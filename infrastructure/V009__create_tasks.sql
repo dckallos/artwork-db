@@ -1,0 +1,23 @@
+-- =============================================================================
+-- V009: Snowflake Tasks for scheduled pipeline runs (Phase 4)
+-- This file is a placeholder. Tasks will be defined here once the pipeline
+-- is running end-to-end and you are ready to schedule recurring extractions.
+--
+-- Tasks will call stored procedures or external functions that trigger:
+--   1. Python extraction (via external function or manual trigger)
+--   2. dbt run (via stored procedure calling dbt CLI, or external trigger)
+--   3. dbt test (validation)
+--
+-- Example structure (uncomment and customize when ready):
+--
+-- CREATE OR REPLACE TASK daily_dbt_run
+--     WAREHOUSE = ARTWORK_WH
+--     SCHEDULE = 'USING CRON 0 6 * * * America/Detroit'
+--     AS
+--     CALL run_dbt_pipeline();
+--
+-- ALTER TASK daily_dbt_run RESUME;
+-- =============================================================================
+
+-- Placeholder: no tasks created yet. See Phase 4 of the action plan.
+SELECT 'V009: Tasks placeholder -- define tasks when pipeline is running end-to-end' AS status;
