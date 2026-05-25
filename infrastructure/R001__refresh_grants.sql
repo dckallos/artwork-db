@@ -1,7 +1,7 @@
 -- =============================================================================
 -- R001: Repeatable grant refresh
--- Re-run this after creating new tables, views, or stages to ensure roles
--- have access to all objects. Safe to run at any time.
+-- Re-run anytime to ensure roles have access to all current and future objects.
+-- No paired drop (repeatable scripts are pure idempotent re-runs).
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;
