@@ -1,7 +1,6 @@
 -- =============================================================================
 -- V006: Grant privileges to functional roles
--- ARTWORK_LOADER: write Bronze
--- ARTWORK_TRANSFORMER: read Bronze, write Silver and Gold
+-- Paired rollback: infrastructure/V006__drop_grants.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;

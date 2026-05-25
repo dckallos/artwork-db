@@ -1,6 +1,7 @@
 -- =============================================================================
 -- V001: Create roles for the artwork medallion pipeline
 -- Roles follow least-privilege: loader writes Bronze, transformer writes Silver/Gold
+-- Paired rollback: infrastructure/V001__drop_roles.sql
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;

@@ -1,5 +1,6 @@
 -- =============================================================================
 -- V003: Create database and medallion schemas (Bronze, Silver, Gold)
+-- Paired rollback: infrastructure/V003__drop_databases_and_schemas.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;

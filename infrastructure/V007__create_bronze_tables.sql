@@ -2,6 +2,7 @@
 -- V007: Create Bronze layer tables
 -- One table per source API + an extraction log for observability.
 -- All tables store raw JSON as VARIANT with extraction metadata.
+-- Paired rollback: infrastructure/V007__drop_bronze_tables.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;

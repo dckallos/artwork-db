@@ -1,6 +1,7 @@
 -- =============================================================================
 -- V002: Create compute warehouses
 -- X-Small is sufficient for development. Scale up for full Met extraction.
+-- Paired rollback: infrastructure/V002__drop_warehouses.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;
