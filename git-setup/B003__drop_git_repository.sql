@@ -1,6 +1,6 @@
 -- =============================================================================
 -- B003 ROLLBACK: drop the GIT REPOSITORY object that points back at the
--- artwork-medallion-pipeline GitHub repo.
+-- artwork-db GitHub repo.
 --
 -- Paired forward: git-setup/B003__create_git_repository.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
@@ -14,7 +14,7 @@
 --
 -- Idempotency:
 --   DROP GIT REPOSITORY IF EXISTS is safe pre-create and safe to re-run.
---   The fully qualified ARTWORK_OPS.GIT.artwork_medallion_pipeline path makes
+--   The fully qualified ARTWORK_OPS.GIT.artwork_db path makes
 --   this script independent of the current session's USE DATABASE / USE SCHEMA
 --   context, so it works the same whether invoked directly or as part of the
 --   bootstrap.py teardown loop.
@@ -35,4 +35,4 @@ USE ROLE ACCOUNTADMIN;
 -- Use the fully qualified name so this script is order-independent of any
 -- preceding USE DATABASE / USE SCHEMA statement, including the case where
 -- ARTWORK_OPS has already been torn down (IF EXISTS still applies cleanly).
-DROP GIT REPOSITORY IF EXISTS ARTWORK_OPS.GIT.artwork_medallion_pipeline;
+DROP GIT REPOSITORY IF EXISTS ARTWORK_OPS.GIT.artwork_db;

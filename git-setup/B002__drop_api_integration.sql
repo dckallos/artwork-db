@@ -1,7 +1,7 @@
 -- =============================================================================
--- B001 ROLLBACK: drop the GitHub API integration.
+-- B002 ROLLBACK (post-renumber 2026-05-27): drop the GitHub API integration.
 --
--- Paired forward: git-setup/B001__create_api_integration.sql.
+-- Paired forward: git-setup/B002__create_api_integration.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
@@ -12,29 +12,28 @@
 --   targets handle this automatically:
 --     - `make down` applies all paired drops in REVERSE order (B003 -> B002
 --       -> B001) so this constraint is satisfied transparently.
---     - `make rollback FILE=git-setup/B001__create_api_integration.sql`
+--     - `make rollback FILE=git-setup/B002__create_api_integration.sql`
 --       assumes B003 has already been rolled back (or was never applied).
 --
--- Idempotency:
---   DROP ... IF EXISTS makes every statement safe to re-run and safe to run
---   even if the paired create script was never applied.
+-- Renumber note (2026-05-27):
+--   This file is the paired drop for what used to be B001 (API integration).
+--   The forward / drop pair was renumbered to B002 so that the SECRET +
+--   schema host now live in B001. The matching DROP SECRET statement that
+--   previously lived here has moved to B001__drop_git_ops_db.sql (section
+--   4.4a) where it is run before DROP SCHEMA / DROP DATABASE using the
+--   fully qualified ARTWORK_OPS.GIT.github_pat_artwork_db name -- see
+--   section 3.3.3 Q2 for why fully qualified is required to bypass 090105.
 --
--- Private repo addendum:
---   If the forward script's PRIVATE REPO ONLY block was uncommented to create
---   github_pat_artwork_db, the matching DROP SECRET below cleans it up. It is
---   wrapped in DROP SECRET IF EXISTS so it is a no-op for public-repo setups
---   where the secret was never created.
+-- Idempotency:
+--   DROP API INTEGRATION IF EXISTS is safe pre-create and safe to re-run.
+--   Account-level statement; no USE DATABASE / USE SCHEMA context required.
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;
 
--- Drop the API integration. If a GIT REPOSITORY still references it, Snowflake
--- raises:
+-- Drop the API integration. If a GIT REPOSITORY still references it,
+-- Snowflake raises:
 --   003531 (42000): SQL compilation error: API_INTEGRATION
 --                   'github_artwork_db_integration' is in use.
 -- Roll back B003 first if you see that error.
 DROP API INTEGRATION IF EXISTS github_artwork_db_integration;
-
--- Drop the optional GitHub PAT secret (private-repo path only). Safe no-op
--- when the secret was never created.
-DROP SECRET IF EXISTS github_pat_artwork_db;
