@@ -1,0 +1,46 @@
+-- =============================================================================
+-- V009 ROLLBACK: placeholder paired with V009__create_tasks.sql, which
+-- itself is a Phase 4 placeholder. When V009 starts creating real tasks,
+-- replace the trailing SELECT with the matching DROP TASK statements
+-- following the template below.
+--
+-- Paired forward: infrastructure/V009__create_tasks.sql.
+-- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
+--                 --connection admin --enhanced-exit-codes.
+--
+-- Future-state template (uncomment and complete when V009 forward defines
+-- real tasks):
+--
+--   USE ROLE ACCOUNTADMIN;
+--
+--   -- Snowflake does NOT support ALTER TASK IF EXISTS, so guarded suspends
+--   -- require Snowflake Scripting blocks. For most teardown chains
+--   -- (`make down`), skip the suspend and rely on DROP TASK alone: Snowflake
+--   -- cancels in-flight runs and prevents future runs at drop time.
+--   -- ALTER TASK ARTWORK_DB.BRONZE.<task_name> SUSPEND;
+--
+--   DROP TASK IF EXISTS ARTWORK_DB.BRONZE.<task_name>;
+--
+-- Ordering:
+--   When V009 lands real tasks, `make down` will run this drop FIRST
+--   (V009 -> V008 -> ... -> V001) so scheduled tasks stop firing before any
+--   of their referenced objects (raw_* tables, stages, file formats) are
+--   torn down. This avoids a window in which a task fires against
+--   partially-destroyed objects.
+--
+-- In-flight runs:
+--   Snowflake's DROP TASK cancels any currently executing run and prevents
+--   any future scheduled run from starting. To allow an in-flight run to
+--   finish naturally before the drop, suspend the task first via an ad-hoc
+--   ALTER (operator decision, not codified here):
+--     snow sql -c admin -q "ALTER TASK ARTWORK_DB.BRONZE.<task_name> SUSPEND;"
+--
+-- Idempotency:
+--   A bare SELECT is trivially safe to re-run. It also gives
+--   `snow sql --enhanced-exit-codes` a successful exit code (0) so the
+--   `make down` chain continues to the next paired drop.
+-- =============================================================================
+
+USE ROLE ACCOUNTADMIN;
+
+SELECT 'V009 rollback: placeholder; replace with DROP TASK statements when V009 forward defines real tasks' AS status;

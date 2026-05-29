@@ -17,7 +17,12 @@
 --   unwinds cleanly in OBJECT_HISTORY. With IF EXISTS this is purely
 --   cosmetic: Snowflake automatically revokes every grant TO and FROM a role
 --   at DROP ROLE time, and the SYSADMIN -> ARTWORK_ADMIN grant from V001
---   forward is removed automatically with the parent.
+--   forward is removed automatically with the parent. The account-level
+--   (global) grants added to ARTWORK_ADMIN by V001 forward -- CREATE
+--   WAREHOUSE and CREATE DATABASE ON ACCOUNT (and EXECUTE TASK once V009
+--   needs it) -- are likewise revoked automatically by DROP ROLE, so this
+--   rollback needs no explicit REVOKE ... ON ACCOUNT statements; it stays a
+--   roles-only teardown.
 --
 -- Account-level effects:
 --   DROP ROLE revokes every grant on every object that was issued TO the

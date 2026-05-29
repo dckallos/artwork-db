@@ -11,3 +11,4 @@ USE SCHEMA BRONZE;
 CREATE OR REPLACE STAGE bronze_load_stage
     FILE_FORMAT = json_raw
     COMMENT = 'Internal stage for Python extraction scripts to upload raw data files.';
+    

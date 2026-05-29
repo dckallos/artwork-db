@@ -24,3 +24,22 @@ GRANT ROLE ARTWORK_TRANSFORMER TO ROLE ARTWORK_ADMIN;
 
 -- Grant ARTWORK_ADMIN to SYSADMIN so it participates in the standard hierarchy
 GRANT ROLE ARTWORK_ADMIN TO ROLE SYSADMIN;
+
+-- ---------------------------------------------------------------
+-- Account-level (global) privileges for ARTWORK_ADMIN.
+-- A freshly created custom role holds NO global privileges.
+-- ARTWORK_ADMIN owns ARTWORK_DB/ARTWORK_WH, so ownership covers
+-- every schema- and object-level DDL downstream (V004-V007). The
+-- ONLY privileges that ever need an explicit account grant are
+-- these global ones. Grant the full set here so later scripts
+-- never fail with 003001 (42501). Only ACCOUNTADMIN (or a role
+-- with MANAGE GRANTS) can grant global privileges -- a role cannot
+-- grant them to itself, which is why they live in this bootstrap
+-- block per the 2026-05-29 design decision (role model).
+-- ---------------------------------------------------------------
+GRANT CREATE WAREHOUSE ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- V002
+GRANT CREATE DATABASE  ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- V003
+-- Future: uncomment IN LOCKSTEP with V009 when it defines real
+-- tasks. Tasks require EXECUTE TASK on the account to run, even
+-- when owned by the executing role:
+-- GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN;   -- V009
