@@ -2,8 +2,9 @@
 # Artwork Medallion Pipeline - Task Runner
 # =============================================================================
 # IaC (python -> bash -> snow sql --filename):
-#   make iac                       Apply ALL: git-setup (B) + infra (V + R)
-#   make bootstrap                 Apply git-setup (B) only
+#   make iac                       Apply ALL in dependency order: infra (V + R) THEN git-setup (B)
+#   make bootstrap                 Apply git-setup (B) only -- OPTIONAL trailing Git-mirror layer;
+#                                  presumes infra roles exist (run 'make infra' or 'make iac' first)
 #   make infra                     Apply infrastructure (V + R) only
 #   make rollback FILE=path.sql    Roll back ONE forward script via its paired drop
 #   make down                      Full teardown: every paired drop in reverse order
@@ -48,8 +49,16 @@ iac: chmod
 	@echo "==> Applying ALL IaC (B + V + R) via python -> bash -> snow sql --filename..."
 	python scripts/bootstrap.py --phase all
 
+# Standalone git-setup (B) is the OPTIONAL trailing Git-mirror layer. Per the
+# 2026-05-29 design decision it runs LAST in `make iac` (after V/R). Run it
+# directly only when the ARTWORK_ADMIN role already exists -- B003 grants READ
+# on the GIT REPOSITORY to it. On a fresh account run `make infra` first. We do
+# NOT add infra as a prereq here so this target stays a narrow, composable step.
 bootstrap: chmod
 	@echo "==> Applying git-setup (B) via python -> bash -> snow sql --filename..."
+	@echo "    NOTE: B is the OPTIONAL trailing Git-mirror layer (runs LAST in 'make iac')."
+	@echo "    Standalone 'make bootstrap' presumes ARTWORK_ADMIN already exists"
+	@echo "    (created by infrastructure/V001 via 'make infra' or 'make iac')."
 	python scripts/bootstrap.py --phase bootstrap
 
 infra: chmod
