@@ -1,14 +1,14 @@
 -- =============================================================================
--- V009 ROLLBACK: placeholder paired with V009__create_tasks.sql, which
--- itself is a Phase 4 placeholder. When V009 starts creating real tasks,
+-- create_tasks.sql ROLLBACK: placeholder paired with create_tasks.sql, which
+-- itself is a Phase 4 placeholder. When create_tasks.sql starts creating real tasks,
 -- replace the trailing SELECT with the matching DROP TASK statements
 -- following the template below.
 --
--- Paired forward: infrastructure/V009__create_tasks.sql.
+-- Paired forward: infrastructure/create_tasks.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
--- Future-state template (uncomment and complete when V009 forward defines
+-- Future-state template (uncomment and complete when create_tasks.sql forward defines
 -- real tasks):
 --
 --   USE ROLE ACCOUNTADMIN;
@@ -22,8 +22,8 @@
 --   DROP TASK IF EXISTS ARTWORK_DB.BRONZE.<task_name>;
 --
 -- Ordering:
---   When V009 lands real tasks, `make down` will run this drop FIRST
---   (V009 -> V008 -> ... -> V001) so scheduled tasks stop firing before any
+--   When create_tasks.sql lands real tasks, `make down` will run this drop FIRST
+--   (create_tasks.sql -> create_service_user.sql -> ... -> create_roles.sql) so scheduled tasks stop firing before any
 --   of their referenced objects (raw_* tables, stages, file formats) are
 --   torn down. This avoids a window in which a task fires against
 --   partially-destroyed objects.
@@ -43,4 +43,4 @@
 
 USE ROLE ACCOUNTADMIN;
 
-SELECT 'V009 rollback: placeholder; replace with DROP TASK statements when V009 forward defines real tasks' AS status;
+SELECT 'create_tasks.sql rollback: placeholder; replace with DROP TASK statements when create_tasks.sql forward defines real tasks' AS status;

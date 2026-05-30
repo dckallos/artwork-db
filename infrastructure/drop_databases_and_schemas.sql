@@ -1,9 +1,9 @@
 -- =============================================================================
--- V003 ROLLBACK: drop the ARTWORK_DB database created by V003. DROP DATABASE
+-- create_databases_and_schemas.sql ROLLBACK: drop the ARTWORK_DB database created by create_databases_and_schemas.sql. DROP DATABASE
 -- cascades through BRONZE, SILVER, GOLD and every schema-level object
 -- beneath them (tables, views, stages, file formats, tasks, streams, grants).
 --
--- Paired forward: infrastructure/V003__create_databases_and_schemas.sql.
+-- Paired forward: infrastructure/create_databases_and_schemas.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
@@ -17,10 +17,10 @@
 --   from the museum APIs.
 --
 -- Ordering:
---   `make down` runs V003 drop after V004 - V009 drops, so the targeted
+--   `make down` runs create_databases_and_schemas.sql drop after create_file_formats.sql - create_tasks.sql drops, so the targeted
 --   schema-level objects beneath ARTWORK_DB are already gone by the time
 --   this script executes; DROP DATABASE then removes the (mostly empty)
---   container. When invoked standalone (`make rollback FILE=...V003...`),
+--   container. When invoked standalone (`make rollback FILE=...create_databases_and_schemas.sql...`),
 --   the cascading DROP DATABASE removes every remaining schema-level object
 --   in one statement. Either invocation path is safe.
 --

@@ -1,15 +1,15 @@
 -- =============================================================================
--- V002 ROLLBACK: drop the ARTWORK_WH virtual warehouse created by V002.
+-- create_warehouses.sql ROLLBACK: drop the ARTWORK_WH virtual warehouse created by create_warehouses.sql.
 --
--- Paired forward: infrastructure/V002__create_warehouses.sql.
+-- Paired forward: infrastructure/create_warehouses.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
 -- Ordering:
 --   Warehouses are account-level objects independent of ARTWORK_DB, so this
---   drop is order-independent of V003 (databases) and may run before or
---   after. `make down` applies it after V003 in the reverse chain (V009 ->
---   ... -> V002 -> V001).
+--   drop is order-independent of create_databases_and_schemas.sql (databases) and may run before or
+--   after. `make down` applies it after create_databases_and_schemas.sql in the reverse chain (create_tasks.sql ->
+--   ... -> create_warehouses.sql -> create_roles.sql).
 --
 -- Active-session note:
 --   DROP WAREHOUSE IF EXISTS succeeds even when sessions are currently using
@@ -19,7 +19,7 @@
 --     snow sql -c admin -q "ALTER WAREHOUSE ARTWORK_WH SUSPEND;"
 --
 -- Resource monitor note:
---   The current V002 forward does not attach a resource monitor, but the
+--   The current create_warehouses.sql forward does not attach a resource monitor, but the
 --   project's roadmap includes one. If a resource monitor is attached to
 --   ARTWORK_WH at drop time, the attachment is removed automatically with
 --   the warehouse. The resource monitor itself is an account-level object

@@ -1,6 +1,6 @@
 -- =============================================================================
--- V004: Create file formats for staged data loading
--- Paired rollback: infrastructure/V004__drop_file_formats.sql
+-- create_file_formats.sql: Create file formats for staged data loading
+-- Paired rollback: infrastructure/drop_file_formats.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;

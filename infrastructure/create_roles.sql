@@ -1,7 +1,7 @@
 -- =============================================================================
--- V001: Create roles for the artwork medallion pipeline
+-- create_roles.sql: Create roles for the artwork medallion pipeline
 -- Roles follow least-privilege: loader writes Bronze, transformer writes Silver/Gold
--- Paired rollback: infrastructure/V001__drop_roles.sql
+-- Paired rollback: infrastructure/drop_roles.sql
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;
@@ -29,7 +29,7 @@ GRANT ROLE ARTWORK_ADMIN TO ROLE SYSADMIN;
 -- Account-level (global) privileges for ARTWORK_ADMIN.
 -- A freshly created custom role holds NO global privileges.
 -- ARTWORK_ADMIN owns ARTWORK_DB/ARTWORK_WH, so ownership covers
--- every schema- and object-level DDL downstream (V004-V007). The
+-- every schema- and object-level DDL downstream (create_file_formats.sql-create_bronze_tables.sql). The
 -- ONLY privileges that ever need an explicit account grant are
 -- these global ones. Grant the full set here so later scripts
 -- never fail with 003001 (42501). Only ACCOUNTADMIN (or a role
@@ -37,9 +37,9 @@ GRANT ROLE ARTWORK_ADMIN TO ROLE SYSADMIN;
 -- grant them to itself, which is why they live in this bootstrap
 -- block per the 2026-05-29 design decision (role model).
 -- ---------------------------------------------------------------
-GRANT CREATE WAREHOUSE ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- V002
-GRANT CREATE DATABASE  ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- V003
--- Future: uncomment IN LOCKSTEP with V009 when it defines real
+GRANT CREATE WAREHOUSE ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- create_warehouses.sql
+GRANT CREATE DATABASE  ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- create_databases_and_schemas.sql
+-- Future: uncomment IN LOCKSTEP with create_tasks.sql when it defines real
 -- tasks. Tasks require EXECUTE TASK on the account to run, even
 -- when owned by the executing role:
--- GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN;   -- V009
+-- GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN;   -- create_tasks.sql

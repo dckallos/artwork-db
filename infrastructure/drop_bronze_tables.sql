@@ -1,8 +1,8 @@
 -- =============================================================================
--- V007 ROLLBACK: drop the seven Bronze raw_* tables and the extraction_log
--- table created by V007.
+-- create_bronze_tables.sql ROLLBACK: drop the seven Bronze raw_* tables and the extraction_log
+-- table created by create_bronze_tables.sql.
 --
--- Paired forward: infrastructure/V007__create_bronze_tables.sql.
+-- Paired forward: infrastructure/create_bronze_tables.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
@@ -20,9 +20,9 @@
 --   first.
 --
 -- Ordering:
---   `make down` runs V007 after V009 (tasks) and V008 (service user), so no
+--   `make down` runs create_bronze_tables.sql after create_tasks.sql (tasks) and create_service_user.sql (service user), so no
 --   task is mid-MERGE and the loader cannot insert during the drop window.
---   These tables are also cascaded by V003 drop (DROP DATABASE); this paired
+--   These tables are also cascaded by create_databases_and_schemas.sql drop (DROP DATABASE); this paired
 --   script exists for fine-grained single-step rollback.
 --
 -- Idempotency:

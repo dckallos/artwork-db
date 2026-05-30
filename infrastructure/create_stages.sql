@@ -1,6 +1,6 @@
 -- =============================================================================
--- V005: Create internal stages for bulk data loading
--- Paired rollback: infrastructure/V005__drop_stages.sql
+-- create_stages.sql: Create internal stages for bulk data loading
+-- Paired rollback: infrastructure/drop_stages.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;

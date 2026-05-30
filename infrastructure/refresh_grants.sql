@@ -1,5 +1,5 @@
 -- =============================================================================
--- R001: Repeatable grant refresh
+-- refresh_grants.sql: Repeatable grant refresh
 -- Re-run anytime to ensure roles have access to all current and future objects.
 -- No paired drop (repeatable scripts are pure idempotent re-runs).
 -- =============================================================================

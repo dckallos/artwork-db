@@ -1,12 +1,12 @@
 -- =============================================================================
--- V008 ROLLBACK: drop the ARTWORK_LOADER_SVC service user created by V008.
+-- create_service_user.sql ROLLBACK: drop the ARTWORK_LOADER_SVC service user created by create_service_user.sql.
 --
--- Paired forward: infrastructure/V008__create_service_user.sql.
+-- Paired forward: infrastructure/create_service_user.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
 -- Ordering:
---   `make down` runs V008 BEFORE V001 so the service user is removed before
+--   `make down` runs create_service_user.sql BEFORE create_roles.sql so the service user is removed before
 --   its DEFAULT_ROLE (ARTWORK_LOADER) is dropped. With IF EXISTS on both
 --   scripts the reverse order also succeeds; the ordering is purely a
 --   convention for cleaner OBJECT_HISTORY trails.
@@ -16,9 +16,9 @@
 --     090105 (22023): Cannot perform DROP USER. The current user is the
 --                     owner of <n> objects.
 --   if ARTWORK_LOADER_SVC owns any Snowflake object. By design, the service
---   user is least-privilege: V006 grants it INSERT / UPDATE / DELETE / SELECT
+--   user is least-privilege: grant_privileges.sql grants it INSERT / UPDATE / DELETE / SELECT
 --   on BRONZE tables and READ / WRITE on stages, but does NOT grant
---   OWNERSHIP. Schemas and tables are owned by ARTWORK_ADMIN via V003 / V007.
+--   OWNERSHIP. Schemas and tables are owned by ARTWORK_ADMIN via create_databases_and_schemas.sql / create_bronze_tables.sql.
 --   If a future change grants OWNERSHIP to this user (for example, custom
 --   tables created by the loader at runtime), transfer ownership back to
 --   ARTWORK_ADMIN with:

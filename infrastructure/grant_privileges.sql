@@ -1,6 +1,6 @@
 -- =============================================================================
--- V006: Grant privileges to functional roles
--- Paired rollback: infrastructure/V006__drop_grants.sql
+-- grant_privileges.sql: Grant privileges to functional roles
+-- Paired rollback: infrastructure/drop_grants.sql
 -- =============================================================================
 
 USE ROLE ARTWORK_ADMIN;

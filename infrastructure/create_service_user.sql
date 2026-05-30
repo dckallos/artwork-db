@@ -1,5 +1,5 @@
 -- =============================================================================
--- V008: Create the service user for the Python extraction layer.
+-- create_service_user.sql: Create the service user for the Python extraction layer.
 --
 -- ARTWORK_LOADER_SVC is the runtime identity used by
 -- extraction/*/snowflake_uploader.py. It is intentionally distinct from any
@@ -8,7 +8,7 @@
 --
 -- Authentication: password by default. Production should rotate to key-pair
 -- auth via:  ALTER USER ARTWORK_LOADER_SVC SET RSA_PUBLIC_KEY = '...';
--- Paired rollback: infrastructure/V008__drop_service_user.sql
+-- Paired rollback: infrastructure/drop_service_user.sql
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;
