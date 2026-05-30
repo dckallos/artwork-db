@@ -51,8 +51,12 @@ updates, (3) Met Bronze/Silver/Gold tables, (4) new data sources, (5) dbt adopti
 > Deep best-practice teaching notes for these tracks now live in
 > `docs/context/engineering-playbook.md` (landed 2026-05-30). A companion doc,
 > `docs/context/cortex-ai-agents-playbook.md`, covers optimizing Cortex AI &
-> Cortex Agents (tools, MCP, orchestration, Web Search enablement). Both are
-> **reference** docs — the guided hands-on build remains the primary learning.
+> Cortex Agents (tools, MCP, orchestration, Web Search enablement).
+> `docs/context/met-deepdive.md` is a **decision register** — a granular,
+> stable-ID list of open Met collection/ingestion questions (legal, cost,
+> pipeline, image-URL lifecycle, deaccession, DDL, automation) and their evolving
+> answers, designed to survive across sessions. All three are **reference** docs —
+> the guided hands-on build remains the primary learning.
 
 ## Workflow domains (navigation — review/verification state lives in Status)
 
@@ -106,8 +110,9 @@ Rules of thumb:
 | `docs/context/ddl-infrastructure.md` | Complete (infra `trusted-prior`; git-setup + orchestration internals read 2026-05-30) |
 | `docs/context/extraction.md` | Complete (read 2026-05-30) |
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
-| `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded, museum-API specifics flagged unverified) |
+| `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 26 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO; Met facts web-verified; grows as we work) |
 
 ## Roadmap & deferred work
 
@@ -128,8 +133,19 @@ Rules of thumb:
   for the five optimization tracks (medallion delete-propagation, clustering/cost,
   entity normalization, dbt completeness testing, ingestion). Companion
   `docs/context/cortex-ai-agents-playbook.md` covers Cortex AI/Agents optimization.
-  Grounded via `cortex search docs` (account-level `web_search` was disabled, so
-  museum-API specifics are flagged `⚠ unverified — confirm before building`).
+  Grounded via `cortex search docs`. Track 4's CMA/AIC/Smithsonian API endpoints,
+  auth, and license terms were **web-verified 2026-05-30** (account-level Web Search
+  now enabled); their `⚠ unverified` flags are cleared. (The Met-API `metadataDate`
+  note in Track 2 and the dbt-docs page note in Track 5 remain flagged — out of
+  scope of the museum-source verification.)
+- **Met deep-dive register STARTED (2026-05-30):** `docs/context/met-deepdive.md`
+  created as a granular, stable-ID decision register for Met collection/ingestion
+  questions (legal, cost, pipeline, image-URL lifecycle, deaccession, DDL,
+  automation). Seeded with 26 entries; Met facts (CC0 license, `metadataDate`
+  delta endpoint, `images.metmuseum.org` host, 80 rps) web-verified 2026-05-30.
+  Most entries are `open`/`exploring` — none `decided`; the owner decides
+  sequencing turn-by-turn. **Mentor-flagged gap captured: `DATA-01` deaccession /
+  delete-propagation** (UPSERT-only bootstrap never deletes vanished CSV rows).
 - **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
   UPPERCASE identifiers, wire `drop_grants.sql` via renaming
   `grant_privileges.sql → create_grants.sql`, reword stale V/R/B comments). Full
@@ -148,11 +164,13 @@ Rules of thumb:
      body; implement the `ALTER USER … SET PASSWORD` or remove.
   5. Minor: hardcoded sample account in `extraction/met/.env.example:14`;
      `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
-  6. **Web Search enablement (decided-but-gated, pending owner go-ahead).**
-     Account-level `web_search` is OFF (`pa37992`); enabling is an ACCOUNTADMIN
-     Snowsight UI toggle (AI & ML » Agents » Settings » Web search) with **no
-     documented `ALTER ACCOUNT` parameter**, so it is *not* cleanly IaC-able — at
+  6. **Web Search enablement — account toggle now ON (2026-05-30).**
+     Account-level `web_search` was **enabled at the account level 2026-05-30**
+     (`pa37992`) via the ACCOUNTADMIN Snowsight UI toggle (AI & ML » Agents »
+     Settings » Web search). There is still **no documented `ALTER ACCOUNT`
+     parameter**, so the account-level enablement is *not* cleanly IaC-able — at
      most a runbook note. The per-agent `web_search` tool *is* IaC-able via
      `CREATE AGENT … FROM SPECIFICATION` once an agent exists. Full cost/token/
      governance analysis + the IaC decision in
-     `docs/context/cortex-ai-agents-playbook.md` §4. Nothing applied or enabled.
+     `docs/context/cortex-ai-agents-playbook.md` §4. No agent created; nothing
+     else applied.

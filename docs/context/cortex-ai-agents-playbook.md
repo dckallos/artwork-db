@@ -3,18 +3,21 @@
 > **Tier-1 REFERENCE doc (companion to `engineering-playbook.md`).** Same contract:
 > a reference tool you return to, not your primary learning tool. It catalogs the
 > ways to extend/optimize Cortex AI and Cortex Agents on this account, and answers
-> the standing question: *why is `web_search` returning nothing, and how do I turn
-> it on?* Grounded with cited Snowflake doc URLs.
+> the standing question: *how do I turn on `web_search`, and what can I do with it?*
+> (Account-level Web Search was **enabled 2026-05-30** — see §4.) Grounded with
+> cited Snowflake doc URLs.
 >
 > Account context: `pa37992`, role `ACCOUNTADMIN` (you can enable account-level
 > features yourself).
 
 ## Why this doc exists
 
-While grounding the engineering playbook, the agent's `web_search` tool returned
-no results. The cause is **not** an outage: Snowflake's **Web Search is an
+While first grounding the engineering playbook, the agent's `web_search` tool
+returned no results. The cause was **not** an outage: Snowflake's **Web Search is an
 account-level feature that an ACCOUNTADMIN must explicitly enable** before any
-agent/tool can use it. That single finding opened a broader question you asked —
+agent/tool can use it. It was **enabled on 2026-05-30** (§4), after which web search
+worked (used to verify Track 4's museum-API facts). That finding opened a broader
+question you asked —
 *"what are all the ways we can optimize Cortex AI and Cortex Agents?"* — which this
 doc answers.
 
@@ -100,9 +103,14 @@ $$;
 
 ---
 
-## 4. Web Search — why it's off, how to enable it, and the IaC decision
+## 4. Web Search — how to enable it (now ON), and the IaC decision
 
 ### 4a. Enable it (account-level, ACCOUNTADMIN — UI toggle)
+
+> **Status: ENABLED 2026-05-30.** This account (`pa37992`) now has the toggle on,
+> and the CLI agent's `web_search` worked afterward (used to verify Track 4's
+> museum-API facts). The note below resolves the prior "unverified" question: the
+> CLI tool *is* gated by the account toggle.
 
 Per the docs, the only way to enable web search is a Snowsight UI toggle:
 
@@ -120,11 +128,9 @@ Web Search API** under the hood. You add the tool to an agent via
 { "tool_spec": { "type": "web_search", "name": "Web Search" } }
 ```
 
-> Note: enabling web search affects the **Cortex Agents** feature. Whether *this*
-> CLI agent's `web_search` tool is wired to the same account toggle is **not
-> documented** and ⚠ **unverified** — enabling the toggle is the documented
-> prerequisite; if the CLI tool still returns nothing afterward, that's a separate
-> question to raise with the agent's owner.
+> Note: enabling web search affects the **Cortex Agents** feature. **Resolved
+> 2026-05-30:** after flipping the toggle, *this* CLI agent's `web_search` tool
+> began returning results — so it shares the same account-level gate.
 
 ### 4b. Extended considerations (you asked for this before deciding)
 

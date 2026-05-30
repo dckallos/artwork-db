@@ -1,22 +1,24 @@
 # engineering-playbook.md — best-practice teaching notes for the five tracks
 
-> **Tier-1 forward-learning REFERENCE doc.** This is the doc the AGENTS.md Roadmap
-> deferred to "a dedicated window with web search." It is a *reference tool you
-> return to*, **not** your primary learning tool — the guided, hands-on build is
-> where the learning happens. So this doc stays tight: per track, it gives the
-> **why**, the **alternatives**, the **tradeoffs**, **one worked snippet**, and a
-> **"next concrete build step (you decide)."** No exhaustive cookbooks.
+> **Tier-1 forward-learning REFERENCE doc.** A *decision-reference / pattern
+> library* you return to, **not** your primary learning tool — the guided,
+> hands-on build is where the learning happens. Per track it gives the **why**,
+> the **alternatives**, the **tradeoffs**, **one worked snippet**, and a
+> **candidate entry point** (surfaced for consideration, never committed in
+> advance). No exhaustive cookbooks.
 
-## How to read this doc
+## How to use this doc
+
+- This is a **decision-reference that grows as we build**. It captures distilled
+  tradeoffs, not a learning schedule.
+- The mentor surfaces depth organically as the current task makes it relevant —
+  you decide sequencing.
+
+## Reading notes
 
 - Each of the five optimization tracks (from AGENTS.md "Five optimization tracks
   driving growth") is one section.
 - Snowflake claims are grounded with cited doc URLs (see **Sources** per track).
-- **Museum-API specifics (Cleveland, AIC, Smithsonian) are marked
-  `⚠ unverified — confirm before building`** because account `pa37992` does not
-  yet have the account-level **Web Search** feature enabled (see the companion
-  doc `cortex-ai-agents-playbook.md`), so those facts could not be web-grounded
-  this window.
 - Companion doc: **`cortex-ai-agents-playbook.md`** — optimizing Cortex AI &
   Cortex Agents (tools, MCP, orchestration, Web Search enablement).
 
@@ -68,10 +70,10 @@ SELECT
 FROM BRONZE.RAW_MET_OBJECTS;
 ```
 
-**Next concrete build step (you decide):** define the Silver grain + the
-deterministic `artwork_sk`, then a thin Gold view that filters to
-public-domain/on-display. We can do this as plain DDL first (to *see* the
-mechanics), then later express it in dbt (Track 5).
+**Candidate entry point (surfaced for consideration — not committed):** define the
+Silver grain + the deterministic `artwork_sk`, then a thin Gold view that filters
+to public-domain/on-display. Could start as plain DDL (to *see* the mechanics),
+then later express it in dbt (Track 5).
 
 **Sources:** dynamic tables overview & supported queries
 (https://docs.snowflake.com/en/user-guide/dynamic-tables/overview,
@@ -142,9 +144,9 @@ The Met API gives you *what exists now*, not *what was removed*. Two strategies:
 authoritative but heavier. **Best practice = delta for freshness + periodic full
 reconciliation for completeness** (this also feeds Track 5's reconciliation idea).
 
-**Next concrete build step (you decide):** stand up the Silver DT with a 1-hour
-lag, then add a `met_object_ids_snapshot` staging table and a "missing-key =
-deaccessioned" flag. We build and watch a refresh together.
+**Candidate entry point (surfaced for consideration — not committed):** stand up
+the Silver DT with a 1-hour lag, then add a `met_object_ids_snapshot` staging
+table and a "missing-key = deaccessioned" flag.
 
 **Sources:** COPY INTO (https://docs.snowflake.com/en/sql-reference/sql/copy-into-table);
 dynamic tables refresh modes & migrate-from-streams/tasks
@@ -206,8 +208,8 @@ when upstream changed) vs. scheduled.
 achieve similar pruning without the always-on serverless spend — at the cost of
 more design effort.
 
-**Next concrete build step (you decide):** pick the Silver clustering key by
-reasoning about *how deaccessions arrive*, run
+**Candidate entry point (surfaced for consideration — not committed):** pick the
+Silver clustering key by reasoning about *how deaccessions arrive*, run
 `SYSTEM$ESTIMATE_AUTOMATIC_CLUSTERING_COSTS` before turning auto-clustering on,
 and wire one stream+task MERGE-with-DELETE so you can watch a delete reach Gold.
 
@@ -239,12 +241,12 @@ canonical entity.
    **shared Silver schema** (same column names/types as Met).
 3. A **union Silver** (or Gold) that stacks all sources on the shared schema.
 
-| Source | Auth | License | Notes |
-|---|---|---|---|
-| Met | none | OpenAccess / public-domain subset | already live |
-| Cleveland (CMA) | none (open API) | CC0 | ⚠ unverified — confirm endpoint/terms |
-| Art Institute (AIC) | none (public API) | varies by work | ⚠ unverified — confirm endpoint/terms |
-| Smithsonian | **API key required** | varies | ⚠ unverified — store key as a secret, never in repo |
+| Source | Base endpoint | Auth | License | Notes |
+|---|---|---|---|---|
+| Met | `https://collectionapi.metmuseum.org/public/collection/v1/` | none | OpenAccess / public-domain subset | already live |
+| Cleveland (CMA) | `https://openaccess-api.clevelandart.org/` (e.g. `/api/artworks/`) | **none — no key or token required** | **all metadata CC0**; CC0 images only where `share_license_status = CC0` | ~64k records; 37k+ images |
+| Art Institute (AIC) | `https://api.artic.edu/api/v1/` (e.g. `/artworks/{id}`) | **none** — anonymous, rate-limited 60 req/min/IP; send an `AIC-User-Agent` header | metadata **CC0 1.0** + artic.edu Terms; image rights vary per work (public-domain works' images are CC0) | 50k+ open-access images; IIIF at `https://www.artic.edu/iiif/2` |
+| Smithsonian | Hosted on `api.data.gov` (EDAN; docs `https://edan.si.edu/openaccess/docs/`) | **API key required** (register via api.data.gov) | **CC0** metadata; media only for public-domain objects | store key as a secret, never in repo |
 
 **Entity normalization — the canonical artist model.** The same artist appears
 as different strings ("Vincent van Gogh", "van Gogh, Vincent", "Gogh, Vincent
@@ -264,14 +266,21 @@ van") and different source IDs. Build a conformed dimension:
 duplicates) against *precision* (not merging distinct artists). The xref+canonical
 pattern lets you change the matching logic later without rewriting Gold.
 
-**Next concrete build step (you decide):** add CMA as source #2 (CC0, no key is
-the gentlest second source), build `RAW_CMA_OBJECTS` + its Silver conform model
-against the shared schema, then introduce `DIM_ARTIST` + `ARTIST_XREF` with
-deterministic matching.
+**Candidate entry point (surfaced for consideration — not committed):** add CMA
+as source #2 (CC0, no key — the gentlest second source), build
+`RAW_CMA_OBJECTS` + its Silver conform model against the shared schema, then
+introduce `DIM_ARTIST` + `ARTIST_XREF` with deterministic matching.
 
-**Sources:** Met already in `extraction/met/` (repo). ⚠ CMA/AIC/Smithsonian API
-endpoints, auth, and license terms are **unverified — confirm before building**
-(web_search disabled; see companion doc to enable it).
+**Sources:** Met already in `extraction/met/` (repo). CMA Open Access API —
+endpoint + "no key or token is required" + CC0
+(https://openaccess-api.clevelandart.org/, https://www.clevelandart.org/open-access-api,
+https://www.clevelandart.org/open-access). AIC public API — `api.artic.edu/api/v1`,
+no auth (60 req/min/IP, `AIC-User-Agent` recommended), metadata CC0 1.0 + Terms
+(https://api.artic.edu/docs/, https://www.artic.edu/open-access/public-api,
+https://www.artic.edu/open-access). Smithsonian Open Access — API key via
+api.data.gov, CC0 metadata
+(https://www.si.edu/openaccess/devtools, https://github.com/Smithsonian/OpenAccess,
+https://edan.si.edu/openaccess/docs/). Verified via web search 2026-05-30.
 
 ---
 
@@ -331,10 +340,10 @@ and when you do, add a Snowflake-native profile (no `env_var()`), which closes t
 gap. (Native deployment uses `CREATE DBT PROJECT`, not the dbt CLI — invoke the
 `dbt-projects-on-snowflake` skill when we get there.)
 
-**Next concrete build step (you decide):** scaffold a minimal dbt project for the
-Silver `met_objects` model with two tests (`unique`/`not_null` on `artwork_sk`)
-plus one reconciliation singular test, run it with dbt-core, *then* plan the
-native migration.
+**Candidate entry point (surfaced for consideration — not committed):** scaffold
+a minimal dbt project for the Silver `met_objects` model with two tests
+(`unique`/`not_null` on `artwork_sk`) plus one reconciliation singular test, run
+it with dbt-core, *then* plan the native migration.
 
 **Sources:** dbt Projects on Snowflake (GA) — overview, dbt-core versions,
 limitations, scheduling
@@ -349,16 +358,9 @@ dbt generic tests & `dbt_utils` are documented at the canonical dbt docs
 
 ---
 
-## Cross-track sequencing (a suggested path — you decide)
+## There is no fixed order
 
-1. **Track 1** — lock Silver grain + deterministic `artwork_sk`, thin Gold view.
-2. **Track 2** — make Silver a dynamic table; add snapshot-diff deaccession flag.
-3. **Track 3** — choose clustering key by delete pattern; estimate auto-cluster
-   cost; wire one stream+task MERGE-with-DELETE to watch a delete reach Gold.
-4. **Track 5** — port the Silver model into dbt with invariant + reconciliation
-   tests (dbt-core first), then plan native migration.
-5. **Track 4** — onboard CMA (CC0, no key) as source #2; introduce
-   `DIM_ARTIST` + `ARTIST_XREF`.
-
-Each step is a guided, hands-on session — this doc is the reference you return to,
-not the lesson itself.
+The five tracks are a **map of terrain, not a route**. Which track we touch next
+is decided turn-by-turn based on what the current build actually surfaces. The
+mentor raises relevant forks, optimizations, and tradeoffs as they come up — you
+choose what to engage.
