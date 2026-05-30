@@ -1,25 +1,13 @@
 # =============================================================================
-# Artwork Medallion Pipeline - Task Runner
+# Artwork Medallion Pipeline - task runner
 # =============================================================================
-# IaC (python -> bash -> snow sql --filename):
-#   make iac                       Apply ALL in dependency order: infra (V + R) THEN git-setup (B)
-#   make bootstrap                 Apply git-setup (B) only -- OPTIONAL trailing Git-mirror layer;
-#                                  presumes infra roles exist (run 'make infra' or 'make iac' first)
-#   make infra                     Apply infrastructure (V + R) only
-#   make rollback FILE=path.sql    Roll back ONE forward script via its paired drop
-#   make down                      Full teardown: every paired drop in reverse order
-#   make down-from FROM=V005       Teardown from V005 onward in reverse order
-#
-# Extraction:
-#   make extract                   Run all extractors
-#   make extract-met               Met Museum only
-#
-# dbt:
-#   make dbt-deps / dbt-run / dbt-test / dbt-freshness / dbt-docs
-#
-# Compound:
-#   make pipeline                  extract -> dbt run -> dbt test
-#   make setup                     infra + dbt deps
+# IaC runs bash -> bash -> snow sql. Apply order: infra (V + R) then git-setup (B).
+#   iac / infra / bootstrap     apply all / infra only / git-setup only (B runs last)
+#   rollback FILE=path.sql      roll back one forward script via its paired drop
+#   down [FROM=V005]            full teardown / from a point, paired drops in reverse
+#   extract[-met|-aic|-cma|-smithsonian]   run extractors
+#   dbt-deps|run|test|freshness|docs        dbt tasks
+#   pipeline / setup            extract -> dbt run -> test / infra + dbt deps
 # =============================================================================
 
 .PHONY: chmod iac bootstrap infra rollback down down-from \
@@ -28,59 +16,54 @@
 
 DBT_PROJECT_DIR := artwork_pipeline
 
-# ---------- Executable bit policy (see Phase 0.6 IaC strategy § 3.4) ----------
-# Idempotent chmod 0755 for every .sh in the bootstrap.py call graph.
-# Wired in as a prereq of every IaC target so `make iac` cannot fail on a
-# missing +x bit. The canonical allow-list lives in
-# scripts/bootstrap_chmod.sh -- never duplicate it elsewhere.
-# Invoked via `bash ...` so it works even when bootstrap_chmod.sh itself
-# is mode 0644 (the bootstrap workaround for its own executable bit).
-# Phony-target prereq pattern: https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
+# ---------- Executable bit policy (Phase 0.6 IaC strategy 3.4) ----------
+# Idempotent chmod 0755 for every .sh bootstrap.py shells out to. Prereq of
+# every IaC target so a missing +x bit can't break `make iac`. Allow-list lives
+# in scripts/bootstrap_chmod.sh (don't duplicate). Run via `bash` so it works
+# even when that script is itself 0644.
 
 chmod:
 	@bash scripts/bootstrap_chmod.sh
 
 # ---------- IaC ----------
-# Every target that invokes bootstrap.py depends on `chmod` so the executable
-# bit on apply_sql.sh / rollback_sql.sh / scripts/snowflake_cli/*.sh is
-# guaranteed before Python shells out via subprocess.run(...).
+# Targets that run bootstrap.py depend on `chmod` so the .sh files are +x
+# before Python shells out.
 
 iac: chmod
-	@echo "==> Applying ALL IaC (B + V + R) via python -> bash -> snow sql --filename..."
-	python scripts/bootstrap.py --phase all
+	@echo "==> Applying ALL IaC (B + V + R) via bash orchestrator -> snow sql --filename..."
+	bash scripts/orchestrate.sh --phase all
 
-# Standalone git-setup (B) is the OPTIONAL trailing Git-mirror layer. Per the
-# 2026-05-29 design decision it runs LAST in `make iac` (after V/R). Run it
-# directly only when the ARTWORK_ADMIN role already exists -- B003 grants READ
-# on the GIT REPOSITORY to it. On a fresh account run `make infra` first. We do
-# NOT add infra as a prereq here so this target stays a narrow, composable step.
+# git-setup (B) is the optional trailing Git-mirror layer; per the 2026-05-29
+# design decision it runs LAST in `make iac` (after V/R). Standalone run needs
+# ARTWORK_ADMIN to exist (B003 grants it READ on the repo), so run `make infra`
+# first on a fresh account. No infra prereq here, to keep this target composable.
 bootstrap: chmod
-	@echo "==> Applying git-setup (B) via python -> bash -> snow sql --filename..."
+	@echo "==> Applying git-setup (B) via bash orchestrator -> snow sql --filename..."
 	@echo "    NOTE: B is the OPTIONAL trailing Git-mirror layer (runs LAST in 'make iac')."
 	@echo "    Standalone 'make bootstrap' presumes ARTWORK_ADMIN already exists"
 	@echo "    (created by infrastructure/V001 via 'make infra' or 'make iac')."
-	python scripts/bootstrap.py --phase bootstrap
+	bash scripts/orchestrate.sh --phase bootstrap
 
 infra: chmod
-	@echo "==> Applying infrastructure (V + R) via python -> bash -> snow sql --filename..."
-	python scripts/bootstrap.py --phase infra
+	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."
+	bash scripts/orchestrate.sh --phase infra
 
 rollback: chmod
 	@if [ -z "$(FILE)" ]; then \
-		echo "usage: make rollback FILE=infrastructure/V005__create_stages.sql"; \
+		echo "usage: make rollback FILE=infrastructure/create_stages.sql"; \
 		exit 64; \
 	fi
-	@PREFIX=$$(basename $(FILE) | cut -d_ -f1); \
+	@PREFIX=$(FILE); \
 		echo "==> Rolling back $$PREFIX via paired drop script..."; \
-		python scripts/bootstrap.py --down --file $$PREFIX
+		bash scripts/orchestrate.sh --down --file $$PREFIX
 
 down: chmod
 	@echo "==> Tearing down ALL IaC (paired drops in reverse order)..."
-	python scripts/bootstrap.py --phase down
+	bash scripts/orchestrate.sh --phase down
 
 down-from: chmod
 	@if [ -z "$(FROM)" ]; then echo "usage: make down-from FROM=V005"; exit 64; fi
-	python scripts/bootstrap.py --phase down --from $(FROM)
+	bash scripts/orchestrate.sh --phase down --from $(FROM)
 
 # ---------- Extraction ----------
 
