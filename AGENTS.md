@@ -112,7 +112,7 @@ Rules of thumb:
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
 | `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 26 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO; Met facts web-verified; grows as we work) |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO; Met facts web-verified; grows as we work) |
 
 ## Roadmap & deferred work
 
@@ -135,14 +135,16 @@ Rules of thumb:
   `docs/context/cortex-ai-agents-playbook.md` covers Cortex AI/Agents optimization.
   Grounded via `cortex search docs`. Track 4's CMA/AIC/Smithsonian API endpoints,
   auth, and license terms were **web-verified 2026-05-30** (account-level Web Search
-  now enabled); their `⚠ unverified` flags are cleared. (The Met-API `metadataDate`
-  note in Track 2 and the dbt-docs page note in Track 5 remain flagged — out of
-  scope of the museum-source verification.)
+  now enabled); their `⚠ unverified` flags are cleared. The Met-API `metadataDate`
+  note in Track 2 was **also web-verified 2026-05-30** and its flag cleared (full
+  Met-facts block in `met-deepdive.md`). (Only the dbt-docs page note in Track 5
+  remains flagged — out of scope of the source-API verification.)
 - **Met deep-dive register STARTED (2026-05-30):** `docs/context/met-deepdive.md`
   created as a granular, stable-ID decision register for Met collection/ingestion
   questions (legal, cost, pipeline, image-URL lifecycle, deaccession, DDL,
-  automation). Seeded with 26 entries; Met facts (CC0 license, `metadataDate`
-  delta endpoint, `images.metmuseum.org` host, 80 rps) web-verified 2026-05-30.
+  automation). Seeded with 30 entries; Met facts (CC0 license + `isPublicDomain`
+  image gate, `metadataDate` delta endpoint, `images.metmuseum.org` CDN host,
+  80 rps, image-URL-less GitHub CSV) web-verified 2026-05-30.
   Most entries are `open`/`exploring` — none `decided`; the owner decides
   sequencing turn-by-turn. **Mentor-flagged gap captured: `DATA-01` deaccession /
   delete-propagation** (UPSERT-only bootstrap never deletes vanished CSV rows).

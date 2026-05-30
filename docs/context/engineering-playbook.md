@@ -153,7 +153,10 @@ dynamic tables refresh modes & migrate-from-streams/tasks
 (https://docs.snowflake.com/en/user-guide/dynamic-tables/refresh-modes,
 https://docs.snowflake.com/en/user-guide/dynamic-tables/migrate-streams-tasks);
 streams intro (https://docs.snowflake.com/en/user-guide/streams-intro).
-⚠ Met API endpoint/`metadataDate` behavior is **unverified — confirm before building**.
+Met API verified: base `https://collectionapi.metmuseum.org/public/collection/v1`,
+no key, 80 req/sec; `GET /objects?metadataDate=YYYY-MM-DD` returns the `objectIDs`
+changed after that date (https://metmuseum.github.io/). Verified via web search
+2026-05-30 — see `met-deepdive.md` for the full Met-facts block.
 
 ---
 
