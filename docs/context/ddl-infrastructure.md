@@ -13,7 +13,10 @@
 - `scripts/bootstrap.py`, `scripts/orchestrate.sh`, `scripts/apply_sql.sh`,
   `scripts/rollback_sql.sh`, `scripts/manifest.txt`.
 - `Makefile` (already read — see notes below).
-- `git-setup/create_git_ops_db.sql` (creates the GIT ops DB + PAT secret).
+- `git-setup/*` — full chain reviewed 2026-05-30: `create_git_ops_db.sql`,
+  `create_api_integration.sql`, `create_git_repository.sql`, all three paired
+  `drop_*.sql`, `operator/rotate_loader_password.sql` (empty), `README.md`,
+  `.env.example`. See "git-setup — Git bind chain" below.
 
 ## Naming convention (CURRENT — authoritative)
 
@@ -127,6 +130,47 @@ Previously summarized only behaviorally; the AGENTS.md roadmap flagged these as
   privilege is missing). `DEFAULT_CONNECTION="admin"`. `.env` read via
   `dotenv_values` only so the child `snow` inherits `SNOWFLAKE_*`.
 
+## git-setup — Git bind chain (reviewed 2026-05-30)
+
+Optional in-Snowflake mirror layer. Per the 2026-05-29 decision it runs **LAST**,
+after infrastructure (create_roles → … → refresh_grants), because
+`create_git_repository.sql` grants READ to `ARTWORK_ADMIN` (created by
+`create_roles.sql`). Applied via the same `scripts/apply_sql.sh` wrapper, driven by
+`make bootstrap` / `make iac`. All three forward scripts succeed in a single pass.
+
+**Forward chain (numeric/dependency order):**
+
+1. `create_git_ops_db.sql` (51 ln) — `CREATE DATABASE IF NOT EXISTS ARTWORK_OPS`
+   + `CREATE SCHEMA IF NOT EXISTS GIT` + `CREATE OR REPLACE SECRET
+   github_pat_artwork_db` (TYPE=PASSWORD, USERNAME='dckallos', PASSWORD=
+   `<% github_pat %>` — snow-sql template placeholder, no committed PAT).
+2. `create_api_integration.sql` (38 ln) — `CREATE OR REPLACE API INTEGRATION
+   github_artwork_db_integration` (GIT_HTTPS_API, prefix `github.com/dckallos/`),
+   whitelists the secret via `ALLOWED_AUTHENTICATION_SECRETS`.
+3. `create_git_repository.sql` (67 ln) — `CREATE OR REPLACE GIT REPOSITORY
+   artwork_db` binding `API_INTEGRATION` + `GIT_CREDENTIALS` + ORIGIN; then
+   `ALTER … FETCH` and `GRANT READ … TO ROLE ARTWORK_ADMIN`.
+
+Missing any of the three reproduces `093550 (22023): Failed to access the Git
+Repository`. Object reachable as `@ARTWORK_OPS.GIT.artwork_db/branches/main/<path>`.
+
+**Rollback chain (reverse order, all `IF EXISTS`, fully-qualified names):**
+`drop_git_repository.sql` (38) → `drop_api_integration.sql` (39) →
+`drop_git_ops_db.sql` (60, owns `DROP SECRET` + `DROP SCHEMA` + `DROP DATABASE`;
+DROP SECRET fully-qualified to avoid `090105` with no current DB).
+
+**PAT safety:** secret-bearing apply (#1) flagged by `bootstrap.py` →
+`apply_sql.sh` runs with `SNOW_SUPPRESS_STDOUT=1`; PAT injected at apply time via
+`-D "github_pat=${GITHUB_PAT}"` sourced from gitignored `git-setup/.env`
+(`.env.example` ships blank `GITHUB_PAT=`). Rotate = edit `.env` + re-run `make
+iac` (no `ALTER SECRET`).
+
+**Gaps:** `git-setup/operator/rotate_loader_password.sql` is **empty (0 ln)** — no
+SQL body (also noted in Gaps). `git-setup/README.md` (112 ln) is the narrative
+runbook but is written entirely in the retired `B###`/`V###`/`R###` prefix scheme
+(stale — see Stale references). SQL comments reference an external "Phase 0.6 IaC
+strategy section 3.3.3" (Notion, not in repo).
+
 ## Role / grant model
 
 - `ARTWORK_LOADER` — writes BRONZE only (USAGE+CREATE TABLE/STAGE on BRONZE;
@@ -201,6 +245,17 @@ cascade from dropped parents) but means its only use is manual.
 - `infrastructure/drop_roles.sql`: "applies V### drops in REVERSE order" (line ~9).
 - `scripts/apply_sql.sh:38` — "Secret-bearing applies (e.g. B001 renders the
   GitHub PAT …)" (B-prefix; reword to name the secret-bearing script/manifest).
+- `git-setup/README.md` (whole file) — narrative runbook written entirely in the
+  retired `B001/B002/B003`, `V###`, `R###` prefix scheme (naming-convention table,
+  execution-order list, bind-chain steps). Reword to prefix-free names + manifest.
+- **`git-setup/*.sql` comment bodies — self-contradictory after the mechanical
+  rename** (artifact of `rename_and_update.py` blindly substituting old→new
+  filenames). E.g. `create_git_ops_db.sql:11` reads "the prior
+  create_git_ops_db.sql created the API integration" (was `V001`→`V002` rename
+  collision); `drop_api_integration.sql:19` "paired drop for what used to be
+  create_git_ops_db.sql"; `drop_git_ops_db.sql:12` "it was the
+  create_api_integration.sql drop". The SQL statements are correct; only the prose
+  is garbled. Rewrite these comments by hand — do NOT re-run the mechanical script.
 
 These are comment-only; behavior is unaffected, but they contradict the
 prefix-free convention and should be reworded to reference the manifest.
