@@ -1,8 +1,8 @@
 # Tier 2 — File map
 
 One line per file: purpose + line count + "open full source only if…" trigger.
-Consult this before opening any source. **Partial:** auth/connection and
-infrastructure files reviewed; extraction is listed but not yet summarized.
+Consult this before opening any source. **Complete:** auth/connection,
+infrastructure, orchestration internals, extraction, and root files all reviewed.
 
 ## scripts/snowflake_cli/ (Workflow 1 — reviewed)
 
@@ -69,7 +69,30 @@ prefixes — retired; see `ddl-infrastructure.md`). Apply order lives in
 | File | Purpose |
 |---|---|
 | `Makefile` | task runner (reviewed — see ddl-infrastructure.md carryover) |
-| `.env.example` | runtime (loader) env template |
-| `profiles.yml.example` | dbt profile (env_var-based; gap for native dbt) |
-| `requirements.txt`, `rename_and_update.py` | not yet reviewed |
-| `extraction/met/*` | Phase 1A extractor (separate workflow; out of current scope) |
+| `.env.example` | runtime (loader) env template; `SNOWFLAKE_*` for `ARTWORK_LOADER_SVC` + `SMITHSONIAN_API_KEY` (no consumer yet); stale `V008` refs (extraction.md) |
+| `profiles.yml.example` | dbt-core profile (env_var + key-pair, dev→SILVER/prod→GOLD); **gap for Snowflake-native dbt** (extraction.md) |
+| `requirements.txt` | root pin set; confirmed present (5 deps mirror extraction) | 
+| `rename_and_update.py` | 91 | **spent one-shot** V###/R### → prefix-free `git mv` + ref-rewrite migration; historical/dead, candidate for removal | open only if auditing the prefix-retirement history |
+
+## extraction/met/ (Workflow 3 — reviewed; see `extraction.md`)
+
+Standalone Met OpenAccess → Bronze ETL. SQL externalized in `sql/*.sql`; SQLite
+is intermediate, `ARTWORK_DB.BRONZE.raw_met_objects` is the destination.
+
+| File | Lines | Purpose | Open full source only if… |
+|---|---|---|---|
+| `run.py` | 120 | argparse CLI: bootstrap/enrich/upload/status/all | changing CLI/phase wiring |
+| `config.py` | 71 | `Config` dataclass; `MET_*`+`SNOWFLAKE_*` env w/ defaults | changing settings/defaults; **stale V001-V007 ref (l.53-54)** |
+| `db.py` | 43 | `load_sql()`, `initialize_database()`, `connect()` | changing SQL-load or SQLite conn |
+| `csv_bootstrap.py` | 223 | download CSV + `_map_row` + batched UPSERT | adding/removing a CSV column |
+| `image_enricher.py` | 280 | async API fetch; rate limiter + backoff | changing retry/limiter/state logic |
+| `snowflake_uploader.py` | 289 | NDJSON + PUT + COPY INTO Bronze; marks upload state | changing Bronze JSON shape / COPY mapping |
+| `sql/schema.sql` | 97 | SQLite DDL: `met_artworks` + `extraction_runs` + indexes | schema changes |
+| `sql/upsert_artwork.sql` | 79 | `INSERT … ON CONFLICT DO UPDATE` (image/bronze cols excluded) | column changes |
+| `sql/update_enrichment_done.sql` | 9 | mark row `done` w/ image URLs | — |
+| `sql/copy_into_bronze.sql` | 18 | templated COPY INTO; `PURGE=TRUE` | changing load target/format |
+| `sql/__init__.py` | 3 | package marker for `importlib.resources` | — |
+| `__init__.py` | 5 | package docstring | — |
+| `requirements.txt` | 5 | connector/requests/aiohttp/dotenv | bumping pins |
+| `.env.example` | 25 | Met-specific env template; **hardcoded sample account (l.14)** | — |
+| `README.md` | 207 | operator runbook (phases, recovery, tuning, verify SQL); **stale V001-V007 ref (l.37)** | need narrative/recovery context |

@@ -96,6 +96,37 @@ later-created Bronze tables are still covered; service_user follows its grants.
   suppressed; an undeclared file rendering the `<% github_pat %>` marker aborts
   the run (fail-closed).
 
+## Orchestration script internals (confirmed 2026-05-30)
+
+Previously summarized only behaviorally; the AGENTS.md roadmap flagged these as
+"internals un-read." Now read end-to-end — the existing summaries above are
+**accurate**. Internal detail worth keeping:
+
+- **`scripts/apply_sql.sh`** (67 ln). `set -euo pipefail`; connection precedence
+  `arg > $SNOW_CONNECTION > "admin"`. Runs `snow sql --filename` with
+  `--enhanced-exit-codes` (exit **5** on any statement failure — needed because
+  plain `snow sql` only reports the LAST statement's status in multi-statement
+  files). Passes `-D "github_pat=${GITHUB_PAT}"` on **every** apply (template var
+  is available to all scripts; only secret-bearing ones reference it). When
+  `SNOW_SUPPRESS_STDOUT=1`, redirects stdout to `/dev/null` (no `exec`) and prints
+  a remediation pointer on failure; otherwise `exec`s the CLI. stderr always
+  preserved.
+- **`scripts/rollback_sql.sh`** (32 ln). Mirror of apply for paired drops; same
+  connection precedence and `-D github_pat`; always `exec`s with
+  `--enhanced-exit-codes`. Relies on every drop being `DROP … IF EXISTS`, so it is
+  safe even if the paired create never ran.
+- **`scripts/bootstrap.py`** (281 ln). Thin Python preflight; **authors no SQL**
+  (only runs the version-controlled `scripts/sql/show_admin_account_grants.sql`).
+  Two subcommands: `verify-contract` (static — parses active `GRANT … ON ACCOUNT
+  TO ROLE ARTWORK_ADMIN` lines in `create_roles.sql`, stripping `--` comments, and
+  asserts they equal the `REQUIRED_ADMIN_ACCOUNT_PRIVILEGES` frozenset
+  `{CREATE WAREHOUSE, CREATE DATABASE}` — `EXECUTE TASK` commented in both places)
+  and `assert-account-privileges --connection NAME` (runtime — runs SHOW GRANTS
+  via `snow sql --format json` with `SNOW_SUPPRESS_STDOUT=1`, keeps `granted_on=
+  ACCOUNT` rows, and fails fast with the exact remediation `GRANT` if any required
+  privilege is missing). `DEFAULT_CONNECTION="admin"`. `.env` read via
+  `dotenv_values` only so the child `snow` inherits `SNOWFLAKE_*`.
+
 ## Role / grant model
 
 - `ARTWORK_LOADER` — writes BRONZE only (USAGE+CREATE TABLE/STAGE on BRONZE;
@@ -168,15 +199,19 @@ cascade from dropped parents) but means its only use is manual.
 - `infrastructure/drop_grants.sql`: "other V### drop scripts" (line ~11) and
   "grants on the ARTWORK_OPS database from B002" (line ~24).
 - `infrastructure/drop_roles.sql`: "applies V### drops in REVERSE order" (line ~9).
+- `scripts/apply_sql.sh:38` — "Secret-bearing applies (e.g. B001 renders the
+  GitHub PAT …)" (B-prefix; reword to name the secret-bearing script/manifest).
 
 These are comment-only; behavior is unaffected, but they contradict the
 prefix-free convention and should be reworded to reference the manifest.
 
 ## Approved decisions — pending application (NOT yet applied)
 
-Operator-approved on 2026-05-30; deferred to a later window. These are
-pre-decided — implement exactly as specified, keep create↔drop pairs and manifest
-order consistent, and validate SQL compiles (do not execute unless told).
+Operator-approved on 2026-05-30. **Gated: do NOT apply until the ENTIRE repo is
+documented** (policy: no code changes during the documentation pass). This section
+is a record for a future dedicated edit window. When that window comes, implement
+exactly as specified, keep create↔drop pairs and manifest order consistent, and
+validate SQL compiles (do not execute unless told).
 
 1. **Idempotency policy (ratified).** Keep the class-based split: `CREATE … IF NOT
    EXISTS` for stateful objects (roles, warehouses, database, schemas, tables,
