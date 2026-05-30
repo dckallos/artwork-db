@@ -172,6 +172,39 @@ cascade from dropped parents) but means its only use is manual.
 These are comment-only; behavior is unaffected, but they contradict the
 prefix-free convention and should be reworded to reference the manifest.
 
+## Approved decisions — pending application (NOT yet applied)
+
+Operator-approved on 2026-05-30; deferred to a later window. These are
+pre-decided — implement exactly as specified, keep create↔drop pairs and manifest
+order consistent, and validate SQL compiles (do not execute unless told).
+
+1. **Idempotency policy (ratified).** Keep the class-based split: `CREATE … IF NOT
+   EXISTS` for stateful objects (roles, warehouses, database, schemas, tables,
+   users); `CREATE OR REPLACE` for stateless/derived (file formats, stages).
+   Action: confirm every `infrastructure/*.sql` conforms (currently consistent)
+   and apply the same rule to any new object.
+2. **Identifier casing → UPPERCASE, unquoted (standardize).** No prior intentional
+   convention. Rewrite lowercase object names to UPPERCASE and update every
+   reference: `raw_*` tables + `extraction_log` (`create_bronze_tables.sql` /
+   `drop_bronze_tables.sql`), `json_raw`/`parquet_raw` (`create_file_formats.sql` /
+   `drop_file_formats.sql` + the `FILE_FORMAT =` ref in `create_stages.sql`),
+   `bronze_load_stage` (`create_stages.sql` / `drop_stages.sql`), and grant targets
+   in `grant_privileges.sql` / `refresh_grants.sql`, plus `DEFAULT_NAMESPACE` in
+   `create_service_user.sql`. Cosmetic (unquoted = case-insensitive) but uniform.
+3. **Wire `drop_grants.sql` into teardown.** `orchestrate.sh teardown()` derives
+   drops only from `create_*` basenames (`create_ → drop_`), so a non-`create_`
+   entry is never torn down. Do NOT just add `drop_grants.sql` to the manifest
+   (that would *apply* a drop on forward runs). Instead **rename
+   `grant_privileges.sql → create_grants.sql`** so `paired_drop` auto-maps it to
+   `drop_grants.sql`; update the `manifest.txt` line and all cross-references
+   (comments in `drop_grants.sql`, file-map, this doc). Verify against
+   `teardown()` after the rename.
+4. **Reword stale V/R/B references** (comment-only) to cite the manifest, not
+   prefixes: `scripts/manifest.txt` header (\"V then R\", \"(V)\", \"(B)\",
+   \"repeatable R###\"; also the stale \"read by bootstrap.py\"), and the
+   `V###`/`B002` mentions in `infrastructure/drop_grants.sql` and
+   `infrastructure/drop_roles.sql`.
+
 ## When to escalate to full source
 
 - Changing apply/teardown order → edit `scripts/manifest.txt` (only source of order).

@@ -48,3 +48,18 @@ Rules of thumb:
 | `docs/context/cli-connection.md` | Complete |
 | `docs/context/ddl-infrastructure.md` | Complete |
 | `docs/context/file-map.md` | Partial (auth + infrastructure done; extraction pending) |
+
+## Roadmap & deferred work
+
+- **Done (reviewed + documented):** Workflow 1 cli-connection; Workflow 2
+  ddl-infrastructure.
+- **Decided, pending apply (NOT yet done):** four DDL edits — idempotency split,
+  UPPERCASE identifiers, wire `drop_grants.sql` via renaming
+  `grant_privileges.sql → create_grants.sql`, and rewording stale V/R/B comments.
+  Full spec: "Approved decisions — pending application" in
+  `docs/context/ddl-infrastructure.md`.
+- **Not yet reviewed:** `extraction/met/*` (Phase 1A extractor), `requirements.txt`,
+  `rename_and_update.py`, the `.env.example` / `profiles.yml.example` gaps, and the
+  un-read internals of `scripts/apply_sql.sh`, `scripts/rollback_sql.sh`,
+  `scripts/bootstrap.py`. Summarize each into the matching Tier-1 doc and update
+  `docs/context/file-map.md`.
