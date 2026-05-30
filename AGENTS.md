@@ -48,8 +48,11 @@ note: not "Cleveland Institute of Art"), **Art Institute of Chicago**, and the
 **Five optimization tracks driving growth:** (1) Met data, (2) Met ingestion /
 updates, (3) Met Bronze/Silver/Gold tables, (4) new data sources, (5) dbt adoption.
 
-> Deep best-practice playbooks for these tracks are deferred to a dedicated
-> window with web search → planned `docs/context/engineering-playbook.md`.
+> Deep best-practice teaching notes for these tracks now live in
+> `docs/context/engineering-playbook.md` (landed 2026-05-30). A companion doc,
+> `docs/context/cortex-ai-agents-playbook.md`, covers optimizing Cortex AI &
+> Cortex Agents (tools, MCP, orchestration, Web Search enablement). Both are
+> **reference** docs — the guided hands-on build remains the primary learning.
 
 ## Workflow domains (navigation — review/verification state lives in Status)
 
@@ -103,6 +106,8 @@ Rules of thumb:
 | `docs/context/ddl-infrastructure.md` | Complete (infra `trusted-prior`; git-setup + orchestration internals read 2026-05-30) |
 | `docs/context/extraction.md` | Complete (read 2026-05-30) |
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
+| `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded, museum-API specifics flagged unverified) |
+| `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
 
 ## Roadmap & deferred work
 
@@ -118,11 +123,13 @@ Rules of thumb:
   not re-read). The gating policy below can now be lifted for a dedicated edit
   window. *(Correction: a prior window prematurely flipped `file-map.md` to
   "Complete" while git-setup DDL was still un-reviewed; that gap is now closed.)*
-- **Forward learning work (not the documentation pass):** create
-  `docs/context/engineering-playbook.md` — web-researched best-practice teaching
-  notes for the five optimization tracks (medallion delete-propagation,
-  clustering/cost, entity normalization, dbt completeness testing, ingestion).
-  Deferred to a dedicated window with web search.
+- **Forward learning work — playbooks DONE (2026-05-30):**
+  `docs/context/engineering-playbook.md` now exists — best-practice teaching notes
+  for the five optimization tracks (medallion delete-propagation, clustering/cost,
+  entity normalization, dbt completeness testing, ingestion). Companion
+  `docs/context/cortex-ai-agents-playbook.md` covers Cortex AI/Agents optimization.
+  Grounded via `cortex search docs` (account-level `web_search` was disabled, so
+  museum-API specifics are flagged `⚠ unverified — confirm before building`).
 - **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
   UPPERCASE identifiers, wire `drop_grants.sql` via renaming
   `grant_privileges.sql → create_grants.sql`, reword stale V/R/B comments). Full
@@ -141,3 +148,11 @@ Rules of thumb:
      body; implement the `ALTER USER … SET PASSWORD` or remove.
   5. Minor: hardcoded sample account in `extraction/met/.env.example:14`;
      `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+  6. **Web Search enablement (decided-but-gated, pending owner go-ahead).**
+     Account-level `web_search` is OFF (`pa37992`); enabling is an ACCOUNTADMIN
+     Snowsight UI toggle (AI & ML » Agents » Settings » Web search) with **no
+     documented `ALTER ACCOUNT` parameter**, so it is *not* cleanly IaC-able — at
+     most a runbook note. The per-agent `web_search` tool *is* IaC-able via
+     `CREATE AGENT … FROM SPECIFICATION` once an agent exists. Full cost/token/
+     governance analysis + the IaC decision in
+     `docs/context/cortex-ai-agents-playbook.md` §4. Nothing applied or enabled.
