@@ -112,7 +112,7 @@ Rules of thumb:
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
 | `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO; Met facts web-verified; grows as we work) |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO; Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled; all other entries still `open`/`exploring`. |
 
 ## Roadmap & deferred work
 
@@ -145,8 +145,15 @@ Rules of thumb:
   automation). Seeded with 30 entries; Met facts (CC0 license + `isPublicDomain`
   image gate, `metadataDate` delta endpoint, `images.metmuseum.org` CDN host,
   80 rps, image-URL-less GitHub CSV) web-verified 2026-05-30.
-  Most entries are `open`/`exploring` — none `decided`; the owner decides
-  sequencing turn-by-turn. **Mentor-flagged gap captured: `DATA-01` deaccession /
+  Most entries are `open`/`exploring`. **PIPE-01/03/05 flipped to `decided`
+  2026-05-30** (owner sign-off): keep fetch **local** (egress-bound work off
+  per-second compute; native-fetch flip condition recorded); enrichment **state
+  authority moves to a thin Snowflake Bronze control table** with SQLite *demoted*
+  to disposable in-run scratch (rejected the dual-write "mirror" framing) and
+  **batch-grained** (never per-row) status callbacks; Mac↔Snowflake labor split
+  formalized as a **two-table contract** (prioritized worklist down, Bronze
+  landing + batch status callback up). This operationalizes `AUTO-02` and unblocks
+  `AUTO-01/03`. The owner decides remaining sequencing turn-by-turn. **Mentor-flagged gap captured: `DATA-01` deaccession /
   delete-propagation** (UPSERT-only bootstrap never deletes vanished CSV rows).
 - **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
   UPPERCASE identifiers, wire `drop_grants.sql` via renaming
