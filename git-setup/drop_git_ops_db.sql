@@ -1,29 +1,29 @@
 -- =============================================================================
--- B001 ROLLBACK (post-renumber 2026-05-28): drop the github_pat_artwork_db
+-- create_git_ops_db.sql ROLLBACK (post-renumber 2026-05-28): drop the github_pat_artwork_db
 -- SECRET, the ARTWORK_OPS.GIT schema, and the ARTWORK_OPS database created by
--- B001__create_git_ops_db.sql.
+-- create_git_ops_db.sql.
 --
--- Paired forward: git-setup/B001__create_git_ops_db.sql.
+-- Paired forward: git-setup/create_git_ops_db.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
 -- Renumber note (2026-05-28):
 --   Under the prior layout this file dropped only the ARTWORK_OPS database
---   (it was the B002 drop). The renumber moves the SECRET + schema host into
---   B001, so this drop now owns the SECRET teardown as well. The DROP SECRET
+--   (it was the create_api_integration.sql drop). The renumber moves the SECRET + schema host into
+--   create_git_ops_db.sql, so this drop now owns the SECRET teardown as well. The DROP SECRET
 --   statement that previously lived in the API-integration drop (now
---   B002__drop_api_integration.sql, section 4.4) has moved here.
+--   drop_api_integration.sql, section 4.4) has moved here.
 --
 -- Ordering:
---   This drop must run AFTER B003 (GIT REPOSITORY) and B002 (API integration)
+--   This drop must run AFTER create_git_repository.sql (GIT REPOSITORY) and create_api_integration.sql (API integration)
 --   have been rolled back, because the API integration's
 --   ALLOWED_AUTHENTICATION_SECRETS clause references this secret and the GIT
 --   REPOSITORY binds it via GIT_CREDENTIALS. The make targets handle this
 --   automatically:
---     - `make down` applies all paired drops in REVERSE order (B003 -> B002
---       -> B001) so the dependents are gone before the secret is dropped.
---     - `make rollback FILE=git-setup/B001__create_git_ops_db.sql` assumes
---       B003 and B002 have already been rolled back (or were never applied).
+--     - `make down` applies all paired drops in REVERSE order (create_git_repository.sql -> create_api_integration.sql
+--       -> create_git_ops_db.sql) so the dependents are gone before the secret is dropped.
+--     - `make rollback FILE=git-setup/create_git_ops_db.sql` assumes
+--       create_git_repository.sql and create_api_integration.sql have already been rolled back (or were never applied).
 --
 -- Fully qualified secret name:
 --   DROP SECRET resolves its name against the current namespace BEFORE the

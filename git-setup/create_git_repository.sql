@@ -1,10 +1,10 @@
 -- =============================================================================
--- B003: Create the GIT REPOSITORY object that points back at this repo.
+-- create_git_repository.sql: Create the GIT REPOSITORY object that points back at this repo.
 --
--- Applied by snow sql via scripts/apply_sql.sh. Must run AFTER B001
+-- Applied by snow sql via scripts/apply_sql.sh. Must run AFTER create_git_ops_db.sql
 -- (ARTWORK_OPS database + GIT schema + github_pat_artwork_db SECRET) and
--- B002 (github_artwork_db_integration with ALLOWED_AUTHENTICATION_SECRETS).
--- Paired rollback: git-setup/B003__drop_git_repository.sql.
+-- create_api_integration.sql (github_artwork_db_integration with ALLOWED_AUTHENTICATION_SECRETS).
+-- Paired rollback: git-setup/drop_git_repository.sql.
 --
 -- Object name (2026-05-27): the GIT REPOSITORY is named artwork_db to match
 -- the actual GitHub repository dckallos/artwork-db. The earlier canonical
@@ -29,19 +29,19 @@
 --   EXECUTE IMMEDIATE FROM
 --     '@ARTWORK_OPS.GIT.artwork_db/branches/main/infrastructure/V001__create_roles.sql';
 --
--- Private-repo authentication: this object binds the secret created by B001
+-- Private-repo authentication: this object binds the secret created by create_git_ops_db.sql
 -- (ARTWORK_OPS.GIT.github_pat_artwork_db) via GIT_CREDENTIALS. The secret is
--- already whitelisted on the API integration by B002 via
+-- already whitelisted on the API integration by create_api_integration.sql via
 -- ALLOWED_AUTHENTICATION_SECRETS. Together these three pieces eliminate the
 -- anonymous-clone fallback that previously produced
 --   093550 (22023): Failed to access the Git Repository. Operation 'clone'
 --                   is not authorized.
 -- See Phase 0.6 IaC strategy section 3.3.3.
 --
--- Because B001 injects the real PAT at apply time via
+-- Because create_git_ops_db.sql injects the real PAT at apply time via
 --   snow sql ... -D "github_pat=${GITHUB_PAT}"
 -- the github_pat_artwork_db secret already holds a working credential by the
--- time B003 runs, so B003 succeeds in the same make iac run. There is no
+-- time create_git_repository.sql runs, so create_git_repository.sql succeeds in the same make iac run. There is no
 -- placeholder PAT, no ALTER SECRET step, and no rollback / re-apply cycle.
 --
 -- Idempotent: uses CREATE OR REPLACE so re-running picks up any change to

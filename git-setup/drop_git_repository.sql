@@ -1,16 +1,16 @@
 -- =============================================================================
--- B003 ROLLBACK: drop the GIT REPOSITORY object that points back at the
+-- create_git_repository.sql ROLLBACK: drop the GIT REPOSITORY object that points back at the
 -- artwork-db GitHub repo.
 --
--- Paired forward: git-setup/B003__create_git_repository.sql.
+-- Paired forward: git-setup/create_git_repository.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
 -- Ordering:
 --   This drop is the FIRST step of a full git-setup rollback. Both the API
---   integration (B001) and the host database (B002) cannot be cleanly dropped
+--   integration (create_git_ops_db.sql) and the host database (create_api_integration.sql) cannot be cleanly dropped
 --   while a GIT REPOSITORY still references them, so `make down` applies
---   B003 -> B002 -> B001 in that order automatically.
+--   create_git_repository.sql -> create_api_integration.sql -> create_git_ops_db.sql in that order automatically.
 --
 -- Idempotency:
 --   DROP GIT REPOSITORY IF EXISTS is safe pre-create and safe to re-run.
