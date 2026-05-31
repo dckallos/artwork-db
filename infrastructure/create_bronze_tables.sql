@@ -112,12 +112,22 @@ COMMENT = 'Thin Snowflake-authoritative enrichment control/lease table for the M
 -- worklist can prioritize PENDING (not-yet-enriched) rows and DATA-01 deaccession
 -- can be detected via snapshot-diff. Discipline: land the whole raw row in Bronze
 -- (sparse cols ~free as VARIANT); promote typed columns selectively in Silver.
+--
+-- Uniqueness (owner-directed 2026-05-31): object_id is the PRIMARY KEY -- exactly
+-- ONE current row per Met object. The bootstrap MUST load via MERGE keyed on
+-- object_id (insert new / update changed), NOT append. Snowflake does not ENFORCE
+-- PK/UNIQUE, so the MERGE load pattern is what carries the guarantee at runtime
+-- (Section C); the constraint declares intent + lets the optimizer assume
+-- distinctness. This keeps the MET_WORKLIST control x snapshot join strictly 1:1
+-- (no row fan-out) and makes DATA-01 deaccession detection a clean anti-join
+-- (object_ids in a prior snapshot but absent from the current CSV).
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS MET_CSV_SNAPSHOT (
-    object_id       NUMBER          COMMENT 'Met objectID (from CSV Object ID column)',
+    object_id       NUMBER          NOT NULL COMMENT 'Met objectID (from CSV Object ID column); PK -> one snapshot row per object',
     raw_payload     VARIANT         NOT NULL COMMENT 'Full Met CSV row as JSON (snake_case keys per _CSV_PAYLOAD_COLUMNS)',
     _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP() COMMENT 'UTC timestamp the snapshot row was landed',
     _source_system  VARCHAR         NOT NULL DEFAULT 'met_museum' COMMENT 'Source system identifier',
-    _batch_id       VARCHAR         NOT NULL COMMENT 'UUID identifying the bootstrap snapshot batch'
+    _batch_id       VARCHAR         NOT NULL COMMENT 'UUID identifying the bootstrap snapshot batch',
+    CONSTRAINT pk_met_csv_snapshot PRIMARY KEY (object_id)
 )
-COMMENT = 'Raw Met OpenAccess CSV snapshot (full list, VARIANT). Feeds MET_WORKLIST priority + DATA-01 deaccession diff.';
+COMMENT = 'Raw Met OpenAccess CSV snapshot (full list, VARIANT). One row per objectID (PK). Feeds MET_WORKLIST priority + DATA-01 deaccession diff.';

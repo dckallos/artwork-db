@@ -579,6 +579,46 @@ map is sound input to the Session-3 prompt.
 - Whether to apply the gated "Approved decisions" inside Session 3 or as a
   separate pre-patch.
 
+## Session-3 reconciliation (2026-05-31)
+
+**Dual-instance incident.** Connection drops spawned overlapping Cortex windows; the
+staged `donkey-kong-sandbox` tree was authored across two ghost clusters (00:51–00:52
+and 01:04–01:07 GMT) with no review trail in the surviving chat. A resuming window
+ran a read-only **provenance + reconciliation audit** + an owner-authorized **mirror
+diff** (committed baseline `2e957708`). Durable step trail:
+`docs/context/session-3-progress-log.md`.
+
+**Audit outcome — CLEAN (zero off-spec).** Staged DDL implements the Session-2b
+build-impact map + the four cosmetic decisions exactly: `MET_ENRICHMENT_CONTROL`
+(DDL-04 strawman, 9 cols + PK), `MET_CSV_SNAPSHOT` (DDL-05 Option A, VARIANT raw blob
+— matches owner-preferred VARIANT default), `MET_WORKLIST` (new `create_bronze_views.sql`;
+DDL-04 fork (a) resolved → joins control × CSV-snapshot, IMG-02 priority, lease-aware),
+paired drops, `MET_LEASE_RECLAIM_TASK` (PIPE-06 lease housekeeping), grant gap fixed,
+rename + UPPERCASE + idempotency split applied, `EXECUTE TASK` uncommented +
+`bootstrap.py` contract in lockstep (preflight self-consistent). Mirror diff confirmed
+independently (file-set + size deltas all expected; rename + 2 views genuinely
+uncommitted).
+
+**IaC verdict:** structure reproducible after audit; working pipeline not until
+Section C. Section-C gaps unchanged and still owner-gated: data seed (control +
+`MET_CSV_SNAPSHOT` land EMPTY — needs the CSV-snapshot land + control seed Python),
+`AUTH-01` (key-pair), `DATA-06` (CSV download integrity guard), dead-code
+`rename_and_update.py` removal, `AUTO-03` extraction_log writes, `PIPE-06`
+lease-claim MERGE.
+
+**Mentor-flag (new, Section C — not a DDL blocker):** `MET_CSV_SNAPSHOT` has no
+uniqueness on `object_id`; `MET_WORKLIST` joins control→snapshot without a
+latest-snapshot filter. If the snapshot is re-landed by append (which `DATA-01`
+diff history wants), the JOIN fans out → duplicate worklist rows. Resolve when the
+seed/diff Python lands (e.g. snapshot batch/date discriminator + dedup, or replace-on-
+bootstrap). Also: view-level `ORDER BY` may not survive an outer `LIMIT` — the Mac's
+drain query should carry its own `ORDER BY`.
+
+**Owner decision:** **Option A** (accept reconciled slice; commit on
+`donkey-kong-sandbox`; then a single `make infra` on a separate go). **No register
+entry flipped to `decided`/`applied`** — objects are not yet applied; status changes
+await explicit owner sign-off + date per register discipline.
+
 ---
 
 ## Cross-references

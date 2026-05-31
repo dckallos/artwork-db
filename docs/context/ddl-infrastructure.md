@@ -327,6 +327,55 @@ decisions (idempotency, UPPERCASE, rename `grant_privileges→create_grants`,
 V/R/B comment rewords) are orthogonal to the new objects. Recommended: apply
 them first in Session 3 as a pre-patch, then add new objects.
 
+## Session-3 reconciliation (2026-05-31) — dual-instance audit outcome
+
+**Context — dual-instance incident.** Repeated connection drops caused overlapping
+Cortex windows; the staged `donkey-kong-sandbox` tree was written across two ghost
+clusters (00:51–00:52 and 01:04–01:07 GMT) with NO review trail in the surviving
+chat. A new window resumed via `docs/context/session-3-progress-log.md` (append-only
+restart trail) and ran a read-only **provenance + reconciliation audit** (no account
+execution, no commit) plus an owner-authorized **mirror diff** vs committed baseline
+`2e957708`.
+
+**Audit outcome — CLEAN.** Every staged change maps to the Session-2b build-impact
+map and/or the four approved cosmetic decisions; ZERO off-spec changes:
+- New objects landed on-spec: `MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT` (in
+  `create_bronze_tables.sql`), `MET_WORKLIST` (new `create_bronze_views.sql`),
+  paired `drop_bronze_views.sql`, `MET_LEASE_RECLAIM_TASK` (real `create_tasks.sql`,
+  hourly CRON / 30-min TTL / ARTWORK_WH), `drop_tasks.sql`.
+- Grant gap fixed: `create_grants.sql` + `refresh_grants.sql` now grant LOADER
+  `SELECT ON ALL+FUTURE VIEWS IN BRONZE`.
+- All four cosmetic decisions applied: idempotency class-split (tables `IF NOT
+  EXISTS`; view/format/stage/task `OR REPLACE`); UPPERCASE identifiers; rename
+  `grant_privileges.sql → create_grants.sql` (auto-pairs to `drop_grants.sql` via
+  orchestrate's `create_→drop_` rule; manifest updated); stale-comment rewords.
+- `create_roles.sql` `EXECUTE TASK ON ACCOUNT` uncommented in lockstep; `bootstrap.py`
+  privilege-contract frozenset adds `"EXECUTE TASK"` — verified self-consistent (the
+  preflight passes iff both agree; it would fail-fast otherwise).
+- Manifest order: `create_bronze_views.sql` inserted after `create_bronze_tables.sql`
+  (step 8), before `create_service_user`/`create_tasks`/`refresh_grants`.
+
+**Mirror diff (read-only, owner-authorized) confirmed it independently:** committed
+baseline still has `grant_privileges.sql` and lacks both view files → the rename + 2
+new files are genuinely uncommitted; all byte-size deltas map to expected edits;
+nothing unexplained. (Line-level diff not run — would need a named file format =
+ad-hoc DDL; diffed on file-set + size, cross-checked vs full content reads.)
+
+**IaC reproducibility verdict:** *structure — reproducible after audit; working
+pipeline — not until Section C.* Idempotency / manifest dep-order / paired-drop
+coverage / privilege-contract preflight all PASS. Known gaps deferred to Section C
+(NOT this session): (1) data seed not codified — control + snapshot land EMPTY;
+(2) AUTH-01 — service user still placeholder password; (3) dead code
+`rename_and_update.py` still present.
+
+**Decision:** owner picked **Option A** (accept reconciled slice; commit to freeze
+ghost ambiguity; then a single `make infra` on a separate go). **Mentor-flag (Section
+C, not a DDL blocker):** `MET_CSV_SNAPSHOT` has no uniqueness on `object_id` and
+`MET_WORKLIST` joins control→snapshot without a latest-snapshot filter — re-landing
+the snapshot by append would fan out the worklist; resolve when the seed/diff Python
+lands. **Status NOT flipped to applied** — objects not yet applied; awaiting the
+commit + `make infra` go-aheads.
+
 ## When to escalate to full source
 
 - Changing apply/teardown order → edit `scripts/manifest.txt` (only source of order).

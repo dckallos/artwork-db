@@ -3,10 +3,15 @@
 One line per file: purpose + line count + "open full source only if…" trigger.
 Consult this before opening any source.
 
-**Coverage (reconciled against `ls -R` on 2026-05-30): 77 files / 12 dirs.** All
+**Coverage (reconciled against `ls -R` on 2026-05-30): 77 files / 12 dirs.**
+**Session-3 update (2026-05-31):** the staged `donkey-kong-sandbox` tree adds 2
+infrastructure files (`create_bronze_views.sql`, `drop_bronze_views.sql`) and renames
+`grant_privileges.sql → create_grants.sql`; the `infrastructure/` rows below are
+re-verified this window (read end-to-end). A new `docs/context/session-3-progress-log.md`
+also exists (append-only restart trail; not row-mapped, like the other docs). All
 substantive source is documented. The `Verified` column records provenance:
-`2026-05-30` = read end-to-end this window; `prior` = trusted from an earlier
-window's summary, not re-read; trivial files (`.gitignore`, `LICENSE`) and the
+a date = read end-to-end that window; `prior` = trusted from an earlier window's
+summary, not re-read; trivial files (`.gitignore`, `LICENSE`) and the
 `docs/context/*.md` docs themselves are intentionally not row-mapped.
 
 ## scripts/snowflake_cli/ (Workflow 1 — reviewed)
@@ -44,22 +49,25 @@ window's summary, not re-read; trivial files (`.gitignore`, `LICENSE`) and the
 
 Prefix-free `create_*` / `drop_*` pairs, matched **by base name** (no V/R/B
 prefixes — retired; see `ddl-infrastructure.md`). Apply order lives in
-`scripts/manifest.txt`, not the names. All 8 create/drop pairs present.
+`scripts/manifest.txt`, not the names. **10 create/drop pairs present** (Session-3
+added the `bronze_views` pair; the `grant_privileges → create_grants` rename makes
+grants the 9th auto-paired `create_`).
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `create_roles.sql` | 46 | 3 roles (LOADER/TRANSFORMER/ADMIN) + hierarchy + account grants (CREATE WH/DB; EXECUTE TASK commented out) | prior | changing role model / account grants |
+| `create_roles.sql` | 46 | 3 roles (LOADER/TRANSFORMER/ADMIN) + hierarchy + account grants (CREATE WH/DB; **EXECUTE TASK now uncommented, Session-3 lockstep with create_tasks**) | 2026-05-31 | changing role model / account grants |
 | `create_warehouses.sql` | 15 | `ARTWORK_WH` X-Small, auto-suspend 60 (`IF NOT EXISTS`) | prior | resizing/adding WH |
 | `create_databases_and_schemas.sql` | 21 | `ARTWORK_DB` + BRONZE/SILVER/GOLD schemas (`IF NOT EXISTS`) | prior | adding schemas |
-| `create_file_formats.sql` | 22 | `json_raw`, `parquet_raw` in BRONZE (`OR REPLACE`) | prior | adding formats |
-| `create_stages.sql` | 14 | `bronze_load_stage` internal stage (`OR REPLACE`); trailing-ws line 14 | prior | adding stages |
-| `create_bronze_tables.sql` | 85 | 6 `raw_*` VARIANT tables + `extraction_log` (`IF NOT EXISTS`) | prior | schema changes |
-| `create_service_user.sql` | 31 | `ARTWORK_LOADER_SVC` user, placeholder pw to rotate | prior | auth/identity changes |
-| `create_tasks.sql` | 7 | **placeholder** (bare SELECT — no real tasks) | prior | defining real tasks |
-| `drop_*.sql` (8) | — | paired rollbacks; `DROP … IF EXISTS`; `drop_tasks` is a placeholder too | prior | rolling back / defining tasks |
-| `grant_privileges.sql` | 45 | ALL+FUTURE grants to functional roles (runs as ARTWORK_ADMIN) | prior | changing grants |
-| `refresh_grants.sql` | 23 | repeatable: re-grant ALL (current) only; no drop | prior | after new objects land |
-| `drop_grants.sql` | 40 | no-op SELECT (grants cascade); **not in manifest → never auto-run**; stale V###/B002 comment refs | prior | implementing real REVOKEs |
+| `create_file_formats.sql` | 22 | `JSON_RAW`, `PARQUET_RAW` in BRONZE (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding formats |
+| `create_stages.sql` | 14 | `BRONZE_LOAD_STAGE` internal stage (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding stages |
+| `create_bronze_tables.sql` | 124 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`) | 2026-05-31 | schema changes |
+| `create_bronze_views.sql` *(NEW, Session-3)* | 59 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`) | 2026-05-31 | changing worklist priority/filters |
+| `create_service_user.sql` | 31 | `ARTWORK_LOADER_SVC` user, placeholder pw to rotate (AUTH-01 pending) | 2026-05-31 | auth/identity changes |
+| `create_tasks.sql` | 44 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`) | 2026-05-31 | defining/altering tasks |
+| `drop_*.sql` (10) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases) + real `drop_tasks` | 2026-05-31 | rolling back |
+| `create_grants.sql` *(renamed from grant_privileges.sql, Session-3)* | 51 | ALL+FUTURE grants to functional roles + **LOADER SELECT on ALL+FUTURE VIEWS in BRONZE** (runs as ARTWORK_ADMIN) | 2026-05-31 | changing grants |
+| `refresh_grants.sql` | 24 | repeatable: re-grant ALL (current) incl. **VIEWS**; no drop | 2026-05-31 | after new objects land |
+| `drop_grants.sql` | 41 | no-op SELECT (grants cascade); reworded to reference `create_grants.sql` | 2026-05-31 | implementing real REVOKEs |
 
 ## scripts/ (orchestration — Workflow 2)
 
