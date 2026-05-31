@@ -36,3 +36,5 @@ Thumbs.db
 uv.lock
 output/code-snapshot.md
 output/extension-map.md
+
+*.folder
