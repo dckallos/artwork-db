@@ -260,13 +260,13 @@ cascade from dropped parents) but means its only use is manual.
 These are comment-only; behavior is unaffected, but they contradict the
 prefix-free convention and should be reworded to reference the manifest.
 
-## Approved decisions — pending application (NOT yet applied)
+## Approved cosmetic decisions — APPLIED 2026-05-31
 
-Operator-approved on 2026-05-30. **Gated: do NOT apply until the ENTIRE repo is
-documented** (policy: no code changes during the documentation pass). This section
-is a record for a future dedicated edit window. When that window comes, implement
-exactly as specified, keep create↔drop pairs and manifest order consistent, and
-validate SQL compiles (do not execute unless told).
+Operator-approved 2026-05-30; applied in Session 3 (committed + `make infra`; see the
+"Decision + outcome" block below). Kept as a record of WHAT changed. One carve-out is
+still PENDING: item 4's V/R/B rewords were done for `infrastructure/*` only — the garbled
+`git-setup/*.sql` comments (section above) and non-infra refs (`config.py`, READMEs,
+`.env.example`; see AGENTS.md gated items) are NOT yet done.
 
 1. **Idempotency policy (ratified).** Keep the class-based split: `CREATE … IF NOT
    EXISTS` for stateful objects (roles, warehouses, database, schemas, tables,
@@ -368,41 +368,38 @@ coverage / privilege-contract preflight all PASS. Known gaps deferred to Section
 (2) AUTH-01 — service user still placeholder password; (3) dead code
 `rename_and_update.py` still present.
 
-**Decision:** owner picked **Option A** (accept reconciled slice; commit to freeze
-ghost ambiguity; then a single `make infra` on a separate go). **Mentor-flag (Section
-C, not a DDL blocker):** `MET_CSV_SNAPSHOT` has no uniqueness on `object_id` and
-`MET_WORKLIST` joins control→snapshot without a latest-snapshot filter — re-landing
-the snapshot by append would fan out the worklist; resolve when the seed/diff Python
-lands. **Status NOT flipped to applied** — objects not yet applied; awaiting the
-commit + `make infra` go-aheads.
+**Decision + outcome — Option A, APPLIED 2026-05-31 (owner sign-off + execution).**
+Owner picked Option A, committed Phase 1 (the 18 reconciled files) on
+`donkey-kong-sandbox`, and ran `make infra` locally. The orchestrator applied all 11
+manifest scripts cleanly + idempotently (pre-existing → "already exists, statement
+succeeded"; new objects created): `MET_ENRICHMENT_CONTROL`, `MET_CSV_SNAPSHOT`,
+`MET_WORKLIST` (view), `MET_LEASE_RECLAIM_TASK` (created + `RESUME`d; first hourly run
+SUCCEEDED). Privilege preflight passed live, validating the `bootstrap.py` ↔
+`create_roles.sql` `EXECUTE TASK` contract; LOADER VIEW grant landed; worklist returns
+0 rows pre-seed (bases empty), as designed. (`BRONZE.RUN_CONTROL` checkpoint table was
+added + applied the same day; see `create_run_control.sql` + the ad-hoc `scripts/check.sh`
+suite.)
 
-**APPLIED — 2026-05-31 (owner sign-off + execution).** Owner committed Phase 1 (the 18
-reconciled files) on `donkey-kong-sandbox` and ran `make infra` locally on their Mac.
-The orchestrator applied all 11 manifest scripts cleanly and idempotently
-(pre-existing objects → "already exists, statement succeeded"; new objects created):
-`MET_ENRICHMENT_CONTROL`, `MET_CSV_SNAPSHOT`, `MET_WORKLIST` (view), and
-`MET_LEASE_RECLAIM_TASK` (created + `RESUME`d). Privilege preflight passed live
-("ARTWORK_ADMIN holds CREATE DATABASE, CREATE WAREHOUSE, EXECUTE TASK"), validating the
-`bootstrap.py` ↔ `create_roles.sql` contract incl. the `EXECUTE TASK` ghost edit. LOADER
-VIEW grant landed (`refresh_grants`: "ALL VIEWS … 1 objects affected"). Worklist returns
-0 rows pre-seed (both base tables empty), as designed. **Correction to the mentor-flag
-above:** the DDL that applied DOES declare `CONSTRAINT pk_met_csv_snapshot PRIMARY KEY
-(object_id)` (and `pk_met_enrichment_control`), so uniqueness INTENT is now declared;
-Snowflake does not ENFORCE PK, so the runtime 1:1 guarantee still rides on the MERGE load
-pattern (Section C). **Dual-instance note:** this block was originally written by a prior
-aborted run; a second concurrent instance also wrote to the shared docs/log this arc —
-owner confirmed a single living session, this window authoritative (full incident in
-`session-3-progress-log.md`). **Section C (data seed, AUTH-01 key-pair, dead-code
-removal, PIPE-06 lease-claim MERGE, DATA-06 guard, AUTO-03 writes) = NEXT session.**
+**Mentor-flag (Section C, not a DDL blocker):** `MET_CSV_SNAPSHOT` and
+`MET_ENRICHMENT_CONTROL` now declare PRIMARY KEYs (uniqueness INTENT), but Snowflake does
+NOT enforce PK — the 1:1 control×snapshot join guarantee rides on the MERGE load pattern.
+Re-landing the snapshot by append (which DATA-01 diff history wants) would still fan out
+`MET_WORKLIST`; resolve with a snapshot discriminator/dedup or replace-on-bootstrap when
+the seed/diff Python lands.
+
+**Dual-instance note:** this section was authored across overlapping aborted runs; owner
+confirmed a single authoritative window (full incident in `session-3-progress-log.md`).
+Section C (data seed, AUTH-01 key-pair, dead-code removal, PIPE-06 lease-claim MERGE,
+DATA-06 guard, AUTO-03 writes) = NEXT session.
 
 ## When to escalate to full source
 
 - Changing apply/teardown order → edit `scripts/manifest.txt` (only source of order).
 - Changing phase routing, preflight, or secret suppression → `scripts/orchestrate.sh`.
-- Adding/altering grants → `grant_privileges.sql` (+ mirror current-grants in
-  `refresh_grants.sql`); rollback stays no-op unless granting on persistent
-  non-dropped objects.
-- Defining real tasks → fill `create_tasks.sql` + `drop_tasks.sql` and uncomment the
-  `EXECUTE TASK` grant in `create_roles.sql` in lockstep.
+- Adding/altering grants → `create_grants.sql` (renamed from `grant_privileges.sql`;
+  + mirror current-grants in `refresh_grants.sql`); rollback stays no-op unless granting
+  on persistent non-dropped objects.
+- Altering the lease-reclaim task → edit `create_tasks.sql` + `drop_tasks.sql`; the
+  `EXECUTE TASK` grant in `create_roles.sql` is already active — keep it in lockstep.
 - Adding a new object class → create both `create_<thing>.sql` and
   `drop_<thing>.sql` and add the create to `manifest.txt`.

@@ -606,18 +606,10 @@ Section C. Section-C gaps unchanged and still owner-gated: data seed (control +
 `rename_and_update.py` removal, `AUTO-03` extraction_log writes, `PIPE-06`
 lease-claim MERGE.
 
-**Mentor-flag (new, Section C — not a DDL blocker):** `MET_CSV_SNAPSHOT` has no
-uniqueness on `object_id`; `MET_WORKLIST` joins control→snapshot without a
-latest-snapshot filter. If the snapshot is re-landed by append (which `DATA-01`
-diff history wants), the JOIN fans out → duplicate worklist rows. Resolve when the
-seed/diff Python lands (e.g. snapshot batch/date discriminator + dedup, or replace-on-
-bootstrap). Also: view-level `ORDER BY` may not survive an outer `LIMIT` — the Mac's
-drain query should carry its own `ORDER BY`.
-
-**Owner decision:** **Option A** (accept reconciled slice; commit on
-`donkey-kong-sandbox`; then a single `make infra` on a separate go). **No register
-entry flipped to `decided`/`applied`** — objects are not yet applied; status changes
-await explicit owner sign-off + date per register discipline.
+**Mentor-flag (Section C, not a DDL blocker):** the PK/uniqueness + snapshot-fan-out
+resolution is in the APPLIED block below. Additional still-open caveat: the view-level
+`ORDER BY` in `MET_WORKLIST` may not survive an outer `LIMIT` — the Mac's drain query must
+carry its own `ORDER BY`.
 
 **APPLIED — 2026-05-31 (owner sign-off + execution).** Owner committed Phase 1 (18
 reconciled files) and ran `make infra` on their Mac; all 11 manifest scripts applied

@@ -3,22 +3,20 @@
 One line per file: purpose + line count + "open full source only if…" trigger.
 Consult this before opening any source.
 
-**Coverage (reconciled against `ls -R` on 2026-05-30): 77 files / 12 dirs.**
-**Session-3 update (2026-05-31):** the staged `donkey-kong-sandbox` tree adds 2
-infrastructure files (`create_bronze_views.sql`, `drop_bronze_views.sql`) and renames
-`grant_privileges.sql → create_grants.sql`; the `infrastructure/` rows below are
-re-verified this window (read end-to-end). A new `docs/context/session-3-progress-log.md`
-also exists (append-only restart trail; not row-mapped, like the other docs). All
-substantive source is documented. The `Verified` column records provenance:
-a date = read end-to-end that window; `prior` = trusted from an earlier window's
-summary, not re-read; trivial files (`.gitignore`, `LICENSE`) and the
-`docs/context/*.md` docs themselves are intentionally not row-mapped.
-**Session-3 APPLIED (2026-05-31):** owner committed Phase 1 + ran `make infra` — the
-2 new view files + renamed `create_grants.sql` are now live IaC (see
-`ddl-infrastructure.md`/`met-deepdive.md` Session-3 "APPLIED" blocks). Effective count
-is now **79 files** (the 2 new bronze-view scripts) once committed; this header's
-"77/12" line predates the new files and should be re-reconciled against `ls -R` next
-edit window.
+**Coverage:** every substantive file is row-mapped below. Total file/dir counts are
+intentionally NOT hardcoded here (they rot) — reconcile against `ls -R` when needed.
+The `Verified` column records provenance: a date = read end-to-end that window;
+`prior` = trusted from an earlier window, not re-read. Trivial files (`.gitignore`,
+`LICENSE`) and the `docs/context/*.md` docs themselves are intentionally not row-mapped.
+
+**Session-3 (2026-05-31) — APPLIED** (owner committed Phase 1 + ran `make infra`). Live
+IaC additions: `create_bronze_views.sql`/`drop_bronze_views.sql` (`MET_WORKLIST`);
+`create_run_control.sql`/`drop_run_control.sql` (`RUN_CONTROL` checkpoint table);
+`MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT` in `create_bronze_tables.sql`; real
+`MET_LEASE_RECLAIM_TASK` in `create_tasks.sql`; and the `grant_privileges.sql →
+create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/check.sh`,
+`scripts/checkpoint.sh`, `scripts/sql/show_{active_sessions,run_control,pipeline_status}.sql`
+— and the append-only `docs/context/session-3-progress-log.md` restart trail. Rows below.
 
 ## scripts/snowflake_cli/ (Workflow 1 — reviewed)
 
@@ -55,9 +53,9 @@ edit window.
 
 Prefix-free `create_*` / `drop_*` pairs, matched **by base name** (no V/R/B
 prefixes — retired; see `ddl-infrastructure.md`). Apply order lives in
-`scripts/manifest.txt`, not the names. **10 create/drop pairs present** (Session-3
-added the `bronze_views` pair; the `grant_privileges → create_grants` rename makes
-grants the 9th auto-paired `create_`).
+`scripts/manifest.txt`, not the names. **11 create/drop pairs present** (Session-3
+added the `bronze_views` and `run_control` pairs; the `grant_privileges → create_grants`
+rename makes grants an auto-paired `create_`).
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
@@ -68,9 +66,10 @@ grants the 9th auto-paired `create_`).
 | `create_stages.sql` | 14 | `BRONZE_LOAD_STAGE` internal stage (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding stages |
 | `create_bronze_tables.sql` | 124 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`) | 2026-05-31 | schema changes |
 | `create_bronze_views.sql` *(NEW, Session-3)* | 59 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`) | 2026-05-31 | changing worklist priority/filters |
+| `create_run_control.sql` *(NEW, Session-3)* | 46 | `RUN_CONTROL` durable checkpoint table — PK (run_id, step), VARIANT checkpoint, session_id/query_tag provenance; resume work across connection drops (`IF NOT EXISTS`) | 2026-05-31 | changing checkpoint schema |
 | `create_service_user.sql` | 31 | `ARTWORK_LOADER_SVC` user, placeholder pw to rotate (AUTH-01 pending) | 2026-05-31 | auth/identity changes |
 | `create_tasks.sql` | 44 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`) | 2026-05-31 | defining/altering tasks |
-| `drop_*.sql` (10) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases) + real `drop_tasks` | 2026-05-31 | rolling back |
+| `drop_*.sql` (11) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases), `drop_run_control`, + real `drop_tasks` | 2026-05-31 | rolling back |
 | `create_grants.sql` *(renamed from grant_privileges.sql, Session-3)* | 51 | ALL+FUTURE grants to functional roles + **LOADER SELECT on ALL+FUTURE VIEWS in BRONZE** (runs as ARTWORK_ADMIN) | 2026-05-31 | changing grants |
 | `refresh_grants.sql` | 24 | repeatable: re-grant ALL (current) incl. **VIEWS**; no drop | 2026-05-31 | after new objects land |
 | `drop_grants.sql` | 41 | no-op SELECT (grants cascade); reworded to reference `create_grants.sql` | 2026-05-31 | implementing real REVOKEs |
@@ -86,6 +85,9 @@ grants the 9th auto-paired `create_`).
 | `rollback_sql.sh` | 32 | paired-drop wrapper; mirrors apply connection logic | 2026-05-30 | debugging CLI invocation |
 | `secret_bearing.txt` | — | scripts whose stdout is suppressed (fail-closed on PAT marker) | prior | adding secret-bearing scripts |
 | `bootstrap_chmod.sh`, `git_mark_executable.sh`, `executable_files.txt`, `sql/show_admin_account_grants.sql` | — | chmod policy + helpers | prior | — |
+| `check.sh` *(NEW, Session-3)* | 36 | standalone read-only ad-hoc SQL runner (`snow sql --filename`); not in orchestrator | 2026-05-31 | adding/altering ad-hoc checks |
+| `checkpoint.sh` *(NEW, Session-3)* | 51 | write one `RUN_CONTROL` checkpoint (`<run_id> <step> [status] [note]`); standalone DML, sets QUERY_TAG | 2026-05-31 | changing checkpoint write |
+| `sql/show_active_sessions.sql`, `sql/show_run_control.sql`, `sql/show_pipeline_status.sql` *(NEW, Session-3)* | — | read-only checks: live sessions / fork detection, run-control trail + dual-instance smell test, pipeline object+task status | 2026-05-31 | — |
 
 ## Root / other
 
