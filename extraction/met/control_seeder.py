@@ -31,7 +31,7 @@ from typing import List, Optional, Tuple
 import snowflake.connector
 
 from .config import Config
-from .db import load_sql
+from .db import load_sql, strip_sql_comments
 from .snowflake_uploader import _snowflake_connect
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,10 @@ def seed_control(
 
     control = f"{config.snowflake_database}.{config.snowflake_schema}.MET_ENRICHMENT_CONTROL"
     snapshot = f"{config.snowflake_database}.{config.snowflake_schema}.MET_CSV_SNAPSHOT"
-    sql = SEED_CONTROL_SQL.format(
+    # Strip -- comments BEFORE binding: the connector pyformat-binds the whole
+    # command string, so any stray % in a comment would break `command % params`
+    # (see db.strip_sql_comments). The real %s bind in {predicate} survives.
+    sql = strip_sql_comments(SEED_CONTROL_SQL).format(
         control=control, snapshot=snapshot, predicate=predicate, limit=limit_clause,
     )
 

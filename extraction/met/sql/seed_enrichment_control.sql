@@ -1,13 +1,20 @@
 -- Seed BRONZE.MET_ENRICHMENT_CONTROL with pending rows for a bounded slice of the
 -- snapshot (Phase 2; docs/context/met-deepdive.md DDL-04 / PIPE-05). Rendered via
 -- str.format() in control_seeder.py with:
---   {control}    fully-qualified MET_ENRICHMENT_CONTROL
---   {snapshot}   fully-qualified MET_CSV_SNAPSHOT
---   {predicate}  slice WHERE predicate; may contain positional bind placeholders
---                 (NOTE: keep ALL literal percent signs out of this file -- the
---                 Snowflake connector pyformat-binds the WHOLE command string,
---                 comments included, so a stray percent breaks `command % params`)
---   {limit}      trailing LIMIT clause text ('' or 'LIMIT n', n already an int)
+--   {{control}}    fully-qualified MET_ENRICHMENT_CONTROL
+--   {{snapshot}}   fully-qualified MET_CSV_SNAPSHOT
+--   {{predicate}}  slice WHERE clause; carries the department positional bind
+--   {{limit}}      trailing LIMIT clause text ('' or 'LIMIT n', n already an int)
+--
+-- BIND-SAFETY (why the doc placeholders above are DOUBLE-BRACED and this file has
+-- no literal percent sign): str.format renders this file FIRST, then the Snowflake
+-- connector pyformat-binds the WHOLE rendered string -- comments included. If the
+-- doc placeholders were single-braced, str.format would substitute them inside the
+-- comment and inject the predicate's positional placeholder there; if any literal
+-- percent sign survived into the rendered text, the connector's bind pass would
+-- miscount its arguments and fail. Double braces render as literal text and stay
+-- inert; the ONLY positional bind in the rendered command is the one inside the
+-- WHERE clause, matched 1:1 by the params list from control_seeder.py.
 --
 -- Why MERGE (not INSERT): re-seeding the same or an overlapping slice must be
 -- idempotent and MUST NOT disturb rows already being worked. MERGE keyed on
