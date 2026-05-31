@@ -868,3 +868,268 @@
          - Do NOT re-add `met_enricher.py` -- it was broken on every contract.
 - **End of this window.**
 
+### 2026-05-31 (same window, follow-on) | RUN RESULT + 403/410 RECLASSIFICATION
+- **Owner re-ran (post P-D1 + P-D2 apply, this window's prior turn):**
+  `python -m extraction.met.run enrich-met --limit 200`
+  -> claimed=200, done=96, no_image=0, error=104, assembled=96,
+     `err_breakdown={'http_4xx_403': 104}`. Diagnosis blind no longer; this is the
+     histogram we wanted.
+- **Verdict: the public-domain CSV flag does not guarantee API availability.**
+  Confirmed Hypothesis A from the code review. 100% of "errors" are 403 Forbidden
+  from `/public/collection/v1/objects/{id}`. NOT a code defect; the Met API
+  refuses to serve some objects whose CSV `is_public_domain = TRUE`. Retrying
+  cannot help. Today these stay `enrichment_status='error'` in
+  `MET_ENRICHMENT_CONTROL`, which keeps them in `MET_WORKLIST` (filter:
+  `enrichment_status IN ('pending','error')`) -- they will be re-leased and
+  re-403'd on every subsequent run. That's a soft-loop the owner pays X-Small
+  warehouse seconds for.
+- **FIX APPLIED (workspace; NOT pushed to Mac yet):**
+  `extraction/met/image_enricher.py` `_fetch_one` -- 403 and 410 now return
+  `(object_id, "no_image", None, "HTTP 403: ...")` instead of `error`. Rationale:
+    - Terminal: retry cannot recover.
+    - Worklist filter `IN ('pending','error')` excludes `no_image`, so the row
+      drops out permanently.
+    - `enrichment_error` is preserved (P-D1) so audits can distinguish
+      "no primaryImage in payload" (legitimate no_image, no error message) from
+      "API refused" (no_image with `HTTP 403: ...` message).
+    - 410 (Gone) gets the same treatment defensively; we did not see any 410s
+      this run, but the logic is identical.
+  `ast.parse` of `image_enricher.py`: OK.
+- **Expected next-run shape on the Mac (after sync + re-run):**
+    - The 104 currently-error rows in `MET_ENRICHMENT_CONTROL` will be
+      re-claimed by the next batch (worklist still includes them while their
+      status is `error`), re-fetched, re-403'd, and now MOVE to
+      `enrichment_status='no_image'` with `enrichment_error='HTTP 403: ...'`.
+      They drop out of the worklist permanently after that.
+    - Subsequent batches will show `done` + `no_image` outcomes only; `error`
+      should approach zero (modulo genuine transients).
+- **NEW-WINDOW BRIEFING (UPDATED -- supersedes the prior one above):**
+    1. AGENTS.md (Tier 0). Then this entry. Then `code-review-met-pipeline.md`
+       sections 0, 4, 5, 6 only if a new patch is being authored.
+    2. Solo-session check.
+    3. Workspace is AHEAD of the Mac with the 403/410 reclassification + all
+       prior P-D1/P-D2/P-B1 staged changes. First action: ask the owner to
+       sync + re-run (`python -m extraction.met.run enrich-met --limit 200`).
+       Expect the 104 rows to flip to `no_image`.
+    4. **Read-only verification queries on the live account after the next run:**
+         - `SELECT enrichment_status, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+            GROUP BY 1 ORDER BY 2 DESC;` -- expect pending shrinking, no_image > 0.
+         - `SELECT LEFT(enrichment_error, 20), COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+            WHERE enrichment_error IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;` -- breakdown.
+         - `SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;` -- assembled total.
+    5. **Decision tree from THERE:**
+         - Clean (no_image absorbs the 403s, error -> 0): drain the remaining
+           ~2,127 European-Paintings PD rows (`enrich-met` no `--limit`). Then
+           consider widening the slice (Drawings + Prints, Photographs, etc.)
+           via re-seed -- documented in `met-deepdive.md` PIPE-05.
+         - Still some `error`: read the new histogram. Most likely candidates
+           are `timeout`/`connect` (network), or a genuine 5xx (Met-side issue).
+    6. **Deferred patches (suggested order, unchanged):** P-B2 doc reword;
+       P-H1 autocommit/BEGIN/COMMIT; P-H4 `--where` env gate; P-H3 paramstyle=qmark;
+       P-H2 DATA-01 deaccession (needs cascade-vs-SCD-2 decision); P-L1 legacy
+       SQLite delete.
+    7. Dual-FS hazard rules unchanged.
+    8. **What MUST NOT happen in the next window** (unchanged + one addition):
+         - Do NOT `make iac` from the workspace.
+         - Do NOT push to main.
+         - Do NOT undo the 403/410 reclassification -- the worklist will soft-loop again.
+         - Do NOT undo P-D1 / P-D2 / P-B1.
+         - Do NOT re-add `met_enricher.py`.
+- **End of this window (for real this time).**
+
+### 2026-05-31 (same window, follow-on 2) | CRITICAL CORRECTION: WAF, NOT API REFUSAL
+- **Owner challenged the 403=no_image conclusion.** Owner reported a separate SQLite
+  instance with 100% enrichment of these same object_ids. That contradicts the Hypothesis
+  A reading from the prior turn.
+- **Sample inspection settled it.** Pulled 25 errored object_ids joined to MET_CSV_SNAPSHOT.
+  Every one is a major European painting (Petrus Christus, Cima da Conegliano, Claude
+  Lorrain, Constable, Clouet, Pieter Claesz, Edwaert Collier, ...). Every `link_resource`
+  is a live `metmuseum.org/art/collection/search/<id>` page that serves the work with
+  images in any browser. The full 403 response body starts with
+  `<html style="height:100%"><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">...
+  <meta http-equiv=...`. That is NOT a Met API response (the API returns JSON). It is the
+  textbook signature of an Akamai/CDN bot-mitigation interstitial.
+- **Verdict: the Mac's request pattern is being WAF-blocked**, not the Met API refusing
+  these specific records. The data is unambiguously available.
+- **REVERTED THIS TURN:** the 403/410 -> `no_image` reclassification I had staged in
+  `extraction/met/image_enricher.py` is removed. The file is back to the original logic
+  (404 -> no_image; 403/410 -> error like other 4xx). Reason: shipping that change with
+  WAF-induced 403s would have **poisoned** ~213+ rows of perfectly available masterworks
+  to `no_image` and they would never be retried. Workspace state now has only the
+  diagnosis-only patches: P-D1 (column), P-D2 (histogram log), P-B1 (dead twin removed).
+- **Live state read (this turn):** `MET_ENRICHMENT_CONTROL` = 187 done / 213 error / 1927
+  pending (= 2327 total). Of the 213 errors: 104 carry `HTTP 403: <html...>` in
+  `enrichment_error` (post-P-D1 batch); 109 have NULL `enrichment_error` (pre-P-D1 first
+  batch). Same root cause for both, just before/after the column existed.
+- **Unverified-but-instructive observation:** `s.raw_payload:object_url::STRING` is NULL
+  for every snapshot row -- that key does not exist. The CSV's "Object URL" column maps
+  to `link_resource` in the snake_case payload. Cosmetic; not a defect. Documenting so
+  the next window does not chase it.
+- **WAF-cause hypotheses (rank-ordered) for the next window's test:**
+    1. `User-Agent: artwork-db/1.0 (contact: daniel@porchanalytics.com)` is too
+       bot-shaped. Akamai bot scoring penalizes custom UAs.
+    2. `MET_API_CONCURRENCY=10` is above browser cap (6/host). Burst-shape looks
+       like a scraper.
+    3. Sparse header set (only UA + Accept). No Accept-Language / Accept-Encoding /
+       Cache-Control / Connection header.
+    4. No HTML warmup (jumps straight to the JSON endpoint).
+    5. Network reputation drift since the prior SQLite run.
+- **Diagnostic the owner is asked to run on the Mac (3-way curl):**
+    A) current UA on `https://collectionapi.metmuseum.org/public/collection/v1/objects/435897`
+    B) browser-style UA (`Mozilla/5.0 ... Safari/605.1.15`) + full Accept-Language / Accept-Encoding
+    C) bare curl (default `curl/x.x.x` UA)
+  Prior: A=403, B=200, C=200. If confirmed, the fix is one line in `config.py:53`.
+- **Mentor lesson worth durably capturing:** the prior turn's "Hypothesis A" was a
+  reasonable reading of the data on hand (100% 403 from a 4xx-non-retryable path), but it
+  did not account for two pieces of evidence the owner had: (1) HTML response body shape;
+  (2) the SQLite control instance with 100% enrichment. Always inspect the response body
+  when you see 403 from a JSON API -- a non-JSON 403 is almost never the API speaking.
+  This is the kind of thing dbt source freshness + content-type contract tests would
+  catch automatically; a Track-5 follow-on.
+- **NEW-WINDOW BRIEFING (UPDATED -- supersedes BOTH prior briefings above):**
+    1. AGENTS.md (Tier 0). Then this entry. The two prior `End of this window` markers
+       above are historical -- this is the current end.
+    2. Solo-session check.
+    3. Workspace state vs Mac:
+         - Mac is AT P-D1 + P-D2 (already applied; you saw the histogram).
+         - Workspace is AT P-D1 + P-D2 + P-B1 (dead twin removed) + the 403/410 fix is
+           **REVERTED** (back to original `image_enricher.py` logic). To re-sync the Mac:
+           pull `donkey-kong-sandbox`. P-B1 alone (3 deletions) is the only delta.
+    4. **First action options for the next window:**
+         (a) Owner has run the 3-way curl and shared results -> propose the one-line
+             config.py UA change (or whichever knob the curl identified).
+         (b) Owner has not yet run the curl -> wait; do not change loader behavior
+             without that data point.
+    5. **If/when the UA fix lands and `enrich-met` is re-run:** the 213 errored rows are
+       still in MET_WORKLIST (their `enrichment_status='error'` keeps them claimable);
+       a re-run picks them up, this time fetches successfully, and the 109 with NULL
+       `enrichment_error` get their column populated on this pass. Expect:
+       `enrichment_status='done'` ~+213 (assuming all 213 had primaryImage), and `error`
+       drops near zero.
+    6. **Deferred patches unchanged:** P-B2 doc reword; P-H1 autocommit/BEGIN/COMMIT;
+       P-H4 `--where` env gate; P-H3 paramstyle=qmark; P-H2 DATA-01 deaccession; P-L1
+       legacy SQLite delete.
+    7. Dual-FS hazard rules unchanged.
+    8. **What MUST NOT happen in the next window:**
+         - Do NOT `make iac` from the workspace.
+         - Do NOT push to main.
+         - Do NOT re-stage the 403/410 -> no_image reclassification. It was wrong; the
+           response body proves WAF, not API refusal.
+         - Do NOT undo P-D1 / P-D2 / P-B1.
+         - Do NOT re-add `met_enricher.py`.
+- **End of this window (third and actually-final time).**
+
+### 2026-05-31 (same window, follow-on 3) | PRIOR-PROJECT CROSS-CHECK + P-T2 APPLIED
+- **Owner shared their prior production Met-OA project** (`met_open_access_sync.py` +
+  sql/ + workload_*.sql) with one explicit teaching point: 403 from the Met API is a
+  rate-limit signal, NOT semantic Forbidden. Their prior code: `# Treat 403 like 429`,
+  honors `Retry-After` (delta-seconds OR HTTP-date), adaptive per-host RateLimiter that
+  drops RPS by 30% after 3 throttles and edges back up 5% per success, max_attempts=7,
+  printed throttle summary at end of run. This is the canonical pattern; the WAF
+  hypothesis from `follow-on 2` is consistent with it (a 403-as-throttle path that runs
+  out of retries because the Mac's request shape is too aggressive will *also* return
+  HTML interstitial bodies once the WAF kicks in -- both views are the same root cause).
+- **Cross-check current `image_enricher.py` against the prior project:** when I re-read
+  the file this turn it was already 381 lines and ALREADY had the prior-project pattern
+  (adaptive `_RateLimiter` with `note_throttle()` / `cool_up()`, `_retry_after_seconds`
+  parsing, 403/410/429/5xx in the same retry path, jitter, base_backoff=0.8). Likely
+  authored by an earlier session after the `follow-on 2` revert. Net: I had nothing to
+  port -- the file was already correct.
+- **`config.py` already has the prior-project tuning:** `MET_API_CONCURRENCY=8`,
+  `MET_API_RPS=10`, `MET_API_MAX_RETRIES=8` -- one notch more conservative than the
+  prior project (their 16 / 20 / 7), with an explanatory comment block citing the
+  observed 403-at-~11rps datapoint. P-T1 was already done; nothing to apply.
+- **APPLIED THIS TURN (workspace; NOT pushed to Mac):** P-T2 -- per-batch throttle
+  visibility:
+    - `extraction/met/image_enricher.py` `_RateLimiter`: added counters
+      `throttle_403`, `throttle_429`, `throttle_other` (410/5xx), `backoff_seconds`.
+      `_fetch_one` increments them on every retry that hits the throttle path.
+    - `extraction/met/control_enricher.py` `_fetch_blocks`: now returns
+      `(blocks, rate_limiter)` so the driver can read counters after `asyncio.run`
+      finishes. `_process_one_batch` extends the per-batch INFO line:
+      `... err_breakdown={...} throttles={'403': N, '429': M, 'other': K}
+      backoff_s=X.X rps_end=Y.YY`. `rps_end` shows where the adaptive limiter
+      settled at batch end, so the operator can see the limiter actually adapting
+      down from 10 -> 7 -> 4.9 -> ... in a throttled batch.
+    - AST-parse OK on all three touched files.
+- **What this turn deliberately did NOT change:**
+    - `User-Agent` in `config.py:53` -- unchanged. The prior project's UA
+      (`split-monogram-met-oa-sync/2.0 (+contact)`) is *more* bot-shaped than ours and
+      that one worked; UA-shape is therefore unlikely to be the WAF trigger. Wait for
+      the 3-way curl evidence before changing it.
+    - Header set -- unchanged. Same logic: the prior project sent only
+      `User-Agent / Accept / From` and that succeeded.
+    - `_RateLimiter` per-host vs single-instance -- unchanged (we only call one host).
+    - Anything in the legacy SQLite path -- unchanged (P-L1 is still gated).
+- **Cumulative workspace state across this multi-turn arc (NONE applied to account
+  or pushed to Mac):**
+    - `docs/context/code-review-met-pipeline.md` -- 601-line review.
+    - `infrastructure/create_bronze_tables.sql` -- P-D1 column + idempotent ALTER.
+    - `extraction/met/sql/callback_enrichment_control.sql` -- P-D1 SET line.
+    - `extraction/met/control_enricher.py` -- P-D2 `_classify_error` + `_histogram` +
+      `err_breakdown=`; P-T2 throttle counters surfaced in the same batch INFO line.
+    - `extraction/met/image_enricher.py` -- adaptive `_RateLimiter` + 403-as-throttle +
+      `Retry-After` parsing + P-T2 counters. (The 403 -> no_image edit from an earlier
+      turn was reverted in `follow-on 2`.)
+    - `extraction/met/config.py` -- conservative API tuning (MET_API_CONCURRENCY=8,
+      MET_API_RPS=10, MET_API_MAX_RETRIES=8) with explanatory comment.
+    - P-B1 -- 3 dead files removed (met_enricher.py, release_lease.sql,
+      copy_into_enrich_stg.sql).
+    - Progress log -- this entry.
+- **NEW-WINDOW BRIEFING (UPDATED -- supersedes ALL prior briefings above):**
+    1. AGENTS.md (Tier 0). Then this entry. The three earlier "End of this window"
+       markers are historical -- this is the current end.
+    2. Solo-session check + CORTEX_FORK_INCIDENTS sweep before any write.
+    3. **Workspace state vs Mac:**
+         - Mac is AT P-D1 + P-D2 (already applied; you saw the histogram).
+         - Workspace is AT P-D1 + P-D2 + P-B1 + adaptive limiter + P-T2.
+         - Mac re-sync delta: P-B1 deletions, the adaptive `image_enricher.py`
+           rewrite, and this turn's P-T2 counters in two files. After sync,
+           NO new `make iac` is needed -- nothing this turn touched IaC.
+    4. **First action options for the next window:**
+         (a) Owner has run the 3-way curl from `follow-on 2` and shared results
+             -> if (B) browser-style + (C) bare curl both 200 while (A) our UA
+             403s, change `config.py:53` UA to the prior project's
+             `split-monogram-met-oa-sync/2.0 (+contact)` shape OR add
+             `Accept-Language: en-US,en;q=0.5` and `Accept-Encoding: gzip, deflate`
+             headers in `_fetch_blocks`. ONE knob at a time so we can attribute.
+         (b) Owner has not yet run the curl -> instead, owner re-runs
+             `enrich-met --limit 200` on the Mac to see the new
+             `throttles=...` / `backoff_s=...` / `rps_end=...` numbers. With the
+             adaptive limiter + max_retries=8, the 213 errored rows MAY drain
+             cleanly without any UA change at all. If they do, we close out
+             without touching headers.
+         (c) Owner wants to chase a different track (P-H1 transactional, P-B2
+             doc reword, etc.) -> see deferred list.
+    5. **Read-only verification queries on the live account after the next run:**
+         - `SELECT enrichment_status, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+            GROUP BY 1 ORDER BY 2 DESC;` -- expect error shrinking.
+         - `SELECT LEFT(enrichment_error, 30), COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+            WHERE enrichment_error IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;`.
+         - `SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;` -- assembled total.
+    6. **Decision tree from the next run:**
+         - `error -> 0` (or near-zero), throttles=0 / low, backoff_s low: WAF was
+           never the issue; the original tuning was just too aggressive. Drain
+           the rest of the slice. Done.
+         - `error -> 0` but throttles high (e.g. 403 count >> claimed): adaptive
+           limiter saved us; consider lowering MET_API_RPS default further, OR
+           accept the slow drain.
+         - `error` still high AND throttles high: WAF really is rejecting our
+           shape after all retries. Apply path (a) above.
+         - `error` high AND throttles low: NOT a throttle issue. Read
+           `err_breakdown=`; could be `timeout`/`connect` (network), `parse`
+           (rare), or other 4xx (genuine bad records).
+    7. **Deferred patches unchanged in priority order:** P-B2 doc reword;
+       P-H1 autocommit/BEGIN/COMMIT; P-H4 `--where` env gate; P-H3
+       paramstyle=qmark; P-H2 DATA-01 deaccession; P-L1 legacy SQLite delete.
+    8. **What MUST NOT happen in the next window:**
+         - Do NOT `make iac` from the workspace.
+         - Do NOT push to main.
+         - Do NOT re-stage the 403/410 -> no_image reclassification (WAF, not
+           semantic refusal -- proven by HTML response body in `follow-on 2`).
+         - Do NOT change UA + headers + concurrency in one PR; one knob at a time
+           or you cannot attribute the cause.
+         - Do NOT undo P-D1 / P-D2 / P-B1 / the adaptive limiter / P-T2.
+         - Do NOT re-add `met_enricher.py`.
+- **End of this window (fourth and final-final).**
+

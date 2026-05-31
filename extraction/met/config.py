@@ -42,11 +42,17 @@ class Config:
         )
     )
 
-    # API enrichment tuning. Met allows ~80 rps; 20 is a polite default.
+    # API enrichment tuning. Met allows ~80 rps but empirically returns 403 as
+    # a soft-throttle well below that ceiling (owner's 2026-05-31 200-row run:
+    # 104/200 went 403 at ~11 rps observed). The defaults below match the prior
+    # production project's tuning -- modest concurrency, conservative target RPS
+    # that the adaptive limiter then nudges up via cool_up() on every success.
+    # MAX_RETRIES=8 is large enough that a Retry-After-driven backoff sequence
+    # (e.g. 1s, 2s, 4s, 8s, 16s, 30s, 30s) can ride out a sustained throttle.
     api_base: str = MET_API_BASE
-    api_max_concurrency: int = int(os.getenv("MET_API_CONCURRENCY", "10"))
-    api_requests_per_second: float = float(os.getenv("MET_API_RPS", "20"))
-    api_max_retries: int = int(os.getenv("MET_API_MAX_RETRIES", "5"))
+    api_max_concurrency: int = int(os.getenv("MET_API_CONCURRENCY", "8"))
+    api_requests_per_second: float = float(os.getenv("MET_API_RPS", "10"))
+    api_max_retries: int = int(os.getenv("MET_API_MAX_RETRIES", "8"))
     api_request_timeout_seconds: int = int(os.getenv("MET_API_TIMEOUT", "30"))
     api_user_agent: str = os.getenv(
         "MET_API_USER_AGENT",

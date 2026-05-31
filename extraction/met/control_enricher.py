@@ -139,8 +139,13 @@ def _claim_batch(
 
 
 # --------------------------------------------------------------------------- fetch
-async def _fetch_blocks(config: Config, object_ids: List[int]) -> List[Dict[str, Any]]:
-    """Fetch image data for the claimed ids; return one block dict per object."""
+async def _fetch_blocks(config: Config, object_ids: List[int]) -> Tuple[List[Dict[str, Any]], "_RateLimiter"]:
+    """Fetch image data for the claimed ids.
+
+    Returns (blocks, rate_limiter). The limiter is returned (not just consumed)
+    so the caller can read its throttle counters into the per-batch INFO log
+    after `asyncio.run` returns -- P-T2.
+    """
     rate_limiter = _RateLimiter(config.api_requests_per_second)
     semaphore = asyncio.Semaphore(config.api_max_concurrency)
     timeout = aiohttp.ClientTimeout(
@@ -172,7 +177,7 @@ async def _fetch_blocks(config: Config, object_ids: List[int]) -> List[Dict[str,
 
         await asyncio.gather(*(worker(oid) for oid in object_ids))
 
-    return blocks
+    return blocks, rate_limiter
 
 
 # --------------------------------------------------------------------------- stage
@@ -288,7 +293,7 @@ def _process_one_batch(
 
         _log_start(cur, batch_id)
         try:
-            blocks = asyncio.run(_fetch_blocks(config, claimed))
+            blocks, rate_limiter = asyncio.run(_fetch_blocks(config, claimed))
             counts: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
             for b in blocks:
                 counts[b["enrichment_status"]] = counts.get(b["enrichment_status"], 0) + 1
@@ -300,9 +305,11 @@ def _process_one_batch(
             assembled = _assemble_and_callback(cur, config, batch_id)
             _log_finish(cur, batch_id, "success", assembled)
             sf_conn.commit()
-            # P-D2: include a per-batch error histogram alongside the status counts
-            # so the failure modes show up in the same INFO line we already write.
-            # Sorted descending by count so the dominant class leads.
+            # P-D2: per-batch error histogram alongside the status counts so the
+            # failure modes show up in the same INFO line we already write.
+            # P-T2: throttle counters from the rate limiter so the operator can
+            # tell "104 went error because of 403 throttling that ran out of
+            # retries" from "104 went error because the API returned bad data".
             hist = _histogram(blocks)
             hist_repr = (
                 "{" + ", ".join(
@@ -312,9 +319,13 @@ def _process_one_batch(
             ) if hist else "{}"
             logger.info(
                 "Batch %s: claimed=%s done=%s no_image=%s error=%s assembled=%s "
-                "err_breakdown=%s",
+                "err_breakdown=%s throttles={'403': %s, '429': %s, 'other': %s} "
+                "backoff_s=%.1f rps_end=%.2f",
                 batch_id, len(claimed), counts["done"], counts["no_image"],
                 counts["error"], assembled, hist_repr,
+                rate_limiter.throttle_403, rate_limiter.throttle_429,
+                rate_limiter.throttle_other, rate_limiter.backoff_seconds,
+                rate_limiter.rps,
             )
             return len(claimed), counts
         except Exception as exc:
