@@ -1,0 +1,32 @@
+# =============================================================================
+# profiles.yml -- dbt-snowflake connection profile
+# =============================================================================
+# All values resolve from the environment via env_var().
+# Auth: key-pair (private_key_path). No passwords.
+#
+# This file lives INSIDE the project dir so dbt_orchestrate.sh can pass
+# --profiles-dir to keep everything self-contained. Alternatively, symlink or
+# copy to ~/.dbt/profiles.yml for default discovery.
+#
+# Required env vars (set in .env, exported by dbt_orchestrate.sh):
+#   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH,
+#   SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE
+# Optional (have defaults):
+#   DBT_SNOWFLAKE_ROLE, DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
+
+artwork_pipeline:
+  target: dev
+  outputs:
+
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
+      schema: SILVER
+      threads: 4
+      client_session_keep_alive: false

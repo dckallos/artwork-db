@@ -1,0 +1,38 @@
+# =============================================================================
+# dbt_project.yml -- Artwork Medallion Pipeline
+# =============================================================================
+# Profile linkage: the `profile:` value must match the top-level key in
+# profiles.yml (either ~/.dbt/profiles.yml or artwork_pipeline/profiles.yml).
+
+name: artwork_pipeline
+version: '1.0.0'
+config-version: 2
+
+profile: artwork_pipeline
+
+# --- Paths ---
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# --- Global configs ---
+# copy_grants prevents privilege loss on CREATE OR REPLACE (full-refresh).
+# See Q5 research: FUTURE GRANTS do NOT re-fire on OR REPLACE; copy_grants
+# preserves the prior object's grants.
+models:
+  artwork_pipeline:
+    +copy_grants: true
+    staging:
+      +materialized: view
+      +schema: SILVER
+      met:
+        +tags: ["met", "staging"]
+    marts:
+      +materialized: table
+      +schema: GOLD
+      +tags: ["marts"]

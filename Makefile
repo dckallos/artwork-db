@@ -6,13 +6,14 @@
 #   rollback FILE=path.sql      roll back one forward script via its paired drop
 #   down [FROM=V005]            full teardown / from a point, paired drops in reverse
 #   extract[-met|-aic|-cma|-smithsonian]   run extractors
-#   dbt-deps|run|test|freshness|docs        dbt tasks
-#   pipeline / setup            extract -> dbt run -> test / infra + dbt deps
+#   dbt-init|build|test|full-refresh|docs|teardown   dbt lifecycle (via orchestrator)
+#   all / pipeline / setup      full apply / extract+build / infra+init
 # =============================================================================
 
 .PHONY: chmod iac bootstrap infra rollback down down-from \
         extract extract-met extract-aic extract-cma extract-smithsonian \
-        dbt-deps dbt-run dbt-test dbt-freshness dbt-docs pipeline setup clean
+        dbt-init dbt-build dbt-test dbt-full-refresh dbt-docs dbt-teardown dbt-deps \
+        all pipeline setup clean
 
 DBT_PROJECT_DIR := artwork_pipeline
 
@@ -82,31 +83,42 @@ extract-cma:
 extract-smithsonian:
 	python -m extraction.run --source smithsonian
 
-# ---------- dbt ----------
+# ---------- dbt (via dbt_orchestrate.sh) ----------
+# The orchestrator sources .env, validates vars, and calls dbt with correct
+# --project-dir and --profiles-dir. Use these targets on the Mac.
 
-dbt-deps:
-	dbt deps --project-dir $(DBT_PROJECT_DIR)
+dbt-init:
+	bash scripts/dbt_orchestrate.sh --phase init
 
-dbt-run:
-	dbt run --project-dir $(DBT_PROJECT_DIR)
+dbt-build:
+	bash scripts/dbt_orchestrate.sh --phase build
 
 dbt-test:
-	dbt test --project-dir $(DBT_PROJECT_DIR)
+	bash scripts/dbt_orchestrate.sh --phase test
 
-dbt-freshness:
-	dbt source freshness --project-dir $(DBT_PROJECT_DIR)
+dbt-full-refresh:
+	bash scripts/dbt_orchestrate.sh --phase full-refresh
 
 dbt-docs:
-	dbt docs generate --project-dir $(DBT_PROJECT_DIR)
-	dbt docs serve --project-dir $(DBT_PROJECT_DIR)
+	bash scripts/dbt_orchestrate.sh --phase docs
+
+dbt-teardown:
+	bash scripts/dbt_orchestrate.sh --phase teardown
+
+# Direct dbt commands (bypass orchestrator; assumes env is already set)
+dbt-deps:
+	dbt deps --project-dir $(DBT_PROJECT_DIR) --profiles-dir $(DBT_PROJECT_DIR)
 
 # ---------- Compound ----------
 
-pipeline: extract dbt-run dbt-test
-	@echo "==> Pipeline complete."
+all: infra dbt-build bootstrap
+	@echo "==> Full pipeline applied (infra + dbt + git-setup)."
 
-setup: infra dbt-deps
-	@echo "==> Setup complete. Run 'make extract' to populate Bronze."
+pipeline: extract dbt-build
+	@echo "==> Pipeline complete (extract + dbt build)."
+
+setup: infra dbt-init
+	@echo "==> Setup complete. Run 'make extract' then 'make dbt-build'."
 
 clean:
 	rm -rf $(DBT_PROJECT_DIR)/target $(DBT_PROJECT_DIR)/dbt_packages $(DBT_PROJECT_DIR)/logs

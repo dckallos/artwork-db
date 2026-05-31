@@ -1,0 +1,36 @@
+# =============================================================================
+# _met__models.yml -- Schema tests and docs for Met staging models
+# =============================================================================
+
+version: 2
+
+models:
+  - name: stg_met__artworks
+    description: >
+      Typed artwork attributes from the Met Museum, flattened from the Bronze
+      VARIANT payload. One row per artwork (object_id is the natural key from
+      the Met API). Materialized as a view over BRONZE.RAW_MET_OBJECTS.
+    columns:
+      - name: object_id
+        description: "Met Museum object identifier (natural PK)"
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: "Artwork title as recorded by the Met"
+        tests:
+          - not_null
+      - name: is_public_domain
+        description: "Whether the artwork is in the public domain (CC0 eligible)"
+      - name: primary_image_url
+        description: "URL to the full-resolution primary image on images.metmuseum.org"
+      - name: artist_display_name
+        description: "Primary artist display name (pipe-delimited if multiple)"
+      - name: classification
+        description: "Object classification (e.g., Paintings, Sculpture)"
+      - name: department
+        description: "Met curatorial department"
+      - name: _extracted_at
+        description: "UTC timestamp of extraction (lineage pass-through)"
+      - name: _source_system
+        description: "Source system identifier (lineage pass-through)"

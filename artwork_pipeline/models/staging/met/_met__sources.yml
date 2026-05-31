@@ -1,0 +1,35 @@
+# =============================================================================
+# _met__sources.yml -- Bronze source declaration for Met Museum data
+# =============================================================================
+# The source() macro maps dbt to the physical BRONZE table so models can
+# reference {{ source('met', 'raw_met_objects') }} without hardcoding schema.
+
+version: 2
+
+sources:
+  - name: met
+    description: "Met Museum OpenAccess data loaded by the extraction pipeline"
+    database: ARTWORK_DB
+    schema: BRONZE
+    tables:
+      - name: raw_met_objects
+        description: >
+          Raw enriched artwork records from the Met Museum. Each row has a
+          VARIANT column (RAW_PAYLOAD) containing nested keys: csv (from the
+          OpenAccess CSV), api_images (from the Met Objects API), and _meta
+          (extraction metadata).
+        identifier: RAW_MET_OBJECTS
+        columns:
+          - name: OBJECT_ID
+            description: "Met API objectID (integer PK)"
+            tests:
+              - unique
+              - not_null
+          - name: RAW_PAYLOAD
+            description: "Full VARIANT payload (csv + api_images + _meta)"
+          - name: _EXTRACTED_AT
+            description: "UTC timestamp when the row was extracted"
+          - name: _SOURCE_SYSTEM
+            description: "Source system identifier (always 'met_museum')"
+          - name: _BATCH_ID
+            description: "UUID of the extraction batch"
