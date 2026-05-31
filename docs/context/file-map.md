@@ -68,7 +68,7 @@ rename makes grants an auto-paired `create_`).
 | `create_bronze_tables.sql` | 124 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`) | 2026-05-31 | schema changes |
 | `create_bronze_views.sql` *(NEW, Session-3)* | 59 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`) | 2026-05-31 | changing worklist priority/filters |
 | `create_run_control.sql` *(NEW, Session-3)* | 46 | `RUN_CONTROL` durable checkpoint table — PK (run_id, step), VARIANT checkpoint, session_id/query_tag provenance; resume work across connection drops (`IF NOT EXISTS`) | 2026-05-31 | changing checkpoint schema |
-| `create_service_user.sql` | 31 | `ARTWORK_LOADER_SVC` user, placeholder pw to rotate (AUTH-01 pending) | 2026-05-31 | auth/identity changes |
+| `create_service_user.sql` | 69 | `ARTWORK_LOADER_SVC` SERVICE user; `CREATE … IF NOT EXISTS` then idempotent `ALTER USER` converge to `TYPE=SERVICE` + `UNSET PASSWORD` (AUTH-01 applied + verified 2026-05-31; key-pair only) | 2026-05-31 | auth/identity changes |
 | `create_tasks.sql` | 44 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`) | 2026-05-31 | defining/altering tasks |
 | `drop_*.sql` (11) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases), `drop_run_control`, + real `drop_tasks` | 2026-05-31 | rolling back |
 | `create_grants.sql` *(renamed from grant_privileges.sql, Session-3)* | 51 | ALL+FUTURE grants to functional roles + **LOADER SELECT on ALL+FUTURE VIEWS in BRONZE** (runs as ARTWORK_ADMIN) | 2026-05-31 | changing grants |
@@ -105,21 +105,32 @@ rename makes grants an auto-paired `create_`).
 
 Standalone Met OpenAccess → Bronze ETL. SQL externalized in `sql/*.sql`; SQLite
 is intermediate, `ARTWORK_DB.BRONZE.raw_met_objects` is the destination.
+Note: `extraction/__init__.py` (added 2026-05-31) makes `extraction` a **regular**
+package (was a PEP 420 namespace package); all 3 packages resolve + resources load (verified).
 
 | File | Lines | Purpose | Verified | Open full source only if… |
 |---|---|---|---|---|
-| `run.py` | 120 | argparse CLI: bootstrap/enrich/upload/status/all | 2026-05-30 | changing CLI/phase wiring |
+| `run.py` | 137 | argparse CLI: bootstrap/**snapshot**/enrich/upload/status/all | 2026-05-31 | changing CLI/phase wiring |
 | `config.py` | 71 | `Config` dataclass; `MET_*`+`SNOWFLAKE_*` env w/ defaults | 2026-05-30 | changing settings/defaults; **stale V001-V007 ref (l.53-54)** |
 | `db.py` | 43 | `load_sql()`, `initialize_database()`, `connect()` | 2026-05-30 | changing SQL-load or SQLite conn |
-| `csv_bootstrap.py` | 223 | download CSV + `_map_row` + batched UPSERT | 2026-05-30 | adding/removing a CSV column |
-| `image_enricher.py` | 280 | async API fetch; rate limiter + backoff | 2026-05-30 | changing retry/limiter/state logic |
-| `snowflake_uploader.py` | 289 | NDJSON + PUT + COPY INTO Bronze; marks upload state | 2026-05-30 | changing Bronze JSON shape / COPY mapping |
+| `csv_bootstrap.py` | 268 | download CSV + `_map_row` + batched UPSERT + **`assert_real_met_csv` DATA-06 guard** | 2026-05-31 | adding/removing a CSV column; CSV-integrity rules |
+| `snapshot_loader.py` | 302 | **Section C Phase 1:** full CSV → VARIANT NDJSON → PUT → COPY (session STG) → MERGE `MET_CSV_SNAPSHOT` (keyed `object_id`); AUTO-03 log; Option B | 2026-05-31 | changing snapshot load/MERGE/AUTO-03 |
+| `image_enricher.py` | 280 | async API fetch; rate limiter + backoff (Snowflake-free today; Phase 3 will add lease-claim) | 2026-05-30 | changing retry/limiter/state logic |
+| `snowflake_uploader.py` | 289 | NDJSON + PUT + COPY INTO Bronze; marks upload state; `_snowflake_connect` (key-pair) | 2026-05-31 | changing Bronze JSON shape / COPY mapping / connect |
 | `sql/schema.sql` | 97 | SQLite DDL: `met_artworks` + `extraction_runs` + indexes | 2026-05-30 | schema changes |
 | `sql/upsert_artwork.sql` | 79 | `INSERT … ON CONFLICT DO UPDATE` (image/bronze cols excluded) | 2026-05-30 | column changes |
 | `sql/update_enrichment_done.sql` | 9 | mark row `done` w/ image URLs | 2026-05-30 | — |
-| `sql/copy_into_bronze.sql` | 18 | templated COPY INTO; `PURGE=TRUE` | 2026-05-30 | changing load target/format |
+| `sql/copy_into_bronze.sql` | 18 | templated COPY INTO raw_met_objects; `PURGE=TRUE` | 2026-05-30 | changing load target/format |
+| `sql/copy_into_snapshot_stg.sql` | 20 | templated COPY of CSV JSON into the session `MET_CSV_SNAPSHOT_STG` (compiled clean 2026-05-31) | 2026-05-31 | changing snapshot stage/format |
+| `sql/merge_csv_snapshot.sql` | 24 | templated MERGE STG → `MET_CSV_SNAPSHOT` on `object_id` (QUALIFY de-dup; compiled clean 2026-05-31) | 2026-05-31 | changing snapshot MERGE/keys |
 | `sql/__init__.py` | 3 | package marker for `importlib.resources` | 2026-05-30 | — |
 | `__init__.py` | 5 | package docstring | 2026-05-30 | — |
 | `requirements.txt` | 5 | connector/requests/aiohttp/dotenv | 2026-05-30 | bumping pins |
 | `.env.example` | 25 | Met-specific env template; **hardcoded sample account (l.14)** | 2026-05-30 | — |
 | `README.md` | 207 | operator runbook (phases, recovery, tuning, verify SQL); **stale V001-V007 ref (l.37)** | 2026-05-30 | need narrative/recovery context |
+
+## analysis/ (Section C — read-only profiling, not IaC, not operational ETL)
+
+| File | Lines | Purpose | Verified | Open full source only if… |
+|---|---|---|---|---|
+| `met_snapshot_profile.sql` | 84 | **Section C Phase 1.5:** read-only profile of `MET_CSV_SNAPSHOT` (counts by department / classification / culture×period / century / public-domain×highlight + a worklist-priority candidate-slice query) so the owner picks the first enrichment slice. Most complex query compiled clean (`only_compile`, 2026-05-31) | 2026-05-31 | adding a slice axis |

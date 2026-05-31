@@ -468,3 +468,171 @@
   on the Mac, then ping me to verify (DESCRIBE shows TYPE=SERVICE + PASSWORD=null; password auth
   dead; `snow connection test -c loader` still OK). I am paused until then (owner chose "wait").
 
+### 2026-05-31 (new window) | ✅ TASK 1 CLOSED + VERIFIED | TYPE=SERVICE applied via make iac
+- Owner ran `make iac` (Mac, `-c admin` JWT) after committing + pulling. `create_service_user.sql`
+  ran: CREATE … IF NOT EXISTS = "already exists, statement succeeded" (the no-op, as expected),
+  then all 3 converging ALTERs = "Statement executed successfully".
+- **VERIFIED END STATE (read-only DESCRIBE USER ARTWORK_LOADER_SVC) — did NOT trust the run alone:**
+  - `TYPE = SERVICE` (was PERSON) ✅
+  - `PASSWORD = null` (was ********) ✅
+  - `COMMENT` = 'Service account (key-pair only)…' ✅ (converged the stale comment too)
+  - `RSA_PUBLIC_KEY` FP `SHA256:xVLEH5VUiGet8+vcqlEAEapGMXsXn8hiHj73U+Y0D5Y=` UNCHANGED ✅ key intact
+  - GOTCHA noted: `PASSWORD_LAST_SET_TIME` still shows 2026-05-29 — historical artifact, NOT a live
+    credential; `PASSWORD=null` is authoritative.
+- **Security outcome:** password auth dead two ways — (a) SERVICE users are programmatic-only
+  (cannot auth by password/MFA by type), (b) no password stored. Key-pair is the only way in.
+- **Solo at write time:** filtered to `QUERY_TAG ILIKE '%cortex_code_snowsight%'` → exactly 1
+  session (mine, `3946258901631134`). Raw unfiltered count spiked to 19 — but that was `make iac`'s
+  ~17 `snow sql -c admin` CLI sessions + Snowsight UI telemetry; none carry the Cortex tag (which is
+  exactly why the fork alert filters on it). `CORTEX_FORK_INCIDENTS` EMPTY.
+- **STILL OWNER-SIDE (cannot run from sandbox — no loader key here):** `snow connection test -c loader`
+  to confirm key-pair JWT still authenticates. Recommend owner run it to fully close the loop.
+- **Next:** Task 3 docs reconciliation — flip `AUTH-01` exploring/applied-with-gap → **applied**
+  (gated on owner sign-off + date); then Task 4 Met seed design.
+
+### 2026-05-31 (new window) | LOADER TEST OK + TASK 3 AUDIT | reconciliation already complete
+- Owner ran `snow connection test -c loader` on the Mac → **OK** as `ARTWORK_LOADER_SVC` / role
+  `ARTWORK_LOADER` (key-pair JWT). Both halves now proven: **password dead + key-pair live.**
+  Task 1 fully closed end-to-end. (`git_mark_executable.sh`: owner runs it on every script change;
+  +x already in git's tree — no action.)
+- **Task 3 finding (ghost/dropped-turn):** the headline docs reconciliation was ALREADY done and
+  is factually correct — `AUTH-01` = "APPLIED + VERIFIED 2026-05-31" (met-deepdive:147), AGENTS
+  Status:118 + gated #4 (183-188) = RESOLVED+APPLIED+VERIFIED, cli-connection:65-76,
+  ddl-infrastructure:370/395, file-map:71 all reconciled to TYPE=SERVICE/PASSWORD=null + FP +
+  connection-test-OK. Solo checks show only my Cortex session + `CORTEX_FORK_INCIDENTS` EMPTY →
+  most likely MY edits from earlier this window dropped by the context corruption (matches style +
+  verified facts), not a live ghost. Audited per read-before-write; did NOT blindly trust.
+- **Residual stale (1, minor):** `AGENTS.md:70` taxonomy still says "loader credential rotation"
+  (now key-pair, not rotation). Holding the 1-word fix to fold into the pending AGENTS.md
+  restructure decision (avoid editing the file twice).
+- **Next:** (a) owner decision on AGENTS.md restructuring proposal (critical review delivered);
+  (b) Task 4 Met seed design.
+
+### 2026-05-31 (new window) | RESUME → SECTION C Met seed | Phase 0 orientation (discussion, NOT executed)
+- **Solo check (cortex-tag-filtered):** exactly **1** distinct `cortex_code_snowsight`
+  session = mine (`3946258901631134`); `CORTEX_FORK_INCIDENTS` = **0 rows**. SOLO confirmed.
+  (Trap noted for future windows: `COUNT(*)` over QUERY_HISTORY counts *queries* (got 17),
+  not sessions — the fork signal is `COUNT(DISTINCT SESSION_ID)`.)
+- **Live state VERIFIED (read-only):** `MET_CSV_SNAPSHOT`, `MET_ENRICHMENT_CONTROL`,
+  `MET_WORKLIST` (view), `RAW_MET_OBJECTS`, `EXTRACTION_LOG` all = **0 rows**. Matches the
+  prompt's stated state. DDL slice is live + empty; Section C is the seed.
+- **Read this window:** AGENTS.md (ritual), this log (last ~10 entries), met-deepdive Section C
+  + DDL-04/05/PIPE-06/DATA-01/DATA-06/AUTO-03, `run.py`/`csv_bootstrap.py`/`image_enricher.py`/
+  `snowflake_uploader.py`/`config.py`, `create_bronze_tables.sql`/`create_bronze_views.sql`,
+  `create_stages.sql`/`create_file_formats.sql` (stage=`BRONZE_LOAD_STAGE`, format=`JSON_RAW`),
+  `copy_into_bronze.sql`, `Makefile`.
+- **Confirmed gaps relevant to the build:** (1) NO existing code lands `MET_CSV_SNAPSHOT` or
+  seeds `MET_ENRICHMENT_CONTROL` — both are net-new Section-C code. (2) Current enrich+upload
+  are **SQLite-authoritative** (enricher reads `_pending_object_ids()` from SQLite; uploader
+  marks SQLite) — conflicts with the decided **Snowflake-control-authoritative** design unless
+  re-plumbed (PIPE-06). (3) Makefile `extract-met` calls `python -m extraction.run --source met`
+  but only `extraction/met/run.py` exists (`bootstrap|enrich|upload`) — the dispatcher module is
+  absent (known gap, not this task). (4) `download_csv` has no DATA-06 integrity guard.
+- **STOPPED for owner discussion** on the Phase-0 architecture fork (state authority + execution
+  locus) + the bounded plan + DATA-01/DATA-06/AUTO-03 scope. Nothing executed; nothing written
+  except this log entry. Next: owner picks the path, then I write code (gated) → owner runs on Mac.
+
+### 2026-05-31 (new window) | AGENTS.md: ritual block + line-70 fix APPLIED (workspace; pending commit)
+- Owner reviewed my critical take on their AGENTS.md restructuring proposal and chose the **minimal**
+  path: add the cold-start ritual + fix the line-70 residual; **defer** the Status/Roadmap strip.
+- **Critical-review verdict (delivered, on record):** endorsed #2 (ritual in-anchor — strongest);
+  endorsed #1's *principle* but REJECTED a new `STATUS.md` (fold state into this log instead — avoid a
+  3rd state sink) and CHALLENGED the unverified "file re-sent every turn" token premise; endorsed #3
+  build-block ONLY if verified — caught a real bug in the owner's draft (`extraction.met.run` subcmds
+  vs the Makefile's `extract-met` → `python -m extraction.run --source met`; two entrypoints); flagged
+  #4 "ASCII-only" as born-stale (docs already use — / → / ✅) → scope to code only; #4 snippet truncated.
+- **Applied to `AGENTS.md` (workspace stage, NOT yet committed):**
+  - New `## Operating environment` + `## Session-open ritual` sections after the intro blockquote:
+    trial/no-hooks/no-Cortex-inference reality + the 4-step ritual (solo check w/ cortex tag filter +
+    CORTEX_FORK_INCIDENTS; resume from this log; read-before-write + raw grep cross-check; plan→go(+date)
+    → make iac only → verify end state). Mechanism detail left in connection-resilience.md (no dup).
+  - Line-70 taxonomy: "loader credential rotation" → "loader key-pair auth setup".
+- Self-lint done: references all real, no hardcoded counts, no contradictions. File now 227 lines.
+- **Pending owner:** commit (Git panel) + git-pull so the Mac/branch carry the change.
+- **Next:** Task 4 — Section C Met data seed design (discuss approach before any execution).
+
+### 2026-05-31 (new window) | RESUME + SECTION C ORIENTATION | design discussion opened (nothing executed)
+- **Solo check (cortex-tagged grain):** exactly **1** distinct `cortex_code_snowsight`
+  session = `3946258901631134` (= `CURRENT_SESSION()`); `CORTEX_FORK_INCIDENTS` = 0 rows.
+  SOLO confirmed. (Self-correction: my first count was COUNT(*) of *queries* = 17, wrong
+  grain; distinct-SESSION count is 1. The raw query spike is the known make-iac/telemetry
+  noise, not a fork.)
+- **Read-order done this window:** AGENTS.md (ritual sections present), this log (all
+  entries), met-deepdive.md (full, incl. Section C + APPLIED block), run.py, csv_bootstrap.py,
+  snowflake_uploader.py, image_enricher.py, config.py, schema.sql, copy_into_bronze.sql,
+  create_bronze_tables.sql, create_bronze_views.sql.
+- **Live state verified (read-only, did not trust prior claims):** MET_CSV_SNAPSHOT=0,
+  MET_ENRICHMENT_CONTROL=0, MET_WORKLIST=0, RAW_MET_OBJECTS=0, EXTRACTION_LOG=0. All empty.
+- **Phase-0 architecture resolution (proposed, awaiting owner):** Snowflake is
+  source-of-truth for (1) descriptive-truth-of-pending (`MET_CSV_SNAPSHOT`) and (2)
+  enrichment state + lease (`MET_ENRICHMENT_CONTROL`); `MET_WORKLIST` is the queue; SQLite
+  is demoted to disposable in-run scratch (per PIPE-03/05 `decided`). Implication surfaced:
+  the existing SQLite-centric enrich/upload code must be ADAPTED, not run as a parallel path.
+- **Central Phase-0 fork surfaced (A vs B):** where the 47 CSV descriptive cols come from
+  when building the Bronze payload — (A) keep CSV→SQLite bootstrap as local scratch (least
+  code, but loads CSV twice); (B) load CSV→`MET_CSV_SNAPSHOT` only and assemble
+  `RAW_MET_OBJECTS` server-side from snapshot × fetched image block (cleaner authority, no
+  double-load, more new SQL). Plus DATA-06 (LFS-pointer guard = hard prerequisite),
+  DATA-01 (deaccession diff), AUTO-03 (EXTRACTION_LOG writes), PIPE-06 fork (enrich opens
+  SF conn vs separate `claim` cmd).
+- **STOPPED for owner discussion. Nothing executed, nothing written to the account.**
+- **Next:** owner picks scope of first bounded seed + A-vs-B + PIPE-06 fork → then build Phase 1.
+
+### 2026-05-31 (same window, cont.) | SECTION C DESIGN LOCKED + PHASE 1 AUTHORED & VERIFIED (not yet run)
+- **Owner decisions captured:** (1) **Option B** — Snowflake assembles `RAW_MET_OBJECTS` server-side
+  from `MET_CSV_SNAPSHOT` × fetched image block; 47 descriptive cols live ONLY in Snowflake.
+  (2) **Full snapshot first, bound at the control seed** — land all ~471k CSV rows (cheap VARIANT),
+  then a version-controlled summary SQL profiles the collection so owner picks ONE slice;
+  enrichment (the costly API part) is what's bounded. (3) **PIPE-06 = hybrid** — single `enrich`
+  command, short-lived SF connections around a connection-free local fetch. Owner's cost worry
+  (warehouse billing while awaiting API) was a **misconception**: a session does NOT keep a wh
+  running — `ARTWORK_WH` is X-Small / `AUTO_SUSPEND=60` / `AUTO_RESUME=true` (verified via
+  `SHOW WAREHOUSES`), so an idle connection during fetch costs $0. Pattern honors the instinct anyway.
+- **Go-ahead given 2026-05-31.** Owner noted "you were on 3 of 6" — a prior/dropped turn in THIS
+  window had already authored Phase 1. Per ritual, I **read-before-write**'d every file before acting.
+- **Phase 1 authored (by prior turn) + reviewed & verified (this turn). NOT YET EXECUTED:**
+  - `extraction/met/csv_bootstrap.py` — **DATA-06 guard** `assert_real_met_csv()` (LFS-pointer +
+    50 MB floor + `Object ID` header check); called by both load paths after download/reuse.
+  - `extraction/met/snapshot_loader.py` (NEW) — `run.py snapshot [--limit N] [--no-refresh]`:
+    stream CSV → snake_case VARIANT NDJSON chunks → PUT `BRONZE_LOAD_STAGE` → COPY into session
+    `MET_CSV_SNAPSHOT_STG` → **MERGE** keyed on `object_id` (QUALIFY de-dups source). AUTO-03
+    EXTRACTION_LOG `running→success/failed` written. Reuses `_snowflake_connect` (key-pair, sets
+    role/wh/db/schema=BRONZE).
+  - `extraction/met/sql/copy_into_snapshot_stg.sql`, `merge_csv_snapshot.sql` (NEW templates).
+  - `extraction/met/run.py` — `snapshot` subcommand wired.
+  - `analysis/met_snapshot_profile.sql` (NEW) — read-only slice-picking profile.
+- **Verification done (read-only / compile-only — did NOT load data):**
+  - All Met tables still **0 rows** (re-confirmed live).
+  - Profile's most-complex query, rendered MERGE, rendered COPY all **compiled clean** (`only_compile`).
+    Created an **ephemeral session `MET_CSV_SNAPSHOT_STG`** (TEMP, auto-drops; zero persistent state)
+    purely to compile the MERGE/COPY against — not `make iac`, not persistent infra.
+  - `BRONZE_LOAD_STAGE` confirmed INTERNAL stage in BRONZE.
+  - Loader privileges sufficient: `CREATE TABLE` on BRONZE (covers TEMP), `SELECT/INSERT/UPDATE/DELETE`
+    on ALL+FUTURE tables (MERGE + EXTRACTION_LOG), `READ,WRITE` on stages.
+  - Code review found **no bugs**: MERGE result (inserted,updated) parse OK, COPY `rows_loaded` index 3 OK,
+    `file://` URI OK, gz+`AUTO_COMPRESS=FALSE`+JSON-COPY OK, log start/finish exception path OK.
+- **Docs updated this turn:** `met-deepdive.md` `PIPE-06`→decided(hybrid), `DATA-06`→decided(guard built),
+  `DDL-05`→loader-built note; `file-map.md` rows for the 3 new + 3 changed files + new `analysis/` section.
+- **NOT done (owner's to run on the Mac — has the loader key + the 280 MB CSV):**
+  Phase 1 **execution** = `python -m extraction.met.run snapshot -v` (start with `--limit 5000` smoke,
+  then full). Then run `analysis/met_snapshot_profile.sql` and pick a slice → Phase 2 (control seed) next.
+- **Phases 2 & 3 NOT authored yet** (control-seed MERGE; lease-claim enrich + server-side Bronze assembly).
+  Deliberately deferred — they follow slice selection, and "Met data flowing" beats more tooling.
+- **Solo throughout:** 1 cortex-tagged session (me); `CORTEX_FORK_INCIDENTS` = 0.
+- **Pending owner:** commit the staged Phase 1 files (+ this window's earlier AGENTS.md edits) on
+  `donkey-kong-sandbox`; run the snapshot load on the Mac; report row counts back.
+- **Next window:** verify snapshot row count > 0, run profile SQL, pick slice, author Phase 2.
+
+### 2026-05-31 (same window, cont.) | PACKAGING FIX — `extraction/__init__.py` added (owner go)
+- **Finding:** `extraction/` had **no `__init__.py`** → resolved as a PEP 420 **namespace package**.
+  Functional under `python -m extraction.met.run` from repo root (verified), but fragile:
+  classic `setuptools.find_packages()` would skip it, and namespace pkgs can silently merge with
+  any other `extraction/` on `sys.path`. (`extraction/met/` + `extraction/met/sql/` already had markers.)
+- **Fix (owner go 2026-05-31):** added `extraction/__init__.py` (docstring only) → now a **regular** package.
+- **Verified:** `extraction.__file__` is set (not None); all 3 packages resolve; `importlib.resources`
+  still loads all **6** `sql/*.sql`. The only sandbox `-m` failure is `ModuleNotFoundError: dotenv`
+  (missing third-party dep here; present in the Mac venv) — unrelated to packaging.
+- No packaging config exists (`no setup.py/pyproject/setup.cfg`); package is used via `python -m`.
+- file-map.md note added under the extraction/met section.
+
+

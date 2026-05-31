@@ -62,14 +62,18 @@ this doc alone. Escalate to source only via the triggers at the bottom.
 
 ## Known gaps (fix candidates)
 
-1. **Loader auth → KEY-PAIR (RESOLVED 2026-05-31, branch `donkey-kong-sandbox`,
-   not yet `make iac`'d).** The old empty `rotate_loader_password.sql` +
-   `06_rotate_loader_password.sh` are **deleted**. `ARTWORK_LOADER_SVC` is now
-   `TYPE = SERVICE` (no password possible); `06_setup_loader_keypair.sh` mints the
+1. **Loader auth → KEY-PAIR + `TYPE = SERVICE` (APPLIED + VERIFIED 2026-05-31 via
+   `make iac`, branch `donkey-kong-sandbox`).** The old empty `rotate_loader_password.sql`
+   + `06_rotate_loader_password.sh` are **deleted**. `ARTWORK_LOADER_SVC` is now
+   `TYPE = SERVICE` with `PASSWORD = null` (confirmed by `DESCRIBE USER`): password auth
+   is dead, key-pair is the only way in. `06_setup_loader_keypair.sh` mints the
    loader key, registers it via the admin JWT connection
    (`git-setup/operator/register_loader_public_key.sql`), and upserts
-   `[connections.loader]` to SNOWFLAKE_JWT. Python + `.env.example` moved to
-   `SNOWFLAKE_PRIVATE_KEY_FILE`. See `met-deepdive.md` `AUTH-01`.
+   `[connections.loader]` to SNOWFLAKE_JWT; `snow connection test -c loader` = OK.
+   Python + `.env.example` moved to `SNOWFLAKE_PRIVATE_KEY_FILE`.
+   **Learning note:** `CREATE USER IF NOT EXISTS` could not convert the pre-existing
+   PERSON user, so the file appends idempotent `ALTER USER … SET TYPE = SERVICE; UNSET
+   PASSWORD` to *converge*. See `met-deepdive.md` `AUTH-01`.
 2. **`profiles.yml.example` uses `env_var()`** — valid for local dbt, but
    **incompatible with Snowflake-native dbt projects** (no env vars inside
    Snowflake). Matters when designing the CLI-driven production version.

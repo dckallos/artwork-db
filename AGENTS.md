@@ -4,6 +4,31 @@
 > tells you exactly how much more to read. The goal: maximize understanding while
 > spending the fewest tokens.
 
+## Operating environment (read before acting)
+
+You run as **Cortex Code in Snowsight** on a trial account. There is **no session
+persistence and no local hooks**: this file plus `docs/context/session-3-progress-log.md`
+(the append-only restart trail) are your only memory, and your own discipline is the
+only enforcement. The trial has **no Cortex inference** (Cortex Agents / Cortex-Code-
+over-API are blocked — see the Track-D notes), so ship data, not agent tooling.
+
+## Session-open ritual (do this first, every window)
+
+1. **Confirm you are the only live Cortex session before any write.** Count
+   `cortex_code_snowsight` sessions (filter `QUERY_TAG ILIKE '%cortex_code_snowsight%'`)
+   in the last ~10 min and check `ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS`. Exactly 1 =
+   solo; >1 = stop and ask. Do not abort husks. Husk-vs-live-ghost test + the full
+   mechanism: `docs/context/connection-resilience.md`.
+2. **Resume from `docs/context/session-3-progress-log.md`** — read the last dated entry
+   for where we left off and honor its resumption contract.
+3. **Read a shared file's current contents immediately before editing it** — a prior
+   (or dropped) turn may have already written it. Cross-check a negative grep with a
+   raw `grep -rn` (the search tool has given false negatives here).
+4. **State the plan and wait for the owner's explicit go (+ date) before any write or
+   execution.** Nothing touches the account without sign-off; all DDL flows through
+   `make iac` (manifest-driven), never inline. Then verify end state (DESCRIBE/SHOW) —
+   a successful run is not proof a change applied.
+
 ## What this repo is
 
 A **learning project** (see "Project mission" below) whose mechanics are
@@ -67,7 +92,7 @@ when a genuinely new area of the repo appears.)
 
 - **CLI connection / auth bootstrap** — installing `snow`, generating the admin
   key pair, registering it, JWT verification, warehouse promotion, loader
-  credential rotation. → `docs/context/cli-connection.md`
+  key-pair auth setup. → `docs/context/cli-connection.md`
 - **DDL / infrastructure** — databases, schemas, roles, warehouses, stages, file
   formats, tables, tasks, grants, the git-setup bind chain, plus the
   bootstrap/orchestration layer that applies them. → `docs/context/ddl-infrastructure.md`
@@ -115,7 +140,7 @@ Rules of thumb:
 | `docs/context/connection-resilience.md` | Complete (written 2026-05-31; problem statement + 10-row prioritized recommendations table + top-3 shortlist + resumable-agent track via Cortex Agents Run+threads + advisory-lease design sketch; doc-grounded, web-verified). **Recs #2 + #3 APPLIED 2026-05-31** via `make infra` (after a scenario-B ghost fork authored the IaC; owner reviewed + accepted the ghost's work). `ABORT_DETACHED_QUERY=TRUE` + `BRONZE.CORTEX_FORK_ALERT` now LIVE. **Rec #1 (advisory lease) explicitly DEFERRED — but evidence-strengthened** by the in-session scenario-B incident. |
 | `docs/context/track-d-resumable-agents.md` | Complete (planning doc written 2026-05-31; **next-window briefing** for migrating repeat workflows to Cortex Agents Run + threads; explicit naming clarification Cortex Code vs Cloud Agents vs Cortex Agents OBJECT; quickest-path UI walkthrough + phased plan A→D + cost guardrails + first-action checklist). Phase A smoke test awaits owner sign-off. |
 | `docs/context/track-d-checklist.md` | Complete (flexible growth checklist written 2026-05-31; companion to the planning doc; **guideline not declarative plan**; 5 stages from sanity-checks to programmatic runner; explicit "challenge prompts" + "hard stops" + "what will surprise you" journal section; primes the next window to ship data work, not over-build the agent). |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; ~30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO/AUTH; Met facts web-verified). **Design→build arc COMPLETE:** S1 strawman → S2 Python review → S2b DDL review → **S3 APPLIED 2026-05-31** (owner ran `make infra`; `DDL-04`/`DDL-05` + the 4 cosmetic decisions → applied; `MET_ENRICHMENT_CONTROL`/`MET_CSV_SNAPSHOT`/`MET_WORKLIST`/`MET_LEASE_RECLAIM_TASK` live in `ARTWORK_DB.BRONZE`). Per-session detail lives in the doc's own sections. **Open = Section C** (data seed, AUTH-01 key-pair, PIPE-06 lease-claim MERGE, DATA-01/DATA-06, AUTO-03). Dual-instance incident this arc → durable restart trail in `session-3-progress-log.md`. |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; ~30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO/AUTH; Met facts web-verified). **Design→build arc COMPLETE:** S1 strawman → S2 Python review → S2b DDL review → **S3 APPLIED 2026-05-31** (owner ran `make infra`; `DDL-04`/`DDL-05` + the 4 cosmetic decisions → applied; `MET_ENRICHMENT_CONTROL`/`MET_CSV_SNAPSHOT`/`MET_WORKLIST`/`MET_LEASE_RECLAIM_TASK` live in `ARTWORK_DB.BRONZE`). Per-session detail lives in the doc's own sections. **Open = Section C** (data seed, PIPE-06 lease-claim MERGE, DATA-01/DATA-06, AUTO-03; AUTH-01 key-pair CLOSED + verified 2026-05-31). Dual-instance incident this arc → durable restart trail in `session-3-progress-log.md`. |
 
 ## Roadmap & deferred work
 
@@ -180,11 +205,12 @@ Rules of thumb:
      (now dead; dense V###/R### source). Candidate for removal.
   3. `profiles.yml.example` uses `env_var()` + key-pair (dbt-core only) — add a
      Snowflake-native dbt profile if/when the project moves to managed dbt.
-  4. **RESOLVED 2026-05-31:** loader auth migrated to key-pair. The empty
-     `rotate_loader_password.sql` + `06_rotate_loader_password.sh` are deleted;
-     `ARTWORK_LOADER_SVC` is now `TYPE = SERVICE` with key registered by
-     `setup.sh --phase loader`. Committed on `donkey-kong-sandbox`; **not yet
-     `make iac`'d** (owner runs it + `--phase loader` on the Mac). See `AUTH-01`.
+   4. **RESOLVED + APPLIED + VERIFIED 2026-05-31:** loader auth migrated to key-pair.
+      The empty `rotate_loader_password.sql` + `06_rotate_loader_password.sh` are deleted;
+      `ARTWORK_LOADER_SVC` is now `TYPE = SERVICE`, `PASSWORD = null` (verified via
+      `DESCRIBE USER`), key registered by `setup.sh --phase loader`. Applied via `make iac`;
+      `snow connection test -c loader` = OK. The `CREATE … IF NOT EXISTS` no-op gap was
+      closed by appending idempotent `ALTER USER … SET TYPE = SERVICE; UNSET PASSWORD`. See `AUTH-01`.
   5. Minor: `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
      (The hardcoded sample account in `extraction/met/.env.example` was FIXED
      2026-05-31.)

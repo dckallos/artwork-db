@@ -120,8 +120,52 @@ def _map_row(row: Dict[str, str], loaded_at: str) -> Optional[Dict[str, Any]]:
     }
 
 
+# DATA-06 guard: the OpenAccess CSV is ~280-300 MB. The two silent failure modes
+# we must catch BEFORE loading anything are (1) a Git-LFS pointer (~130 bytes that
+# raw.githubusercontent.com serves instead of LFS content) and (2) a truncated
+# download / HTML error page. Either would poison MET_CSV_SNAPSHOT. Fail loud.
+# See docs/context/met-deepdive.md DATA-06.
+MIN_CSV_BYTES = 50 * 1024 * 1024  # 50 MB floor; the real file is ~280+ MB.
+
+
+def assert_real_met_csv(path: Path) -> None:
+    """Validate a Met CSV file is real data, not an LFS pointer or error page.
+
+    Raises RuntimeError with remediation guidance on any failure (DATA-06). This
+    is the single gate every load path (SQLite bootstrap and the Snowflake
+    snapshot loader) calls before trusting a downloaded/reused CSV.
+    """
+    if not path.exists():
+        raise RuntimeError(f"DATA-06: Met CSV not found at {path}.")
+    size = path.stat().st_size
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        head = f.read(4096)
+
+    # Most likely failure: raw.githubusercontent.com serves the LFS pointer, not
+    # the file. The pointer always begins with this version line.
+    if head.startswith("version https://git-lfs"):
+        raise RuntimeError(
+            f"DATA-06: {path} is a Git-LFS pointer ({size} bytes), not the CSV. "
+            "raw.githubusercontent.com serves LFS pointers, not content. Set "
+            "MET_CSV_URL to the media host, e.g. https://media.githubusercontent.com/"
+            "media/metmuseum/openaccess/master/MetObjects.csv"
+        )
+    if size < MIN_CSV_BYTES:
+        raise RuntimeError(
+            f"DATA-06: {path} is only {size / 1e6:.2f} MB (< {MIN_CSV_BYTES / 1e6:.0f} MB "
+            "floor); likely a truncated download or error page. Refusing to load."
+        )
+    first_line = head.splitlines()[0] if head else ""
+    if "Object ID" not in first_line:
+        raise RuntimeError(
+            f"DATA-06: {path} header has no 'Object ID' column. First line was "
+            f"{first_line[:200]!r}. Refusing to load a non-Met CSV."
+        )
+    logger.info("DATA-06 guard passed: %s (%.1f MB), header OK.", path, size / 1e6)
+
+
 def download_csv(csv_url: str, target_path: Path, chunk_bytes: int = 1024 * 1024) -> None:
-    """Stream the Met CSV from GitHub to a local file."""
+    """Stream the Met CSV from GitHub to a local file, then DATA-06-validate it."""
     target_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading Met CSV from %s -> %s", csv_url, target_path)
     with requests.get(csv_url, stream=True, timeout=300) as resp:
@@ -134,6 +178,7 @@ def download_csv(csv_url: str, target_path: Path, chunk_bytes: int = 1024 * 1024
         "Downloaded %s (%.1f MB)",
         target_path, target_path.stat().st_size / 1e6,
     )
+    assert_real_met_csv(target_path)
 
 
 def _iter_csv_rows(csv_path: Path) -> Iterator[Dict[str, str]]:
@@ -189,6 +234,7 @@ def bootstrap(
         download_csv(config.csv_url, config.csv_local_path)
     else:
         logger.info("Reusing existing CSV at %s", config.csv_local_path)
+        assert_real_met_csv(config.csv_local_path)
 
     loaded_at = datetime.now(timezone.utc).isoformat()
     processed = 0

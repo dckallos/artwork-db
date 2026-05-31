@@ -228,12 +228,14 @@ cascade from dropped parents) but means its only use is manual.
 
 ## Gaps / TODOs / empty files
 
-- `create_tasks.sql` + `drop_tasks.sql` — Phase-4 placeholders (bare `SELECT`); no
-  real tasks yet. `EXECUTE TASK ON ACCOUNT` grant stays commented out in
-  `create_roles.sql` until tasks are defined.
-- `create_service_user.sql` creates `ARTWORK_LOADER_SVC` as `TYPE = SERVICE`
-  (no password possible); the RSA key is registered out-of-band by
-  `setup.sh --phase loader` (key-pair only). [updated 2026-05-31]
+- `create_tasks.sql` + `drop_tasks.sql` — Session-3: real `MET_LEASE_RECLAIM_TASK`
+  (hourly CRON, 30-min TTL lease reclaim; created + `RESUME`d). `EXECUTE TASK ON ACCOUNT`
+  is now granted to `ARTWORK_ADMIN` (uncommented in `create_roles.sql`, lockstep). [updated 2026-05-31]
+- `create_service_user.sql` creates `ARTWORK_LOADER_SVC` then CONVERGES it to
+  `TYPE = SERVICE` + removed password via idempotent `ALTER USER … SET TYPE = SERVICE;
+  UNSET PASSWORD` (because `CREATE … IF NOT EXISTS` cannot alter a pre-existing user).
+  Verified 2026-05-31: `TYPE=SERVICE`, `PASSWORD=null`; RSA key registered out-of-band
+  by `setup.sh --phase loader` (key-pair only). [updated 2026-05-31]
 
 ## Stale `V***` / `R***` / `B***` references to clean up (flagged, not fixed)
 
@@ -365,8 +367,8 @@ ad-hoc DDL; diffed on file-set + size, cross-checked vs full content reads.)
 pipeline — not until Section C.* Idempotency / manifest dep-order / paired-drop
 coverage / privilege-contract preflight all PASS. Known gaps deferred to Section C
 (NOT this session): (1) data seed not codified — control + snapshot land EMPTY;
-(2) AUTH-01 — service user still placeholder password; (3) dead code
-`rename_and_update.py` still present.
+(2) AUTH-01 — CLOSED 2026-05-31 (service user now `TYPE=SERVICE`, `PASSWORD=null`,
+key-pair verified); (3) dead code `rename_and_update.py` still present.
 
 **Decision + outcome — Option A, APPLIED 2026-05-31 (owner sign-off + execution).**
 Owner picked Option A, committed Phase 1 (the 18 reconciled files) on
@@ -389,8 +391,8 @@ the seed/diff Python lands.
 
 **Dual-instance note:** this section was authored across overlapping aborted runs; owner
 confirmed a single authoritative window (full incident in `session-3-progress-log.md`).
-Section C (data seed, AUTH-01 key-pair, dead-code removal, PIPE-06 lease-claim MERGE,
-DATA-06 guard, AUTO-03 writes) = NEXT session.
+Section C (data seed, dead-code removal, PIPE-06 lease-claim MERGE,
+DATA-06 guard, AUTO-03 writes) = NEXT session. (AUTH-01 key-pair CLOSED + verified 2026-05-31.)
 
 ## When to escalate to full source
 

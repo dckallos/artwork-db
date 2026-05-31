@@ -3,6 +3,8 @@ Command-line entry point for the Met extractor pipeline.
 
 Subcommands:
   bootstrap   Download the Met OpenAccess CSV and upsert it into SQLite.
+  snapshot    Load the Met OpenAccess CSV into BRONZE.MET_CSV_SNAPSHOT (the
+              Snowflake-authoritative descriptive truth; Option B, no API calls).
   enrich      Call the Met API to fetch image URLs for every pending row.
   upload      Upload enriched rows (status=done, not yet uploaded) to Bronze.
   status      Print row counts by enrichment_status / upload state.
@@ -22,6 +24,7 @@ from .config import Config
 from .csv_bootstrap import bootstrap
 from .db import connect, initialize_database
 from .image_enricher import enrich
+from .snapshot_loader import load_snapshot
 from .snowflake_uploader import upload
 
 
@@ -90,6 +93,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Reuse the existing local CSV instead of re-downloading.",
     )
 
+    p_snap = sub.add_parser(
+        "snapshot",
+        help="Load the Met CSV into BRONZE.MET_CSV_SNAPSHOT (Snowflake-authoritative).",
+    )
+    p_snap.add_argument(
+        "--no-refresh", action="store_true",
+        help="Reuse the existing local CSV instead of re-downloading.",
+    )
+    p_snap.add_argument(
+        "--limit", type=int, default=None,
+        help="Cap objects loaded (smoke testing). Default: full file.",
+    )
+
     sub.add_parser("enrich", help="Fetch image URLs from the Met API for pending rows.")
     sub.add_parser("upload", help="Upload enriched rows to Snowflake Bronze.")
     sub.add_parser("status", help="Print pipeline status counts.")
@@ -102,6 +118,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "bootstrap":
         bootstrap(config, refresh_csv=not args.no_refresh)
+    elif args.command == "snapshot":
+        load_snapshot(config, refresh_csv=not args.no_refresh, limit=args.limit)
     elif args.command == "enrich":
         enrich(config)
     elif args.command == "upload":
