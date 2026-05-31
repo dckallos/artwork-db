@@ -34,3 +34,5 @@ Thumbs.db
 *.swp
 *.swo
 uv.lock
+output/code-snapshot.md
+output/extension-map.md
