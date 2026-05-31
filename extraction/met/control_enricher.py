@@ -319,7 +319,7 @@ def _process_one_batch(
                     for k, v in sorted(hist.items(), key=lambda kv: -kv[1])
                 ) + "}"
             ) if hist else "{}"
-            logger.info(
+            logger.debug(
                 "Batch %s: claimed=%s done=%s no_image=%s error=%s assembled=%s "
                 "err_breakdown=%s throttles={'403': %s, '429': %s, 'other': %s} "
                 "backoff_s=%.1f rps_end=%.2f",
@@ -354,28 +354,57 @@ def _create_staging_table(sf_conn: snowflake.connector.SnowflakeConnection) -> N
 
 
 def enrich_from_control(
-    config: Config, batch_size: int = 2000, max_batches: Optional[int] = None,
+    config: Config,
+    batch_size: int = 2000,
+    max_batches: Optional[int] = None,
+    progress_every: int = 100,
+    total_expected: Optional[int] = None,
 ) -> Dict[str, int]:
     """Drain MET_WORKLIST in bounded batches. Returns aggregate status counts.
 
     Args:
-        batch_size:  rows leased + fetched per batch.
-        max_batches: stop after this many batches (None = drain the whole worklist).
+        batch_size:   rows leased + fetched per batch.
+        max_batches:  stop after this many batches (None = drain the whole worklist).
+        progress_every: emit one INFO progress line every N items processed.
+        total_expected: if known, show "X/total" in progress lines; otherwise "X/?".
     """
     totals: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0, "claimed": 0}
+    # Track how many items processed since the last progress line.
+    _progress_emitted = 0
+    total_label = f"{total_expected:,}" if total_expected else "?"
+
     sf_conn = _snowflake_connect(config)
     try:
         _create_staging_table(sf_conn)
+        # Query the worklist size for the progress denominator if not provided.
+        if total_expected is None:
+            cur = sf_conn.cursor()
+            try:
+                worklist = f"{config.snowflake_database}.{config.snowflake_schema}.MET_WORKLIST"
+                cur.execute(f"SELECT COUNT(*) FROM {worklist}")
+                row = cur.fetchone()
+                total_label = f"{int(row[0]):,}" if row else "?"
+            finally:
+                cur.close()
+
         batch_no = 0
         while max_batches is None or batch_no < max_batches:
             claimed, counts = _process_one_batch(sf_conn, config, batch_size)
             if claimed == 0:
-                logger.info("Worklist drained (no claimable rows). Stopping.")
                 break
             totals["claimed"] += claimed
             for k in ("done", "no_image", "error"):
                 totals[k] += counts.get(k, 0)
             batch_no += 1
+
+            # Emit progress at every progress_every boundary.
+            while totals["claimed"] >= _progress_emitted + progress_every:
+                _progress_emitted += progress_every
+                logger.info(
+                    "Progress: %s/%s done=%s no_image=%s error=%s",
+                    f"{_progress_emitted:,}", total_label,
+                    totals["done"], totals["no_image"], totals["error"],
+                )
     finally:
         sf_conn.close()
 

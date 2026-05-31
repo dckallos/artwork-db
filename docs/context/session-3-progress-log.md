@@ -1851,3 +1851,287 @@ output before proposing the one-knob next step.
   demotion is applied in the workspace only -- not synced, not committed, not applied to
   account. P-V1/V2/V3 behavior is otherwise intact; only log verbosity changed.).**
 
+---
+
+## 2026-05-31 — follow-on 9 (dbt strategy session — docs-only)
+
+### What changed this turn
+
+- **NEW FILE: `docs/context/dbt-plan.md`** (321 lines) — Tier-1 doc capturing all
+  dbt adoption architecture decisions from a strategy conversation. Covers: execution
+  engine choice (dbt Core local, Option L), pragmatic star schema in Gold (dim_artworks,
+  dim_artists, fct_artwork_images + openaccess_catalog OBT), dbt as peer IaC track
+  (`dbt_orchestrate.sh` + Makefile targets), unified variable control (`.env` as single
+  source of truth feeding `profiles.yml` / `connections.toml` / `config.py`), error
+  handling strategy (idempotent re-runs, `dbt retry`, `--full-refresh`), completeness
+  testing (dbt tests in-DAG), 3-milestone build sequence (M1: scaffold + stg_met__artworks;
+  M2: artist entity + image fact + Gold dims; M3: delete propagation + OBT +
+  completeness), and 7 open research questions for the design window.
+- `AGENTS.md` Status table + Workflow domains already reference `dbt-plan.md` (wired
+  by prior context or system).
+- **Applied to account: NO.** This was a strategy/docs session. No DDL, no code.
+- **Pushed to Mac: NO.** Workspace-only.
+
+### Cumulative workspace state vs Mac
+
+Mac has: P-D1 + P-D2 (from prior sync).
+Workspace has (delta for next sync):
+- Everything since P-D2 (adaptive limiter, P-B1, P-T2, P-V1, P-V2, P-V3)
+- INFO->DEBUG log demotion (follow-on 8)
+- **NEW: `docs/context/dbt-plan.md`** (this session)
+
+### Solo-session check result
+
+Not performed this session (strategy conversation only, no writes to account, no DDL).
+The only file written was a new doc in the workspace.
+
+### First-action options for the next window
+
+**(a) Research + design window (RECOMMENDED):** Read `docs/context/dbt-plan.md` section
+"Open research questions." Investigate each (env_var + key-pair auth in profiles.yml,
+dbt-utils compatibility, VARIANT flatten patterns, incremental hard-delete strategy,
+FUTURE GRANTS interaction, project naming, .env sourcing). Produce a design artifact
+that answers all 7 questions and specifies the exact file contents for M1.
+
+**(b) Jump straight to M1 build:** Skip the research window and start writing
+`artwork_pipeline/`, `dbt_orchestrate.sh`, Makefile targets. Higher risk of rework if
+research questions have surprising answers.
+
+**(c) Sync to Mac first, then (a):** Owner syncs workspace to Mac, commits the
+dbt-plan.md on `donkey-kong-sandbox`, then opens a new window for the research pass.
+
+### Read-only verification queries
+
+N/A — no account changes this session.
+
+### Decision tree for next window
+
+```
+IF owner picks (a) or (c):
+  -> New window reads dbt-plan.md, researches 7 open questions
+  -> Produces a "ready-to-build" spec (exact file contents, no ambiguity)
+  -> Owner reviews spec, then a THIRD window executes M1
+
+IF owner picks (b):
+  -> New window reads dbt-plan.md, builds M1 directly
+  -> Answers research questions just-in-time as they arise
+  -> Faster but riskier (may need to redo profiles.yml wiring)
+```
+
+### Deferred patches (priority order)
+
+1. Reword stale V/R/B refs in `extraction/met/README.md`, `.env.example`,
+   `apply_sql.sh`, `git-setup/README.md`.
+2. Decide fate of `rename_and_update.py` (spent one-shot migration).
+3. `profiles.yml.example` dbt-core vs Snowflake-native profile.
+4. `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+5. Met enrichment: drain full collection (Phase 3 runtime continuation).
+
+### What MUST NOT happen in the next window
+
+- Do NOT write any dbt models, scripts, or Makefile changes without first resolving
+  the 7 open research questions in `dbt-plan.md`.
+- Do NOT run `make iac` or any DDL from the workspace.
+- Do NOT push to `main`.
+- Do NOT create a `CREATE DBT PROJECT` object (that is M5, far future).
+- Do NOT install dbt in the Snowsight workspace sandbox (it runs on the Mac only).
+
+### Hand-off prompt
+
+```
+SESSION HANDOFF -- artwork-db / dbt adoption: research + design pass
+
+You are Cortex Code (Snowsight) resuming an in-flight learning project on account
+pa37992 (Porchanalytics). Branch: donkey-kong-sandbox. Senior-DE mentor tone:
+explain the why and the trade-offs; the OWNER decides, you honor it.
+
+SESSION-OPEN RITUAL (in order, before any write):
+1. Read /workspace/AGENTS.md fully (cheapest read, orientation).
+2. Read ONLY the LAST dated entry of
+   /workspace/docs/context/session-3-progress-log.md (titled "follow-on 9").
+3. Read /workspace/docs/context/dbt-plan.md fully — this is your primary input.
+4. Solo-session check (must return 1):
+     SELECT COUNT(DISTINCT SESSION_ID) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+   Then SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY 1 DESC LIMIT 5;
+5. State the plan and wait for "proceed (today's date)" before any write.
+
+STATE:
+- dbt-plan.md is LOCKED (decisions D1-D7, DAG shape, IaC design, milestones M1-M3).
+- No code exists yet. No dbt project directory. No dbt_orchestrate.sh.
+- Bronze is live (RAW_MET_OBJECTS ~1,100 rows enriched, ~1,200 in worklist).
+- Silver and Gold schemas EXIST but are EMPTY.
+- The extraction loader runs on Mac only (not in Snowsight sandbox).
+- dbt will also run on Mac only (Option L = local dbt Core).
+
+YOUR TASK THIS WINDOW:
+Research + design. Produce a "ready-to-build" specification that answers ALL 7 open
+questions in dbt-plan.md § "Open research questions" and specifies:
+  1. Exact profiles.yml content (env_var + key-pair auth for ARTWORK_TRANSFORMER).
+  2. Exact dbt_project.yml content (project name, profile, model paths, vars).
+  3. Exact packages.yml content (dbt-utils version pinned).
+  4. dbt_orchestrate.sh pseudocode/structure (phases, .env sourcing, error handling).
+  5. Makefile additions (exact target definitions).
+  6. .env variable list (canonical, with comments showing which consumer reads each).
+  7. stg_met__artworks.sql sketch (VARIANT flatten approach — the CTE pattern).
+
+Use web search + cortex search docs to ground answers (especially: dbt-snowflake
+key-pair auth, env_var() syntax, FUTURE GRANTS behavior with dbt-created tables,
+dbt incremental hard-delete on Snowflake). Do NOT write files to the workspace —
+output the spec as conversation text for owner review.
+
+HARD RULES: No make iac. No DDL. No push to main. No file writes without owner
+sign-off. Do NOT install dbt in the workspace. Do NOT create Snowflake objects.
+This is a RESEARCH + DESIGN session only.
+
+FIRST RESPONSE: quote back the "End of this window" header from follow-on 9;
+confirm solo-session check; then state your research plan and wait for proceed.
+```
+
+- **End of this window (ninth; supersedes the "eighth" marker above. Strategy session
+  only -- `docs/context/dbt-plan.md` written to workspace. No account changes, no code,
+  no sync to Mac. Next window = research + design pass per the hand-off prompt above.)**
+
+---
+
+## 2026-05-31 — follow-on 10 (dbt-plan.md review + hardening)
+
+### What changed this turn
+
+- **EDITED: `docs/context/dbt-plan.md`** — Review pass fixing 6 gaps/weaknesses:
+  1. D3: Added multi-artist relationship clarification (pipe-delimited constituents;
+     M1-M2 = primary artist only; bridge table deferred as documented simplification).
+  2. Model responsibilities table: added Materialization column + rationale (Silver =
+     views except stg_met__artworks which becomes incremental in M3; Gold = tables).
+  3. Delete-propagation cornerstone: rewritten to distinguish trivial full-refresh mode
+     from the hard incremental-delete problem (research question #4).
+  4. .env variable block: split into DBT_* vs LOADER_* namespaces to fix the role/user
+     confusion (ARTWORK_LOADER_SVC is extraction, not dbt; dbt runs as PORCHANALYTICS
+     with ARTWORK_TRANSFORMER role).
+  5. Research questions: expanded with sub-questions (YAML shape for #1, macro rename
+     for #2, source() + VARIANT for #3, "absent from source" signal for #4, dbt grants
+     config for #5, profile linkage for #6, dbt debug behavior for #7).
+  6. Research question #7: removed pre-answered parenthetical, added verification ask.
+- **EDITED: `AGENTS.md`** — Status row for dbt-plan.md corrected (D1-D10 -> D1-D7;
+  added materializations + .env split + research questions count).
+- **Applied to account: NO.** Docs edits only.
+- **Pushed to Mac: NO.** Owner will sync.
+
+### Cumulative workspace state vs Mac
+
+Same as follow-on 9, plus the dbt-plan.md + AGENTS.md edits above. Owner's next step
+is to sync workspace -> Mac, then open a new window with the hand-off prompt below.
+
+### Solo-session check result
+
+Not run (docs-only review, no account interaction).
+
+### First-action options for the next window
+
+The owner stated their intent: sync to Mac, then open a new window for the dbt
+research + build arc. The hand-off prompt below combines research and implementation
+into a single window (resolve the 7 questions just-in-time as M1 is built, since
+the owner expressed preference for forward momentum over a separate research-only pass).
+
+### Read-only verification queries
+
+N/A — no account changes.
+
+### Decision tree for next window
+
+```
+Owner syncs workspace -> Mac (git add + commit on donkey-kong-sandbox)
+  -> Opens new Cortex window with the hand-off prompt below
+  -> That window: reads dbt-plan.md, researches open questions, builds M1
+  -> M1 exit criteria: `make dbt-build` passes, SILVER.STG_MET__ARTWORKS exists
+```
+
+### Deferred patches (priority order)
+
+1. Met enrichment Phase 3 drain (full EP collection) — whenever owner is ready.
+2. Stale V/R/B refs outside infrastructure.
+3. `rename_and_update.py` removal decision.
+4. `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+5. Multi-artist bridge table (documented simplification; revisit at source #2).
+
+### What MUST NOT happen in the next window
+
+- Do NOT install dbt in the Snowsight workspace sandbox — dbt runs on Mac only.
+- Do NOT run `make iac` from the workspace.
+- Do NOT push to `main`.
+- Do NOT create a `CREATE DBT PROJECT` object (that is M5).
+- Do NOT commit to Airflow or Cosmos (explicitly deferred).
+- Do NOT modify Bronze schema objects — dbt owns Silver/Gold only.
+
+### Hand-off prompt (paste into a new Cortex window to start the dbt build)
+
+```
+SESSION HANDOFF — artwork-db / dbt Milestone 1: research + build
+
+ROLE: Senior Data/Platform Engineer mentor for a Snowflake learning project.
+Account: pa37992. Branch: donkey-kong-sandbox. Explain the WHY and trade-offs;
+the OWNER decides, you honor it.
+
+SESSION-OPEN RITUAL (in order, before any write):
+1. Read /workspace/AGENTS.md (cheapest read; orientation).
+2. Read the LAST "End of this window" entry in
+   /workspace/docs/context/session-3-progress-log.md (titled "follow-on 10").
+3. Read /workspace/docs/context/dbt-plan.md FULLY — primary reference for all
+   architecture decisions, DAG shape, IaC design, and the 7 research questions.
+4. Solo-session check (must return exactly 1):
+     SELECT COUNT(DISTINCT SESSION_ID) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+   Then: SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY 1 DESC LIMIT 5;
+5. DUAL-FS HAZARD: re-read files before editing. Ask me to paste Mac copy if unsure.
+6. State the plan and wait for "proceed (date)" before any write or execution.
+
+STATE (do not re-derive):
+- dbt-plan.md is LOCKED: 7 decisions (D1-D7), model DAG, IaC integration design,
+  3-milestone sequence. This window executes M1.
+- Bronze LIVE: RAW_MET_OBJECTS has ~1,100 enriched rows (European Paintings slice).
+- Silver and Gold schemas EXIST but are EMPTY. dbt will fill them.
+- dbt runs on Mac ONLY (Python venv, dbt-core + dbt-snowflake, key-pair auth).
+- .env is the single source of truth. DBT_* vars feed profiles.yml via env_var().
+- ARTWORK_TRANSFORMER role + PORCHANALYTICS user for dbt connections.
+- 7 open research questions in dbt-plan.md must be answered before/during M1 build.
+
+YOUR TASK THIS WINDOW:
+Milestone 1 — dbt project scaffold + stg_met__artworks + full IaC wiring.
+
+Phase 1 (research): Answer the 7 open questions in dbt-plan.md using web search +
+cortex search docs. Key unknowns: env_var() key-pair auth syntax, dbt-utils version
++ surrogate_key macro name, VARIANT flatten best practice, FUTURE GRANTS behavior.
+Present findings for owner review BEFORE writing any files.
+
+Phase 2 (build, after owner "proceed"): Create the following in the workspace:
+  - artwork_pipeline/ (dbt_project.yml, profiles.yml, packages.yml)
+  - artwork_pipeline/models/staging/met/ (sources, schema, stg_met__artworks.sql)
+  - scripts/dbt_orchestrate.sh (phases: init, build, test, teardown, full-refresh)
+  - Makefile additions (dbt-init, dbt-build, dbt-test, dbt-teardown, all target)
+  - .env updates (DBT_* variables added)
+  - Basic tests: unique + not_null on object_id
+
+EXIT CRITERIA: After owner syncs to Mac and runs `make dbt-init && make dbt-build`,
+SILVER.STG_MET__ARTWORKS exists with typed columns and passes dbt tests.
+
+HARD RULES:
+- Do NOT install dbt in the workspace sandbox (runs on Mac only).
+- Do NOT run make iac from the workspace.
+- Do NOT push to main.
+- Do NOT skip the research phase — present findings before writing code.
+- Do NOT create tables in Silver/Gold manually — dbt owns those schemas.
+- Do NOT create a CREATE DBT PROJECT object (that is M5, far future).
+- One commit per logical unit. Owner decides when to commit.
+
+FIRST RESPONSE: Quote back the "End of this window (tenth...)" header; confirm
+solo-session=1 + CORTEX_FORK_INCIDENTS clean; then present your research plan
+(which questions, which sources) and wait for "proceed."
+```
+
+- **End of this window (tenth; supersedes the "ninth" marker above. Review/hardening
+  pass on dbt-plan.md — 6 gaps fixed, .env namespace split, materialization decisions
+  added, multi-artist simplification documented. No account changes. Owner's next step:
+  sync to Mac, then open a new window with the hand-off prompt above to execute M1.)**
+

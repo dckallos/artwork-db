@@ -133,7 +133,7 @@ class _RateLimiter:
                     "identity rejection, not rate.", self._rps,
                 )
             self._throttle_burst = 0
-            logger.info("Adaptive RPS dropped to %.2f after throttle burst", self._rps)
+            logger.debug("Adaptive RPS dropped to %.2f after throttle burst", self._rps)
 
     def cool_up(self) -> None:
         """Successful response; edge RPS back up toward the ceiling."""
@@ -408,7 +408,7 @@ async def _enrich_async(
                     completed += 1
                     if completed % progress_every == 0:
                         conn.commit()
-                        logger.info(
+                        logger.debug(
                             "Enrich progress: %s/%s (done=%s no_image=%s error=%s)",
                             f"{completed:,}", f"{len(object_ids):,}",
                             counters["done"], counters["no_image"], counters["error"],

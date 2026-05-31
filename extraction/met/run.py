@@ -44,6 +44,11 @@ def _configure_logging(verbose: bool) -> None:
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    # Suppress noisy third-party loggers at INFO (they emit connection/auth chatter).
+    if not verbose:
+        logging.getLogger("snowflake.connector").setLevel(logging.WARNING)
+        logging.getLogger("botocore").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def _print_status(config: Config) -> None:
@@ -141,6 +146,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--limit", type=int, default=None,
         help="Max objects to claim+enrich this run (batch bound). Default: whole worklist.",
     )
+    p_enrich_met.add_argument(
+        "--progress-every", type=int, default=100,
+        help="Emit one progress line every N items processed. Default: 100.",
+    )
 
     sub.add_parser("enrich", help="Fetch image URLs from the Met API for pending rows.")
     sub.add_parser("upload", help="Upload enriched rows to Snowflake Bronze.")
@@ -166,10 +175,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     elif args.command == "enrich-met":
         if args.limit is not None:
             # Bounded smoke: claim+enrich ONE batch of --limit objects, then stop.
-            enrich_from_control(config, batch_size=args.limit, max_batches=1)
+            enrich_from_control(
+                config, batch_size=args.limit, max_batches=1,
+                progress_every=args.progress_every,
+            )
         else:
             # Drain the whole worklist in default-size batches.
-            enrich_from_control(config)
+            enrich_from_control(config, progress_every=args.progress_every)
     elif args.command == "enrich":
         enrich_sqlite_legacy(config)
     elif args.command == "upload":
