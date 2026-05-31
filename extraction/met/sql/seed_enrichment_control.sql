@@ -3,7 +3,10 @@
 -- str.format() in control_seeder.py with:
 --   {control}    fully-qualified MET_ENRICHMENT_CONTROL
 --   {snapshot}   fully-qualified MET_CSV_SNAPSHOT
---   {predicate}  slice WHERE predicate; may contain %s bind placeholders
+--   {predicate}  slice WHERE predicate; may contain positional bind placeholders
+--                 (NOTE: keep ALL literal percent signs out of this file -- the
+--                 Snowflake connector pyformat-binds the WHOLE command string,
+--                 comments included, so a stray percent breaks `command % params`)
 --   {limit}      trailing LIMIT clause text ('' or 'LIMIT n', n already an int)
 --
 -- Why MERGE (not INSERT): re-seeding the same or an overlapping slice must be
