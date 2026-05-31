@@ -164,16 +164,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             limit=args.limit,
         )
     elif args.command == "enrich-met":
-        enrich_met(config, limit=args.limit)
+        if args.limit is not None:
+            # Bounded smoke: claim+enrich ONE batch of --limit objects, then stop.
+            enrich_from_control(config, batch_size=args.limit, max_batches=1)
+        else:
+            # Drain the whole worklist in default-size batches.
+            enrich_from_control(config)
     elif args.command == "enrich":
-        enrich(config)
+        enrich_sqlite_legacy(config)
     elif args.command == "upload":
         upload(config)
     elif args.command == "status":
         _print_status(config)
     elif args.command == "all":
         bootstrap(config, refresh_csv=True)
-        enrich(config)
+        enrich_sqlite_legacy(config)
         upload(config)
     return 0
 

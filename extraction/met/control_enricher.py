@@ -39,13 +39,13 @@ import aiohttp
 import snowflake.connector
 
 from .config import Config
-from .db import load_sql
+from .db import load_sql, strip_sql_comments
 from .image_enricher import _RateLimiter, _fetch_one
 from .snowflake_uploader import _snowflake_connect
 
 logger = logging.getLogger(__name__)
 
-CLAIM_WORKLIST_SQL = load_sql("claim_worklist.sql")
+CLAIM_WORKLIST_SQL = strip_sql_comments(load_sql("claim_worklist.sql"))
 COPY_INTO_BLOCK_STG_SQL = load_sql("copy_into_image_block_stg.sql")
 ASSEMBLE_RAW_SQL = load_sql("assemble_raw_met_objects.sql")
 CALLBACK_CONTROL_SQL = load_sql("callback_enrichment_control.sql")

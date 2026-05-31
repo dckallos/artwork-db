@@ -681,4 +681,56 @@
 - **Next window:** verify control seeded (2327 pending) + first enrich batch landed in
   RAW_MET_OBJECTS; then DATA-01 deaccession diff, AUTO-03 audit review, and widening the slice.
 
+### 2026-05-31 (new window, cont.) | SEED CRASH DIAGNOSED + ENRICH-PATH RECONCILED (workspace fixed; Mac is BEHIND)
+- **Owner ran on Mac:** `seed-control --department "European Paintings"` →
+  `TypeError: not enough arguments for format string` at `cur.execute(sql, params)`.
+- **Root cause (definitive):** the Snowflake connector pyformat-binds the WHOLE command
+  string INCLUDING `--` comments (`command % params`). `seed_enrichment_control.sql` had a
+  literal `%s` in its header comment, so the bound command held TWO `%s` (comment + the real
+  `department = %s` predicate bind) vs ONE param → crash. (SSO/botocore warnings above it are
+  unrelated; key-pair auth succeeded.)
+- **DUAL-FS / dropped-turn, AGAIN.** The workspace-stage FS is AHEAD of the Mac git checkout:
+  - `db.py` already has `strip_sql_comments()` (dropped-turn artifact; even anticipates a
+    future `--where "... LIKE '%greek%'"`); `control_seeder.py:126` already calls
+    `strip_sql_comments(SEED_CONTROL_SQL).format(predicate=predicate, limit=limit_clause)`.
+    The Mac crash proves the Mac's `control_seeder` does NOT yet strip (older copy).
+  - bash `/workspace` FS and the file-tool FS diverged on `claim_worklist.sql` (bash showed a
+    `%s`-bind variant; file-tool showed a `{limit}`+`%s` variant) — neither matched the code.
+- **FIXES APPLIED THIS TURN (workspace-stage; NOT executed; Mac still needs them):**
+  1. `seed_enrichment_control.sql` — removed the literal `%s`/`%` from the header comment (now
+     percent-free; defense-in-depth on top of strip_sql_comments).
+  2. `claim_worklist.sql` — rewritten to match `met_enricher._claim_batch`'s contract:
+     placeholders `{control}/{worklist}/{batch_id}/{limit_clause}`, batch_id str.format'd as a
+     literal (machine-generated token, injection-safe, consistent w/ assemble/callback/release),
+     NO `%s` bind, NO stray `%`. Both renders (LIMIT / no-LIMIT) compiled clean (`only_compile`).
+- **VERIFIED-ALREADY-CORRECT (dropped-turn, no change needed):** `db.strip_sql_comments` +
+  its wiring in `control_seeder`; `control_seeder` `.format(predicate=predicate)` kwargs.
+- **Self-inflicted near-miss:** my first comment reword reintroduced a `%` (`` `command % params` ``);
+  caught + scrubbed. Lesson: after editing a pyformat-bound SQL file, re-grep for `%`.
+- **MAC ACTION (workspace is ahead — sync OR hand-apply):**
+  - Fastest: sync the workspace state to the Mac (commit + pull) so it inherits the vetted files.
+  - Minimal hand-fix to unblock SEED on the current Mac copy: delete the `%s` token from the
+    comment in `extraction/met/sql/seed_enrichment_control.sql` (`grep -n '%' <file>` → expect none).
+  - Before `enrich-met`: ensure the Mac's `claim_worklist.sql` uses `{batch_id}`+`{limit_clause}`
+    (no `%s`) — i.e. matches the workspace version above.
+- **Then:** `seed-control --department "European Paintings"` (expect inserted=2327, re-run=0) →
+  `enrich-met --limit 200` smoke → drain. Report MET_ENRICHMENT_CONTROL / MET_WORKLIST /
+  RAW_MET_OBJECTS / EXTRACTION_LOG counts.
+
+### 2026-05-31 (new window, cont.) | PHASE 2 SEED APPLIED + VERIFIED (owner ran; Mac was in sync)
+- Owner re-ran `seed-control --department "European Paintings"` on the Mac → succeeded:
+  `inserted=2,327` (the botocore/SSO `TokenRetrievalError` in the log is unrelated AWS-SSO
+  noise; Snowflake key-pair auth + the MERGE both ran fine). So the Mac WAS up to date with
+  the workspace fixes after all.
+- **Verified live (read-only):** `MET_ENRICHMENT_CONTROL` = 2327 total / 2327 pending / 0
+  claimed; `MET_WORKLIST` = 2327 claimable; `EXTRACTION_LOG` batch
+  `met_seed_20260531T200309Z_21b8e6` = success, records_loaded=2327, error=None (AUTO-03 OK).
+- **Phase 2 = DONE.** First enrichment slice (European Paintings PD) is staged + prioritized,
+  unleased. Idempotency claim now testable: a re-run should report inserted=0.
+- **NEXT (owner-run on Mac):** `enrich-met --limit 200 -v` smoke (claims 200 off the worklist,
+  fetches images, assembles RAW_MET_OBJECTS, settles control + clears leases), then drop
+  `--limit` to drain the remaining ~2127. Watch for: claimed→done/no_image/error transitions,
+  RAW_MET_OBJECTS row growth (only status='done' rows land), and a clean lease release. Report
+  MET_ENRICHMENT_CONTROL status breakdown + RAW_MET_OBJECTS count + EXTRACTION_LOG.
+
 
