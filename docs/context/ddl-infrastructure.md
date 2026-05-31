@@ -295,6 +295,38 @@ validate SQL compiles (do not execute unless told).
    `V###`/`B002` mentions in `infrastructure/drop_grants.sql` and
    `infrastructure/drop_roles.sql`.
 
+## Session-2b reconciliation notes (2026-05-31)
+
+Full `infrastructure/` review against the Session-1 strawman + `DDL-04`/`DDL-05`.
+Detailed findings and the build-impact map are in `met-deepdive.md` → "Session-2b
+DDL review" block. Summary of **net changes for Session 3:**
+
+| What | Where | Kind |
+|---|---|---|
+| `MET_ENRICHMENT_CONTROL` table DDL | append `create_bronze_tables.sql` | new SQL |
+| `MET_CSV_SNAPSHOT` table DDL | append `create_bronze_tables.sql` | new SQL |
+| `MET_WORKLIST` view DDL | **new** `create_bronze_views.sql` + manifest entry (after step 7) | new file |
+| Paired drop for tables | append `drop_bronze_tables.sql` | new SQL |
+| Paired drop for view | **new** `drop_bronze_views.sql` | new file |
+| VIEW grant for LOADER | add to `grant_privileges.sql` + `refresh_grants.sql` | new lines |
+| Lease-reclaim TASK | fill `create_tasks.sql` placeholder | replace SELECT |
+| EXECUTE TASK account grant | uncomment l.45 `create_roles.sql` | uncomment |
+| Drop task | fill `drop_tasks.sql` placeholder | replace SELECT |
+
+**Grant gap found:** `grant_privileges.sql` has no `GRANT SELECT ON ALL/FUTURE
+VIEWS IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER`. Today harmless (no
+Bronze views exist), but the `MET_WORKLIST` view requires it for the loader's
+lease-claim MERGE to read the worklist. Add in Session 3.
+
+**No new stage, file format, or warehouse needed.** Status-callback uses
+`bronze_load_stage` with a `/status/met/` path prefix. `MET_CSV_SNAPSHOT` loads
+via NDJSON + existing `json_raw` format.
+
+**Gated-decisions collision check: CLEAR.** All four approved-but-pending
+decisions (idempotency, UPPERCASE, rename `grant_privileges→create_grants`,
+V/R/B comment rewords) are orthogonal to the new objects. Recommended: apply
+them first in Session 3 as a pre-patch, then add new objects.
+
 ## When to escalate to full source
 
 - Changing apply/teardown order → edit `scripts/manifest.txt` (only source of order).

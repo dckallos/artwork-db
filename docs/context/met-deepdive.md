@@ -478,6 +478,109 @@ worklist view.
 
 ---
 
+## Session-2b DDL review — full infrastructure/ reconciliation (appended 2026-05-31)
+
+> **DOCS-ONLY (gate down).** Systematic review of all 19 `infrastructure/` files
+> (10 forward + 9 drop/rollback) against the Session-1 strawman + `DDL-05` +
+> `DDL-04`. Rubric: `[H]` correctness/cost · `[M]` robustness/maint · `[L]`
+> cosmetic. Class: `R` readability · `O` optimization · `X` reconciliation.
+> Nothing flips to `decided`; reconciliation verdicts and the build-impact map
+> are positions for owner sign-off at session end.
+
+### A. Per-file review (key findings; files with nothing notable omitted)
+
+| File | Verdict vs strawman | Key findings |
+|---|---|---|
+| `create_roles.sql` (46 ln) | **forces-a-change** | `EXECUTE TASK ON ACCOUNT` (l.45, commented) must uncomment in lockstep with real tasks in `create_tasks.sql`. Already self-documented. |
+| `create_warehouses.sql` (15 ln) | matches | ARTWORK_WH X-Small sufficient; new objects don't need a new warehouse. |
+| `create_databases_and_schemas.sql` (21 ln) | matches | All new objects land in existing BRONZE schema. |
+| `create_file_formats.sql` (22 ln) | matches | VARIANT-blob design means `json_raw` (existing) covers `MET_CSV_SNAPSHOT` loading (NDJSON path). No new format needed. |
+| `create_stages.sql` (14 ln) | **forces-a-change (resolved: no DDL)** | Strawman §3 references a status stage for batch callbacks. **Position:** reuse `bronze_load_stage` with a `/status/met/` path prefix — no new stage DDL needed; LOADER already has R/W. `[L][R]` trailing whitespace l.14. |
+| `grant_privileges.sql` (45 ln) | **forces-a-change (additive)** | `[M][X]` LOADER has full CRUD on ALL+FUTURE **TABLES** in BRONZE (covers `MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT`). But **no VIEW grants in BRONZE** — `MET_WORKLIST` (VIEW) is unreadable by LOADER. Session 3 must add: `GRANT SELECT ON ALL VIEWS IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;` + `GRANT SELECT ON FUTURE VIEWS IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;`. |
+| `create_bronze_tables.sql` (85 ln) | **missing — new objects** | Natural home for `MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT` (both tables, same pattern as existing 6 raw_* tables). `MET_WORKLIST` (VIEW) recommended for a separate file. `[H][X]` `raw_met_objects` has no PK — intentional (append-only Bronze log; control is the PK authority). `[M][X]` No `CHANGE_TRACKING` — needed later for DT/stream Track 2/3 work, not for the strawman. |
+| `create_service_user.sql` (31 ln) | matches | Key-pair migration (`AUTH-01`) is orthogonal; placeholder pw + rotation comment intact. |
+| `create_tasks.sql` (7 ln) | **forces-a-change (fill placeholder)** | Lease-reclaim housekeeping task lives here. Reclaim predicate: `claimed_at < DATEADD(minute, -:ttl, CURRENT_TIMESTAMP())` → NULL both lease cols. In lockstep: uncomment `EXECUTE TASK` in `create_roles.sql`; fill `drop_tasks.sql`. |
+| `refresh_grants.sql` (23 ln) | **forces-a-change (minor)** | Add `GRANT SELECT ON ALL VIEWS IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;` to mirror `grant_privileges.sql` addition. |
+| `drop_bronze_tables.sql` (43 ln) | **missing** | Add `DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL;` + `DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.MET_CSV_SNAPSHOT;`. |
+| `drop_tasks.sql` (47 ln) | **forces-a-change** | Replace placeholder SELECT with `DROP TASK IF EXISTS ARTWORK_DB.BRONZE.<lease_reclaim_task>;`. |
+| `drop_roles.sql` (42 ln) | matches (stale V### ref l.9 already flagged) | No reconciliation impact. |
+| `drop_grants.sql` (40 ln) | matches (stale V###/B002 refs already flagged) | No reconciliation impact. |
+| All other drops | matches | New objects cascade through existing `drop_databases_and_schemas.sql`; fine-grained drops need the additions above. |
+
+### B. DDL build-impact map for Session 3
+
+| New object | Type | Created by | Owner | Manifest position | LOADER grant | Rollback |
+|---|---|---|---|---|---|---|
+| `BRONZE.MET_ENRICHMENT_CONTROL` | TABLE | append `create_bronze_tables.sql` | ARTWORK_ADMIN | step 7 (existing) | S/I/U/D already covered (ALL+FUTURE TABLES) | append `drop_bronze_tables.sql` |
+| `BRONZE.MET_CSV_SNAPSHOT` | TABLE | append `create_bronze_tables.sql` | ARTWORK_ADMIN | step 7 (existing) | S/I/U/D already covered (ALL+FUTURE TABLES) | append `drop_bronze_tables.sql` |
+| `BRONZE.MET_WORKLIST` | VIEW | **new file** `create_bronze_views.sql` | ARTWORK_ADMIN | **insert after step 7** (new manifest entry) | **NEW grant:** SELECT ON ALL+FUTURE VIEWS in BRONZE (add to `grant_privileges.sql` + `refresh_grants.sql`) | **new file** `drop_bronze_views.sql` |
+| Lease-reclaim TASK (e.g. `MET_LEASE_RECLAIM_TASK`) | TASK | fill `create_tasks.sql` | ARTWORK_ADMIN | step 9 (existing) | none (runs AS admin, inherits LOADER) | fill `drop_tasks.sql` |
+| `EXECUTE TASK ON ACCOUNT` | ACCOUNT GRANT | uncomment l.45 `create_roles.sql` | ACCOUNTADMIN | step 1 (existing) | N/A (revokes on DROP ROLE) | auto |
+
+**Positions (Session-3 design choices, not decisions):**
+
+1. **View in its own file** (recommended) — clean object-class split; manifest slot
+   controls dependency order; drop pair stays symmetric.
+2. **Reuse `bronze_load_stage`** with `/status/met/` path prefix — zero new DDL for
+   the batch-callback channel. LOADER already has READ/WRITE.
+3. **Loading format for `MET_CSV_SNAPSHOT`** — NDJSON (Python maps CSV→JSON rows,
+   PUT, COPY with `json_raw`). Keeps the loading path uniform with `raw_met_objects`.
+   No new file format.
+4. **Control-table seed path** — operational INSERT (Python bootstrap), not DDL.
+   `INSERT INTO MET_ENRICHMENT_CONTROL (object_id, metadata_date) SELECT … FROM
+   MET_CSV_SNAPSHOT`. Runs at first bootstrap; idempotent (PK conflict = skip).
+5. **Lease-reclaim task warehouse** — `ARTWORK_WH` (existing X-Small). ~471k row
+   scan with a simple date predicate = O(seconds). No scaling needed.
+6. **Task schedule** — position: `SCHEDULE = 'USING CRON 0 * * * * UTC'` (hourly) or
+   a short-interval `SCHEDULE = '5 MINUTE'` for development. Owner decides at build.
+7. **Manifest ordering** — `create_bronze_views.sql` must come AFTER `create_bronze_tables.sql`
+   AND after `grant_privileges.sql` (the view needs SELECT on both tables; grants
+   must already exist). Current order: `grant_privileges.sql` is step 6,
+   `create_bronze_tables.sql` is step 7. Slot the view at **step 7.5** (between
+   `create_bronze_tables.sql` and `create_service_user.sql`).
+
+### C. Collision check: gated "Approved decisions" vs new objects
+
+All four gated decisions in `ddl-infrastructure.md` are **orthogonal** to the new
+control/snapshot/worklist objects:
+
+| Gated decision | Collision? | Note |
+|---|---|---|
+| 1. Idempotency policy (IF NOT EXISTS / OR REPLACE) | **None** | New tables use IF NOT EXISTS; view uses OR REPLACE — conforms naturally. |
+| 2. UPPERCASE identifiers | **None** | New names already UPPERCASE. The `raw_met_objects` → `RAW_MET_OBJECTS` rename is cosmetic (unquoted = CI); view JOIN refs work either way. Best practice: apply rename first, then write view with uppercased refs. |
+| 3. Rename `grant_privileges.sql` → `create_grants.sql` | **None** | The new VIEW grant lines go in whichever name the file has at edit time. Manifest + paired-drop wiring is independent. |
+| 4. Reword stale V/R/B refs | **None** | Comment-only; new objects introduce no V/R/B references. |
+
+**Recommended Session-3 order:** apply gated cosmetic fixes first (they're self-contained),
+then add new objects. This avoids referencing about-to-be-renamed identifiers.
+
+**Independent re-verification (2026-05-31, second window).** The four load-bearing
+claims were re-read against source this window before drafting the Session-3 prompt:
+(1) `grant_privileges.sql:17-23` — LOADER has TABLES+STAGES in BRONZE, **no VIEW
+grant** → gap confirmed; (2) `create_bronze_tables.sql` — 7 tables, VARIANT, `IF NOT
+EXISTS`, runs as `ARTWORK_ADMIN`, `extraction_log` present (AUTO-03 "no DDL" holds),
+`raw_met_objects` has no PK → confirmed; (3) `create_tasks.sql:6` — bare-SELECT
+placeholder → confirmed; (4) `create_roles.sql:45` — `EXECUTE TASK ON ACCOUNT`
+commented with explicit lockstep note → confirmed. Coverage corrected to **19 files
+(9 drops, not 8)** — per-file table already covered all 19. Review stands; build-impact
+map is sound input to the Session-3 prompt.
+
+### Deferred to Session 3 (noted here, not solved)
+
+- The build itself (DDL + Python).
+- `DDL-02` clustering (premature pre-volume).
+- `DATA-01` deaccession build (needs `MET_CSV_SNAPSHOT` to exist first; Session 3
+  designs the diff query but may defer the automated pipeline).
+- `AUTO-03` extraction_log Python write (table exists — only Python changes).
+- `MET_CSV_SNAPSHOT` VARIANT-vs-typed fork: VARIANT (owner-preferred default;
+  max flexibility, zero schema maintenance) vs typed columns (queryable without
+  `::` casting, but schema-drift-sensitive). **Recommendation: VARIANT.** The view
+  or Silver can expose typed extractions.
+- Whether to apply the gated "Approved decisions" inside Session 3 or as a
+  separate pre-patch.
+
+---
+
 ## Cross-references
 
 - Patterns behind these decisions: `engineering-playbook.md` (Track 2 ingestion,

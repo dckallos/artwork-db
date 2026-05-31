@@ -112,7 +112,7 @@ Rules of thumb:
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
 | `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. **Session 2b inserted 2026-05-30** (owner-directed, DOCS-ONLY): full `infrastructure/` DDL review pass; `create_bronze_tables.sql` exposed that the worklist can't prioritize *pending* rows → new `DDL-05` `BRONZE.MET_CSV_SNAPSHOT` (Option A, owner-preferred, gated); `AUTO-03` corrected (`extraction_log` already exists). Arc now S1→S2→S2b→S3. |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. **Session 2b inserted 2026-05-30** (owner-directed, DOCS-ONLY): full `infrastructure/` DDL review pass; `create_bronze_tables.sql` exposed that the worklist can't prioritize *pending* rows → new `DDL-05` `BRONZE.MET_CSV_SNAPSHOT` (Option A, owner-preferred, gated); `AUTO-03` corrected (`extraction_log` already exists). Arc now S1→S2→S2b→S3. **Session-2b DDL review completed 2026-05-31** (DOCS-ONLY): all 19 `infrastructure/` files read and reconciled against the strawman; DDL build-impact map produced (5 new/modified objects; 1 grant gap found; 4 gated decisions confirmed orthogonal). Gate still DOWN — nothing newly `decided`; positions recorded for Session-3 sign-off. **Independently re-verified 2026-05-31 (second window):** 4 load-bearing claims (VIEW grant gap, bronze-tables home, tasks placeholder, EXECUTE TASK comment) re-read against source — all hold; file-count corrected to 19 (9 drops, not 8); Session-3 build prompt drafted for owner review. |
 
 ## Roadmap & deferred work
 
@@ -196,6 +196,17 @@ Rules of thumb:
   `infrastructure/` DDL review) → S3 (build)**. Gate still DOWN — nothing newly
   `decided`. Session 2b = review the full `infrastructure/` DDL set; sign-off at its end
   opens Session 3.
+- **Session 2b of the build arc DONE (2026-05-31, DOCS-ONLY) — DDL review pass
+  COMPLETED.** Full readability+optimization+reconciliation review of all 19
+  `infrastructure/` files (10 forward, 9 rollback). Key output: a **DDL build-impact
+  map** for Session 3 — 3 new objects (tables: `MET_ENRICHMENT_CONTROL`,
+  `MET_CSV_SNAPSHOT`; view: `MET_WORKLIST`), 1 lease-reclaim task, grant-gap fix
+  (LOADER needs SELECT on BRONZE VIEWS), file-placement decisions (view gets its own
+  `create_bronze_views.sql` + manifest entry after step 7), stage reuse with path
+  prefix (`/status/met/`), confirmed all 4 gated cosmetic decisions are orthogonal.
+  Recorded in `met-deepdive.md` → "Session-2b DDL review" + `ddl-infrastructure.md`
+  → "Session-2b reconciliation notes". **Nothing newly `decided`; gate DOWN.**
+  Arc: S1→S2→S2b(done)→S3. Session 3 = the build (gate lifts only on owner sign-off).
 - **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
   UPPERCASE identifiers, wire `drop_grants.sql` via renaming
   `grant_privileges.sql → create_grants.sql`, reword stale V/R/B comments). Full
