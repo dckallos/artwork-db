@@ -118,21 +118,33 @@ def _write_ndjson_chunk(
 
 
 def _snowflake_connect(config: Config) -> snowflake.connector.SnowflakeConnection:
-    """Open a Snowflake connection using config credentials."""
-    if not (config.snowflake_account and config.snowflake_user and config.snowflake_password):
+    """Open a Snowflake connection using key-pair auth.
+
+    ARTWORK_LOADER_SVC is a TYPE = SERVICE user with no password; the connector
+    authenticates with the private key registered by
+    scripts/snowflake_cli/06_setup_loader_keypair.sh.
+    """
+    if not (config.snowflake_account and config.snowflake_user and config.snowflake_private_key_file):
         raise RuntimeError(
             "Snowflake credentials missing. Set SNOWFLAKE_ACCOUNT, "
-            "SNOWFLAKE_USER, and SNOWFLAKE_PASSWORD in your .env."
+            "SNOWFLAKE_USER, and SNOWFLAKE_PRIVATE_KEY_FILE (path to the loader "
+            ".p8 private key) in your .env."
         )
-    return snowflake.connector.connect(
+    # The connector does not expand '~'; resolve it ourselves.
+    private_key_file = str(Path(config.snowflake_private_key_file).expanduser())
+    connect_kwargs: Dict[str, Any] = dict(
         account=config.snowflake_account,
         user=config.snowflake_user,
-        password=config.snowflake_password,
+        private_key_file=private_key_file,
         role=config.snowflake_role,
         warehouse=config.snowflake_warehouse,
         database=config.snowflake_database,
         schema=config.snowflake_schema,
     )
+    # Only set when the key is an encrypted PKCS#8 file.
+    if config.snowflake_private_key_file_pwd:
+        connect_kwargs["private_key_file_pwd"] = config.snowflake_private_key_file_pwd
+    return snowflake.connector.connect(**connect_kwargs)
 
 
 def _put_and_copy(

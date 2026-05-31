@@ -51,10 +51,16 @@ class Config:
     )
 
     # Snowflake connection. Bronze loader role/warehouse/db/schema/stage match
-    # the objects created in infrastructure/V001-V007.
+    # the objects created under infrastructure/. Authentication is KEY-PAIR:
+    # ARTWORK_LOADER_SVC is a TYPE = SERVICE user with no password, so we point
+    # the connector at the same private key registered by
+    # scripts/snowflake_cli/06_setup_loader_keypair.sh. No password at rest.
     snowflake_account: Optional[str] = os.getenv("SNOWFLAKE_ACCOUNT")
     snowflake_user: Optional[str] = os.getenv("SNOWFLAKE_USER")
-    snowflake_password: Optional[str] = os.getenv("SNOWFLAKE_PASSWORD")
+    snowflake_private_key_file: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
+    # Only needed if the private key is an ENCRYPTED PKCS#8 file; the keys minted
+    # by 06_setup_loader_keypair.sh are unencrypted (-nocrypt), so this is None.
+    snowflake_private_key_file_pwd: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE_PWD")
     snowflake_role: str = os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER")
     snowflake_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH")
     snowflake_database: str = os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB")
