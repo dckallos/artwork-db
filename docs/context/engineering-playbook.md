@@ -158,6 +158,38 @@ no key, 80 req/sec; `GET /objects?metadataDate=YYYY-MM-DD` returns the `objectID
 changed after that date (https://metmuseum.github.io/). Verified via web search
 2026-05-30 — see `met-deepdive.md` for the full Met-facts block.
 
+### 2d. Worklist + lease-claim + batch-callback (the Mac↔Snowflake contract)
+
+Reusable pattern (full Met-specific detail + strawman SQL in
+`met-deepdive.md` → "Session-1 strawman", 2026-05-30; `DDL-04`/`PIPE-03`/`PIPE-05`):
+
+- **System of record = a thin Snowflake control table**, narrow orchestration
+  *state* only (status, timestamps, gate flags, lease cols) — never the wide data row.
+- **Worklist = a VIEW** over the control table (joined to descriptive truth for
+  priority ordering), not a second materialized table — it can't drift.
+- **Claim = lease columns + atomic MERGE** (bounded set rides the `USING` subquery
+  since `UPDATE` has no `LIMIT`); a Stream is the wrong tool for a prioritized queue.
+- **Status callback = one MERGE per batch.** Acceptance rule: Snowflake round-trips
+  per batch = **O(1)**, never O(N). External I/O stays on the cheapest executor; only
+  a small per-batch status delta crosses the wire.
+
+**Session-2 code-reconciliation notes (2026-05-30, against `extraction/met/`):**
+The existing `snowflake_uploader.py` already owns the Snowflake connection + PUT/COPY,
+so it is the natural home for the batch-callback MERGE — adding it there keeps the
+O(1)/batch guard a one-line code review check (no per-row `executemany` status write).
+Conversely `image_enricher.py` is currently **Snowflake-free** (worklist from local
+SQLite), so the lease-claim forces a design choice — give enrich a Snowflake
+connection, or split a separate `claim` command (see `met-deepdive.md` `PIPE-06`).
+Two general lessons surfaced worth carrying to any executor pattern:
+- **Crash-window idempotency.** A "do work → mark done" pair where the mark is a
+  *separate* statement after a destructive load (`COPY … PURGE=TRUE`) has a duplicate
+  window: die between COPY and mark → re-run reloads. Append-only Bronze tolerates it
+  only if Silver de-dups. Prefer a single transactional unit, or make the loader
+  naturally idempotent (load metadata / MERGE key).
+- **Bounded fan-out.** Don't `asyncio.gather(*(... for x in N))` over a 471k-row set —
+  it materializes all N tasks up front regardless of any semaphore. Drain in bounded
+  slices so memory tracks the in-flight window, not the backlog.
+
 ---
 
 ## Track 3 — Delete propagation Bronze→Silver→Gold + clustering/cost

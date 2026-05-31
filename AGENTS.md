@@ -112,7 +112,7 @@ Rules of thumb:
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
 | `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO; Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled; all other entries still `open`/`exploring`. |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. |
 
 ## Roadmap & deferred work
 
@@ -155,6 +155,33 @@ Rules of thumb:
   landing + batch status callback up). This operationalizes `AUTO-02` and unblocks
   `AUTO-01/03`. The owner decides remaining sequencing turn-by-turn. **Mentor-flagged gap captured: `DATA-01` deaccession /
   delete-propagation** (UPSERT-only bootstrap never deletes vanished CSV rows).
+- **Session 1 of the 3-session build arc DONE (2026-05-30, DOCS-ONLY):** designed
+  the control-table/worklist contract as an explicit **STRAWMAN** and mapped the
+  SQLite→control **demotion delta** (read `schema.sql`, `image_enricher.py`,
+  `snowflake_uploader.py`). Recorded in `met-deepdive.md` → "Session-1 strawman"
+  (control table `MET_ENRICHMENT_CONTROL`, worklist VIEW + lease-MERGE claim,
+  one-MERGE-per-batch callback with an O(1)/batch guard); pattern pointer added to
+  `engineering-playbook.md` §2d. Forks: liveness = own `image_status` enum;
+  full detail in `met-deepdive.md` only. Seeded `DDL-04`; advanced `AUTO-01/02`,
+  `IMG-04` to `exploring`. **NON-FINAL — nothing newly `decided`.** Session 2 =
+  full `extraction/met/` Python review + strawman reconciliation; Session 3 =
+  build (gate lifts only on owner sign-off at end of Session 2).
+- **Session 2 of the 3-session build arc DONE (2026-05-30, DOCS-ONLY):** full
+  readability+optimization review of every `extraction/met/` module (run, config,
+  db, csv_bootstrap, image_enricher, snowflake_uploader + the 4 `sql/` files) under a
+  severity×{readability,optimization} rubric, reconciled against the Session-1
+  strawman into a "build-impact map" (which Python/SQL each strawman element
+  touches). Recorded in `met-deepdive.md` → "Session-2 review" block; playbook §2d
+  got code-reconciliation + crash-window/bounded-fan-out notes. Headline findings:
+  eager `asyncio.gather` over 471k rows (memory), SQLite PRAGMAs never reaching
+  working connections, uploader crash-window duplicate risk, deaccession blind spot
+  (`DATA-01`), and a possible Git-LFS-pointer CSV download (`DATA-06`). New IDs:
+  `PIPE-06` (lease-claim locus), `DATA-06` (CSV download integrity), `AUTH-01`
+  (loader auth → **key-pair, owner-preferred**). Dead-code (gated): `rename_and_update.py`
+  → REMOVE; empty `rotate_loader_password.sql` + `06_*.sh` → remove/repurpose under the
+  key-pair migration. **NON-FINAL — nothing newly `decided`; gate still DOWN.**
+  Session 3 = build (apply control-table DDL → Python changes), gate lifts only on
+  owner sign-off at end of Session 2.
 - **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
   UPPERCASE identifiers, wire `drop_grants.sql` via renaming
   `grant_privileges.sql → create_grants.sql`, reword stale V/R/B comments). Full
