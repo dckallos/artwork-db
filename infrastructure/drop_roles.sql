@@ -6,7 +6,7 @@
 --                 --connection admin --enhanced-exit-codes.
 --
 -- Ordering:
---   `make down` applies V### drops in REVERSE order (create_tasks.sql -> create_service_user.sql -> ... ->
+--   `make down` applies paired drops in REVERSE manifest order (create_tasks.sql -> create_service_user.sql -> ... ->
 --   create_roles.sql). By the time this script runs, the warehouse (create_warehouses.sql), database
 --   (create_databases_and_schemas.sql), file formats (create_file_formats.sql), stages (create_stages.sql), tables (create_bronze_tables.sql), service user
 --   (create_service_user.sql), and tasks (create_tasks.sql) that referenced these roles are already gone.

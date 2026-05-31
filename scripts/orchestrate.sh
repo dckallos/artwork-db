@@ -300,9 +300,11 @@ apply_phase() {
 
 # ------------------------------------------------------------
 # teardown -- apply paired drops in REVERSE manifest order. Only create_*
-# entries are torn down (grant_privileges.sql / refresh_grants.sql have no
-# paired drop and their grants cascade with the dropped parents). With
-# --from FILE, start at FILE's paired drop and continue to the end.
+# entries are torn down. create_grants.sql (formerly grant_privileges.sql) now
+# pairs to drop_grants.sql via the create_ -> drop_ rule; refresh_grants.sql is
+# a non-create_ entry with no paired drop and is skipped (its grants cascade
+# with the dropped parents). With --from FILE, start at FILE's paired drop and
+# continue to the end.
 # ------------------------------------------------------------
 teardown() {
     local from_file="$1" entry

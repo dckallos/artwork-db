@@ -1,46 +1,29 @@
 -- =============================================================================
--- create_tasks.sql ROLLBACK: placeholder paired with create_tasks.sql, which
--- itself is a Phase 4 placeholder. When create_tasks.sql starts creating real tasks,
--- replace the trailing SELECT with the matching DROP TASK statements
--- following the template below.
+-- create_tasks.sql ROLLBACK: drop the Met pipeline tasks created by
+-- create_tasks.sql.
 --
 -- Paired forward: infrastructure/create_tasks.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
 --                 --connection admin --enhanced-exit-codes.
 --
--- Future-state template (uncomment and complete when create_tasks.sql forward defines
--- real tasks):
---
---   USE ROLE ACCOUNTADMIN;
---
---   -- Snowflake does NOT support ALTER TASK IF EXISTS, so guarded suspends
---   -- require Snowflake Scripting blocks. For most teardown chains
---   -- (`make down`), skip the suspend and rely on DROP TASK alone: Snowflake
---   -- cancels in-flight runs and prevents future runs at drop time.
---   -- ALTER TASK ARTWORK_DB.BRONZE.<task_name> SUSPEND;
---
---   DROP TASK IF EXISTS ARTWORK_DB.BRONZE.<task_name>;
---
 -- Ordering:
---   When create_tasks.sql lands real tasks, `make down` will run this drop FIRST
---   (create_tasks.sql -> create_service_user.sql -> ... -> create_roles.sql) so scheduled tasks stop firing before any
---   of their referenced objects (raw_* tables, stages, file formats) are
---   torn down. This avoids a window in which a task fires against
+--   `make down` runs this drop FIRST (REVERSE manifest order: create_tasks.sql ->
+--   create_bronze_views.sql -> ... -> create_roles.sql) so the scheduled task
+--   stops firing before any object it references (MET_ENRICHMENT_CONTROL) is
+--   torn down. This avoids a window in which the task fires against
 --   partially-destroyed objects.
 --
 -- In-flight runs:
---   Snowflake's DROP TASK cancels any currently executing run and prevents
---   any future scheduled run from starting. To allow an in-flight run to
---   finish naturally before the drop, suspend the task first via an ad-hoc
---   ALTER (operator decision, not codified here):
---     snow sql -c admin -q "ALTER TASK ARTWORK_DB.BRONZE.<task_name> SUSPEND;"
+--   DROP TASK cancels any currently executing run and prevents future runs from
+--   starting. No explicit SUSPEND is required for teardown. Snowflake does NOT
+--   support ALTER TASK IF EXISTS, so a guarded suspend would need a Scripting
+--   block; DROP TASK IF EXISTS alone is sufficient and idempotent.
 --
 -- Idempotency:
---   A bare SELECT is trivially safe to re-run. It also gives
---   `snow sql --enhanced-exit-codes` a successful exit code (0) so the
---   `make down` chain continues to the next paired drop.
+--   DROP TASK IF EXISTS is safe pre-create and safe to re-run. Fully qualified
+--   ARTWORK_DB.BRONZE.* paths keep this independent of session USE context.
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;
 
-SELECT 'create_tasks.sql rollback: placeholder; replace with DROP TASK statements when create_tasks.sql forward defines real tasks' AS status;
+DROP TASK IF EXISTS ARTWORK_DB.BRONZE.MET_LEASE_RECLAIM_TASK;

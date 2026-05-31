@@ -1,6 +1,7 @@
 -- =============================================================================
--- create_bronze_tables.sql ROLLBACK: drop the seven Bronze raw_* tables and the extraction_log
--- table created by create_bronze_tables.sql.
+-- create_bronze_tables.sql ROLLBACK: drop the seven Bronze raw_*/extraction_log
+-- tables plus the two Met orchestration tables (MET_ENRICHMENT_CONTROL,
+-- MET_CSV_SNAPSHOT) created by create_bronze_tables.sql.
 --
 -- Paired forward: infrastructure/create_bronze_tables.sql.
 -- Applied by:     scripts/rollback_sql.sh -> snow sql --filename
@@ -33,10 +34,16 @@
 
 USE ROLE ACCOUNTADMIN;
 
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.raw_met_objects;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.raw_aic_artworks;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.raw_cma_artworks;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.raw_cma_creators;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.raw_cma_exhibitions;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.raw_smithsonian_objects;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.extraction_log;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_AIC_ARTWORKS;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_CMA_ARTWORKS;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_CMA_CREATORS;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_CMA_EXHIBITIONS;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_SMITHSONIAN_OBJECTS;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.EXTRACTION_LOG;
+-- Met enrichment orchestration pair (Session 3). MET_WORKLIST (a VIEW over these)
+-- is dropped first by the paired drop_bronze_views.sql, which the manifest places
+-- AFTER create_bronze_tables.sql -> reversed teardown runs it earlier. Safe to drop
+-- the bases here without an explicit view drop.
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL;
+DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.MET_CSV_SNAPSHOT;

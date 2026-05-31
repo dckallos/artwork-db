@@ -8,14 +8,14 @@ USE DATABASE ARTWORK_DB;
 USE SCHEMA BRONZE;
 
 -- JSON file format for raw API payloads
-CREATE OR REPLACE FILE FORMAT json_raw
+CREATE OR REPLACE FILE FORMAT JSON_RAW
     TYPE = 'JSON'
     STRIP_OUTER_ARRAY = FALSE
     COMPRESSION = 'AUTO'
     COMMENT = 'JSON format for raw API response loading into VARIANT columns.';
 
 -- Parquet file format (used by write_pandas under the hood, but explicit for COPY INTO)
-CREATE OR REPLACE FILE FORMAT parquet_raw
+CREATE OR REPLACE FILE FORMAT PARQUET_RAW
     TYPE = 'PARQUET'
     COMPRESSION = 'SNAPPY'
     COMMENT = 'Parquet format for bulk data loading (AIC dumps, Smithsonian S3).';

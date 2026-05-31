@@ -1,5 +1,7 @@
 -- =============================================================================
--- grant_privileges.sql: Grant privileges to functional roles
+-- create_grants.sql: Grant privileges to functional roles
+-- (Renamed from grant_privileges.sql so teardown's create_->drop_ pairing rule
+--  auto-maps it to drop_grants.sql; see scripts/manifest.txt + orchestrate.sh.)
 -- Paired rollback: infrastructure/drop_grants.sql
 -- =============================================================================
 
@@ -21,6 +23,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ARTWORK_DB.BRONZE T
 GRANT SELECT, INSERT, UPDATE, DELETE ON FUTURE TABLES IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;
 GRANT READ, WRITE ON ALL STAGES IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;
 GRANT READ, WRITE ON FUTURE STAGES IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;
+-- Loader must SELECT Bronze views (e.g. MET_WORKLIST) to drain the worklist for
+-- its lease-claim MERGE. Tables/stages above do not cover the VIEW object class.
+GRANT SELECT ON ALL VIEWS IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;
+GRANT SELECT ON FUTURE VIEWS IN SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_LOADER;
 
 -- ARTWORK_TRANSFORMER: read Bronze, full access to Silver and Gold
 GRANT USAGE ON SCHEMA ARTWORK_DB.BRONZE TO ROLE ARTWORK_TRANSFORMER;

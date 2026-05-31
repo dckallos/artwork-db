@@ -39,7 +39,7 @@ GRANT ROLE ARTWORK_ADMIN TO ROLE SYSADMIN;
 -- ---------------------------------------------------------------
 GRANT CREATE WAREHOUSE ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- create_warehouses.sql
 GRANT CREATE DATABASE  ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- create_databases_and_schemas.sql
--- Future: uncomment IN LOCKSTEP with create_tasks.sql when it defines real
--- tasks. Tasks require EXECUTE TASK on the account to run, even
--- when owned by the executing role:
--- GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN;   -- create_tasks.sql
+-- Tasks require EXECUTE TASK on the account to run, even when owned by the
+-- executing role. Enabled IN LOCKSTEP with create_tasks.sql, which defines
+-- MET_LEASE_RECLAIM_TASK (Session-3 build, 2026-05-31).
+GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN;   -- create_tasks.sql
