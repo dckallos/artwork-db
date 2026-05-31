@@ -56,6 +56,67 @@ CALLBACK_CONTROL_SQL = load_sql("callback_enrichment_control.sql")
 _STG_TABLE = "MET_IMAGE_BLOCK_STG"
 
 
+# --------------------------------------------------------------------------- diag
+def _classify_error(msg: Optional[str]) -> str:
+    """P-D2: bucket a per-row enrichment_error string into a stable error class.
+
+    The class names are the labels that show up in the per-batch histogram log.
+    Buckets are derived from the shapes _fetch_one (image_enricher.py) emits:
+      - "HTTP <status>: <body>"      non-retryable 4xx other than 404 -> http_4xx_<code>
+                                     non-retryable 5xx (rare path)    -> http_5xx_<code>
+      - "HTTP <status>"              retry-exhausted 429/5xx          -> http_<class>_<code>
+      - "ClientConnectorError: ..."                                  -> connect
+      - "ServerTimeoutError: ..." / "TimeoutError: ..."              -> timeout
+      - "ClientPayloadError: ..."                                    -> payload
+      - "ContentTypeError: ..."                                      -> parse
+      - "max retries exceeded"                                       -> retries_exhausted
+      - everything else                                              -> other:<head>
+    The bucket is intentionally low-cardinality: it shows up unsorted in INFO logs,
+    so we want a tight enum, not a free-text histogram.
+    """
+    if not msg:
+        return "none"
+    if msg.startswith("HTTP "):
+        # Either "HTTP 410: <body>" or "HTTP 503". Either way: "HTTP {code}..."
+        rest = msg[5:]
+        # Code is digits up to the first non-digit (':' or end-of-string).
+        code = ""
+        for ch in rest:
+            if ch.isdigit():
+                code += ch
+            else:
+                break
+        if code:
+            klass = "4xx" if code.startswith("4") else ("5xx" if code.startswith("5") else "xxx")
+            return f"http_{klass}_{code}"
+        return "http_unknown"
+    if msg.startswith("ClientConnectorError"):
+        return "connect"
+    if "TimeoutError" in msg.split(":", 1)[0]:
+        # ServerTimeoutError, asyncio.TimeoutError, SocketTimeoutError, etc.
+        return "timeout"
+    if msg.startswith("ClientPayloadError"):
+        return "payload"
+    if msg.startswith("ContentTypeError"):
+        return "parse"
+    if msg == "max retries exceeded":
+        return "retries_exhausted"
+    # Last resort: keep the leading exception class for visibility, drop the body.
+    head = msg.split(":", 1)[0]
+    return f"other:{head[:32]}"
+
+
+def _histogram(blocks: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Return {error_class: count} over the rows whose status == 'error'."""
+    hist: Dict[str, int] = {}
+    for b in blocks:
+        if b.get("enrichment_status") != "error":
+            continue
+        klass = _classify_error(b.get("enrichment_error"))
+        hist[klass] = hist.get(klass, 0) + 1
+    return hist
+
+
 # --------------------------------------------------------------------------- claim
 def _claim_batch(
     cur: snowflake.connector.cursor.SnowflakeCursor,
@@ -239,10 +300,21 @@ def _process_one_batch(
             assembled = _assemble_and_callback(cur, config, batch_id)
             _log_finish(cur, batch_id, "success", assembled)
             sf_conn.commit()
+            # P-D2: include a per-batch error histogram alongside the status counts
+            # so the failure modes show up in the same INFO line we already write.
+            # Sorted descending by count so the dominant class leads.
+            hist = _histogram(blocks)
+            hist_repr = (
+                "{" + ", ".join(
+                    f"{k!r}: {v}"
+                    for k, v in sorted(hist.items(), key=lambda kv: -kv[1])
+                ) + "}"
+            ) if hist else "{}"
             logger.info(
-                "Batch %s: claimed=%s done=%s no_image=%s error=%s assembled=%s",
+                "Batch %s: claimed=%s done=%s no_image=%s error=%s assembled=%s "
+                "err_breakdown=%s",
                 batch_id, len(claimed), counts["done"], counts["no_image"],
-                counts["error"], assembled,
+                counts["error"], assembled, hist_repr,
             )
             return len(claimed), counts
         except Exception as exc:

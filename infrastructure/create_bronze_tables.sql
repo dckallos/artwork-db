@@ -101,9 +101,19 @@ CREATE TABLE IF NOT EXISTS MET_ENRICHMENT_CONTROL (
     last_head_check_at  TIMESTAMP_NTZ   COMMENT 'CDN HEAD liveness-sweep timestamp (IMG-04)',
     claimed_by_batch    VARCHAR         COMMENT 'Lease owner: batch_id currently fetching this row (NULL = free)',
     claimed_at          TIMESTAMP_NTZ   COMMENT 'Lease timestamp; TTL reclaim of abandoned claims (see create_tasks.sql)',
+    enrichment_error    VARCHAR(500)    COMMENT 'Last fetch error message; cleared on success (P-D1: per-row diagnosis).',
     CONSTRAINT pk_met_enrichment_control PRIMARY KEY (object_id)
 )
 COMMENT = 'Thin Snowflake-authoritative enrichment control/lease table for the Met worklist. State only, not data.';
+
+-- P-D1 (code-review-met-pipeline.md): on accounts where MET_ENRICHMENT_CONTROL
+-- already exists from a prior apply, the CREATE TABLE IF NOT EXISTS above is a
+-- no-op. The idempotent ALTER below adds enrichment_error to those installations
+-- without disturbing rows. Snowflake silently no-ops ADD COLUMN IF NOT EXISTS
+-- when the column is already present, so this is safe to re-run.
+ALTER TABLE IF EXISTS MET_ENRICHMENT_CONTROL
+    ADD COLUMN IF NOT EXISTS enrichment_error VARCHAR(500)
+    COMMENT 'Last fetch error message; cleared on success (P-D1: per-row diagnosis).';
 
 -- -----------------------------------------------------------------------------
 -- Full Met CSV snapshot landed at bootstrap (Session 3 build; see DDL-05,

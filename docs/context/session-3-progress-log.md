@@ -734,3 +734,137 @@
   MET_ENRICHMENT_CONTROL status breakdown + RAW_MET_OBJECTS count + EXTRACTION_LOG.
 
 
+### 2026-05-31 (new window) | CODE REVIEW + P-D1/P-D2 STAGED (workspace; NOT applied)
+- **Context:** owner ran `enrich-met --limit 200` -> claimed=200, done=91, error=109. The
+  `botocore.tokens` SSO error in the log is unrelated noise (other AWS-CLI session in venv).
+  109 errors are diagnostic-blind today: `_fetch_blocks` carries `enrichment_error` in the
+  staging block, but `callback_enrichment_control.sql` never wrote it back, and
+  `MET_ENRICHMENT_CONTROL` had no error column. EXTRACTION_LOG.error_message is single-valued
+  per batch, so the 109 collapse to one line.
+- **DELIVERED (workspace-stage; Mac still needs them):**
+  1. `docs/context/code-review-met-pipeline.md` -- overwritten with full senior code review
+     (Blocker / High / Medium / Low / Nit, file:line, fixes; CLI-vs-connector hybrid
+     recommendation; dbt-forward note; 9 gated patch plans P-B1..P-L1; suggested order;
+     section 4 = full diagnosis of the 109 errors).
+  2. **P-D1 (per-row error persistence)** -- workspace-staged, NOT applied:
+     - `infrastructure/create_bronze_tables.sql`: added `enrichment_error VARCHAR(500)` to
+       MET_ENRICHMENT_CONTROL; appended idempotent
+       `ALTER TABLE IF EXISTS ... ADD COLUMN IF NOT EXISTS enrichment_error VARCHAR(500)`
+       so `make iac` upgrades the existing live table (CREATE TABLE IF NOT EXISTS would
+       otherwise no-op). Compiled clean (only_compile=true) against the live account.
+     - `extraction/met/sql/callback_enrichment_control.sql`: extended SET clause to write
+       `c.enrichment_error = s.block:enrichment_error::STRING`. Render-checked.
+     - No code change in `control_enricher.py` for D1 -- `_fetch_blocks` already populates
+       `enrichment_error` (line 107) and truncates at 500 chars.
+  3. **P-D2 (per-batch error histogram log)** -- workspace-staged, NOT applied:
+     - `extraction/met/control_enricher.py`: added `_classify_error(msg)` (low-cardinality
+       buckets: `http_4xx_<code>`, `http_5xx_<code>`, `connect`, `timeout`, `payload`,
+       `parse`, `retries_exhausted`, `other:<head>`, `none`) + `_histogram(blocks)`; the
+       per-batch INFO log now appends `err_breakdown={...}` sorted desc by count. AST-parsed
+       OK; classifier smoke-tested against 14 sample messages, all bucketed correctly.
+- **NOT touched / explicitly deferred to next PRs:** P-B1 delete dead `met_enricher.py` twin
+  (still on disk + still broken; non-urgent because run.py routes to `control_enricher`),
+  P-B2 doc reword, P-H1 autocommit/BEGIN/COMMIT, P-H2 deaccession sweep (needs
+  cascade-vs-SCD-2 decision), P-H3 paramstyle=qmark, P-H4 `--where` env gate, P-L1
+  legacy-SQLite delete.
+- **MAC ACTION (workspace is ahead -- sync OR hand-apply):**
+  1. Sync workspace -> Mac (commit + pull on `donkey-kong-sandbox`).
+  2. `make infra` (or `make iac`) to apply the new column. Verify:
+     `DESCRIBE TABLE ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL;` -- expect
+     `ENRICHMENT_ERROR  VARCHAR(500)`.
+  3. Re-run the smoke: `python -m extraction.met.run enrich-met --limit 200 -v`. The
+     batch INFO log should now include `err_breakdown={...}`. The errors this run
+     produces will land their messages in `MET_ENRICHMENT_CONTROL.enrichment_error`.
+  4. Read the histogram + the column. Decide next move (very likely: D2 already answers
+     it; if not, hand-curl 5-10 errored object_ids).
+- **Solo-session check this turn:** `SELECT COUNT(DISTINCT SESSION_ID)` on
+  ACCOUNT_USAGE.QUERY_HISTORY filtered to `cortex_code_snowsight` last 10 min = 1. Solo.
+- **Self-lint:** classifier was tested in isolation (extracted via regex + exec'd) because
+  `control_enricher.py` imports `snowflake.connector` which is not in the sandbox; this is
+  enough to validate logic. Live smoke is the Mac re-run.
+
+### 2026-05-31 (new window) | P-B1 APPLIED (workspace) + NEW-WINDOW HANDOFF
+**This is the last entry of THIS window. The next window starts here.**
+
+- **Solo-session check:** `SELECT COUNT(DISTINCT SESSION_ID) ... cortex_code_snowsight ...
+  last 10 min` = 1. Solo.
+- **P-B1 applied (workspace; NOT pushed to Mac yet):** the dead Phase-3 twin and its
+  twin-only SQL templates are removed. Three files deleted:
+    - `extraction/met/met_enricher.py` (broken: placeholder/bind contract mismatch with
+      `claim_worklist.sql`, `assemble_raw_met_objects.sql`, `callback_enrichment_control.sql`).
+    - `extraction/met/sql/release_lease.sql` (loaded only by met_enricher; control_enricher
+      uses an inline UPDATE for the same purpose).
+    - `extraction/met/sql/copy_into_enrich_stg.sql` (loaded only by met_enricher;
+      control_enricher uses `copy_into_image_block_stg.sql`).
+  Verification this turn:
+    - Grep for `met_enricher|release_lease|copy_into_enrich_stg` across `**/*.py` returns
+      ONLY doc-comment references (the review doc + this progress log). Zero live importers.
+    - `ast.parse` of every remaining `extraction/met/*.py` module: OK.
+    - `sql/` contents now: assemble_raw_met_objects, callback_enrichment_control,
+      claim_worklist, copy_into_bronze, copy_into_image_block_stg, copy_into_snapshot_stg,
+      merge_csv_snapshot, schema, seed_enrichment_control, update_enrichment_done (legacy
+      SQLite, dead but kept for now per L1 deferral), upsert_artwork (legacy, same).
+- **Cumulative state of this multi-turn arc on the workspace (NONE applied to account or
+  pushed to Mac):**
+    - `docs/context/code-review-met-pipeline.md` -- 601 lines; the canonical review.
+    - `infrastructure/create_bronze_tables.sql` -- P-D1 column + idempotent ALTER staged.
+    - `extraction/met/sql/callback_enrichment_control.sql` -- P-D1 SET line staged.
+    - `extraction/met/control_enricher.py` -- P-D2 `_classify_error` + `_histogram` +
+      `err_breakdown=` in batch INFO log.
+    - P-B1 -- 3 dead files deleted.
+- **NEW-WINDOW BRIEFING (read this section first in the next window):**
+    1. Read AGENTS.md (Tier 0). Then this entry. Then `docs/context/code-review-met-pipeline.md`
+       sections 0, 4, 5, 6 (executive summary, 109-errors diagnosis, patch plans, suggested
+       order). Stop reading once you know enough to act.
+    2. Solo-session check (AGENTS.md ritual). Confirm `BRONZE.CORTEX_FORK_INCIDENTS` is clean.
+    3. **Workspace is AHEAD of the Mac.** First action options:
+         (a) Owner has synced + run `make infra` already -- proceed to "after-apply checks"
+             below.
+         (b) Owner has NOT synced -- nothing to do here; ask the owner where they are.
+       Do NOT `make iac` from the workspace; the Mac is the apply surface.
+    4. **After-apply checks (read-only):**
+         - `DESCRIBE TABLE ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL;` -- expect new column
+           `ENRICHMENT_ERROR  VARCHAR(500)` last.
+         - Owner re-runs `python -m extraction.met.run enrich-met --limit 200 -v`. Expect:
+             - INFO log gains `err_breakdown={'http_4xx_xxx': N, ...}` after each batch.
+             - `SELECT enrichment_error, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+                WHERE enrichment_status='error' GROUP BY 1 ORDER BY 2 DESC` returns the 109-class
+               breakdown.
+    5. **Decision tree from the histogram:**
+         - If dominated by `http_4xx_403` / `http_4xx_410`: the public-domain CSV flag does
+           not guarantee API availability. NOT a code defect. Action: a small Python tweak
+           in `image_enricher._fetch_one` to treat 403/410 as `no_image` (semantic) rather
+           than `error` (transient/retryable), so the worklist stops re-leasing them. Tiny
+           PR, doc note in met-deepdive.md DATA-01 / IMG-02.
+         - If dominated by `timeout` / `connect`: lower `MET_API_CONCURRENCY` / `MET_API_RPS`
+           (defaults 10 / 20.0 in config.py); already conservative vs. Met's 80 rps ceiling,
+           so a deeper look is warranted -- check the Mac's network or run during off-peak.
+         - If dominated by `retries_exhausted`: bump `MET_API_MAX_RETRIES` from 5 to 8 and
+           re-test, but only if the histogram does not also show `http_5xx_*` (Met-side
+           pressure means we should back OFF, not retry harder).
+         - If dominated by `parse` / `payload`: bug in `_fetch_one` json handling -- open a
+           ticket; this would be unexpected.
+         - If `none` is dominant: `enrichment_error` is being null'd somewhere; bug in P-D1
+           wiring -- re-check the callback SQL.
+    6. **Deferred patches awaiting owner sign-off (in suggested order):**
+         - P-B2 doc reword (CLI-vs-connector convention in AGENTS.md / CLAUDE.md). Zero risk.
+         - P-H1 `autocommit=False` + explicit `BEGIN/COMMIT` around assemble+callback. Medium.
+         - P-H4 gate `--where` behind `MET_ALLOW_RAW_WHERE=1`. Zero risk.
+         - P-H3 paramstyle=qmark migration. Medium; eliminates the `%`-bind bug class for good.
+         - P-H2 DATA-01 deaccession sweep. Needs owner decision: hard-DELETE cascade vs.
+           soft-delete + dbt SCD-2.
+         - P-L1 delete legacy SQLite path (`image_enricher.py`, the SQLite-side of
+           `snowflake_uploader.py`, `update_enrichment_done.sql`, `upsert_artwork.sql`,
+           `csv_bootstrap.py` once `_iter_csv_rows` is moved into `snapshot_loader.py`,
+           plus the `bootstrap`/`enrich`/`upload`/`status`/`all` subcommands in `run.py`).
+           Medium; do AFTER initial enrichment is clean so we can compare counts.
+    7. **DUAL-FS HAZARD (per AGENTS.md):** before reasoning about any extraction file,
+       re-read it via the file tool. The progress log + this entry + the review doc are
+       authoritative for the workspace; the Mac is authoritative for the running pipeline.
+    8. **What MUST NOT happen in the next window:**
+         - Do NOT `make iac` from the workspace.
+         - Do NOT push to main.
+         - Do NOT undo the P-D1 column or the P-D2 logging -- those are the diagnosis path.
+         - Do NOT re-add `met_enricher.py` -- it was broken on every contract.
+- **End of this window.**
+
