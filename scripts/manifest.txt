@@ -22,6 +22,7 @@ infrastructure/create_file_formats.sql
 infrastructure/create_stages.sql
 infrastructure/create_grants.sql
 infrastructure/create_bronze_tables.sql
+infrastructure/create_run_control.sql
 infrastructure/create_bronze_views.sql
 infrastructure/create_service_user.sql
 infrastructure/create_tasks.sql

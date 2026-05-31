@@ -18,8 +18,10 @@
 - [~] Step 1 — Establish read-only diff baseline (DONE w/ caveat: baseline=mirror@00:44:35 GMT + mtime; byte-diff blocked by sandbox)
 - [x] Step 2 (Task 1) — Per-file audit DONE: 18 staged files, all bucket (b) on-spec/ghost-origin, 0 (c); STOP for owner sign-off on the (b) set
 - [x] Step 3 (Task 2) — IaC reproducibility verified: structure reproducible after audit; working pipeline not until Section C
-- [~] Step 4 (Task 3) — Recommendation = Option A; WAITING for owner pick
-- [ ] Record-back (only after owner sign-off) — met-deepdive.md + ddl-infrastructure.md blocks; file-map.md reconcile; AGENTS.md self-lint
+- [x] Step 4 (Task 3) — Recommendation = Option A; owner picked A + ran make infra
+- [x] Phase 2 — `make infra` APPLIED by owner 2026-05-31 09:33 (11 scripts OK)
+- [x] Phase 3 — Post-apply sanity runbook: ALL GREEN
+- [x] Phase 4 — Record-back COMPLETE (applied notes in 3 docs + AGENTS; this window authoritative; dead-twin entries reconciled). SESSION 3 COMPLETE.
 
 ## STANDING EVIDENCE (gathered once; do not re-derive)
 - `/workspace` is NOT a local git repo (`git status` → fatal). Staged diff must come
@@ -206,6 +208,42 @@
   and explicit go before any commit or apply. RECORD-BACK to met-deepdive.md /
   ddl-infrastructure.md / file-map.md / AGENTS.md is also gated on owner sign-off.**
 
+### 2026-05-31 09:33 GMT | APPLY | Owner picked Option A and ran `make infra` — SUCCESS
+- **Owner action (their terminal, ~/dev/artwork-db on donkey-kong-sandbox):** chose
+  Option A and executed `make infra`. Full orchestrator log reviewed. Clean, idempotent run.
+- **Phase 3 sanity — CONFIRMED from the apply log (no live SQL needed):**
+  - Privilege preflight passed: "preflight and create_roles.sql agree on CREATE
+    DATABASE, CREATE WAREHOUSE, EXECUTE TASK" + post-roles "ARTWORK_ADMIN holds …
+    EXECUTE TASK" → the bootstrap.py:69 ghost edit is validated live.
+  - `MET_ENRICHMENT_CONTROL` → "Table … successfully created" (new ⇒ empty).
+  - `MET_CSV_SNAPSHOT` → "Table … successfully created" (new ⇒ empty).
+  - `MET_WORKLIST` → "View … successfully created" (compiles; both bases empty ⇒ 0 rows).
+  - `MET_LEASE_RECLAIM_TASK` → "Task … successfully created" + "ALTER TASK … RESUME"
+    succeeded ⇒ started.
+  - LOADER view grant: `refresh_grants` shows "GRANT SELECT ON ALL VIEWS … 1 objects
+    affected" (= MET_WORKLIST); earlier `create_grants` showed "0 objects affected"
+    (correct — view not yet created; FUTURE grant covered it).
+  - All pre-existing objects returned "already exists, statement succeeded" ⇒ idempotency
+    confirmed end-to-end.
+- **DUAL-INSTANCE EVIDENCE FOUND DURING RECORD-BACK (important):** `file-map.md`,
+  `ddl-infrastructure.md`, and `met-deepdive.md` ALREADY contained Session-3
+  reconciliation blocks written by PRIOR aborted runs of this same prompt (each said
+  "not yet applied / no register entry flipped"). Also: `file-map.md` content was dated
+  2026-05-31 while bash `ls -la` reported its mtime as 05-30 21:05 → the bash `/workspace`
+  FS and the file-tool workspace-stage FS are NOT the same snapshot. LESSON CONFIRMED:
+  always READ a doc before appending record-back; a dead twin may have written it. I
+  therefore APPENDED dated "applied" updates rather than duplicating blocks.
+- **Stale-flag correction:** the prior-run blocks flag `MET_CSV_SNAPSHOT` as having "no
+  uniqueness on object_id." The DDL that actually applied has `CONSTRAINT
+  pk_met_csv_snapshot PRIMARY KEY (object_id)` (and `MET_ENRICHMENT_CONTROL` has its PK).
+  Snowflake does not ENFORCE PK, so the runtime guarantee still rides on the MERGE load
+  pattern (Section C) — but the uniqueness INTENT is now declared. Noted in the docs.
+- **Conclusion:** Session-3 DDL slice is APPLIED and structurally reproducible. Working
+  pipeline still blocked on Section C (data seed, AUTH-01 key-pair, dead-code removal,
+  PIPE-06 lease-claim MERGE, DATA-06 guard, AUTO-03 writes) = NEXT session.
+- **Next:** record-back appended to all four docs + AGENTS self-lint (this entry +
+  dated "applied" notes). Session 3 COMPLETE pending any owner follow-up.
+
 ### 2026-05-31 | OWNER DECISION | Option A chosen; owner committed Phase 1
 - Owner picked **Option A** and reported "I've committed" (Phase 1 commit of the 18
   reconciled files done by owner in their terminal). Authorized "Proceed".
@@ -219,3 +257,72 @@
 - **Next:** attempt `make infra` via sandbox-disabled bash (owner permission prompt).
   If owner prefers to run it themselves, they report results and I proceed to Phase 3
   (read-only SHOW/SELECT sanity runbook) + Phase 4 (record-back).
+
+### 2026-05-31 | TIMELINE RECONCILIATION | this window is AUTHORITATIVE
+- **Owner confirmed:** this is the only living session; the other instance (author of
+  the "OWNER DECISION | Option A chosen; owner committed Phase 1" entry above) is DEAD.
+  Its entry described a parallel branch — it is preserved (append-only discipline) but
+  is NON-AUTHORITATIVE.
+- **Authoritative facts (owner-stated 2026-05-31):**
+  1. Phase 1 COMMITTED — the 18 reconciled files are committed on donkey-kong-sandbox.
+  2. Phase 2 APPLIED — owner ran `make infra` locally on their Mac (their terminal);
+     full orchestrator log reviewed in this window; clean idempotent run (see the
+     "09:33 GMT | APPLY" entry above).
+- **Net:** both Phase 1 (commit) and Phase 2 (apply) are DONE. The dead twin had only
+  reached "about to apply." Record-back now proceeds from this window only.
+- **Next:** append dated commit+applied notes to ddl-infrastructure.md + met-deepdive.md
+  (correct the stale PK-uniqueness flag), file-map.md, AGENTS.md Status/Roadmap.
+
+### 2026-05-31 | TIMELINE RECONCILIATION | dead-twin entries above resolved
+- The two entries immediately above ("OWNER DECISION … owner committed Phase 1" and its
+  Phase-0/2 notes, lines ~247–259) were written by a SECOND Cortex instance that has
+  since died. Owner confirms (this turn): **this window is the only living session**,
+  **Phase 1 was committed** by the owner in their terminal, and **`make infra` was run
+  locally on the owner's Mac** (the orchestrator log captured in the APPLY entry above).
+- The twin's entries are KEPT (append-only discipline) as primary evidence of the
+  dual-instance incident — NOT deleted. They and this window's APPLY entry describe the
+  same real-world outcome (Option A committed + applied); only the narration differs.
+- **Authoritative state of record:** Phase 1 COMMITTED; Phase 2 `make infra` APPLIED
+  (clean, idempotent, sanity-confirmed from log); Phase 4 record-back now completed in
+  the four docs below. **Session 3 COMPLETE.** Section C is the next session.
+
+### 2026-05-31 | RUNBOOK | Reliably killing another Cortex/Snowflake session (owner-requested)
+- **Discovery result (this window, read-only):**
+  `SELECT SESSION_ID … FROM TABLE(ARTWORK_DB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER(RESULT_LIMIT=>1000))
+   WHERE (EXECUTION_STATUS='RUNNING' OR (EXECUTION_STATUS='SUCCESS' AND END_TIME>=DATEADD(second,-600,CURRENT_TIMESTAMP())))
+   AND SESSION_ID != CURRENT_SESSION() GROUP BY SESSION_ID;`
+  → **0 rows.** No other `PORCHANALYTICS` session ran SQL in the last 10 min. (Note: the
+  bare `INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER` fails with "Invalid identifier" when the
+  session has no current DB — fully-qualify with `ARTWORK_DB.INFORMATION_SCHEMA.`)
+- **KEY FINDING — why `SYSTEM$ABORT_SESSION` is NOT a reliable kill for a Cortex window:**
+  1. **Async, not immediate** (Snowflake KB): abort forces a client logout then cleans up
+     asynchronously; statement termination is not guaranteed instant.
+  2. **Client reconnects** → the Cortex window simply opens a NEW session. KB: "you will
+     also need to stop the client to prevent further queries from being started."
+  3. **Cortex workspace file-writes may not surface as user SQL** in QUERY_HISTORY — this
+     window's discovery returned 0 rows even though a twin had been appending to shared
+     docs minutes earlier. So you often **cannot even find the twin's session_id** to
+     abort it. Abort is therefore a *stun*, and frequently a blind one.
+  4. **Both windows share one user** (`PORCHANALYTICS`), so you cannot selectively target
+     one by identity, role, or network policy without hitting this window too.
+- **RELIABLE METHODS (preferred → last resort):**
+  1. **Close the client window/tab** (Snowsight browser tab; other browser/device; the
+     Snowflake VS Code extension). The ONLY clean, guaranteed, permanent stop. Not SQL,
+     but 100% reliable. For an orphaned/ghost-rebooted session: fully sign out of Snowsight
+     everywhere, close the browser, reopen ONE tab.
+  2. **User lockout + re-enable, from a SEPARATE break-glass ACCOUNTADMIN** (programmatic,
+     reliable, but all-or-nothing — it also kills THIS window, so you need a second admin
+     identity to undo it):
+        ALTER USER PORCHANALYTICS SET DISABLED = TRUE;   -- all clients drop, cannot reconnect
+        -- confirm every Cortex window is gone, then:
+        ALTER USER PORCHANALYTICS SET DISABLED = FALSE;  -- reopen exactly ONE window
+  3. **Abort-loop** (scripted stopgap, NOT fully reliable): every few seconds, for each
+     non-current session of the user:
+        SELECT SYSTEM$CANCEL_ALL_QUERIES(<id>); SELECT SYSTEM$ABORT_SESSION(<id>);
+     Only works if the twin's session is visible in query history AND reconnects slower
+     than the loop — neither holds for Cortex windows. Use only as a last-ditch interrupt.
+- **VERDICT for this account:** because both windows are the same user (likely same
+  machine/IP), there is **no clean selective programmatic kill**. Use Method 1 (close the
+  tab) as the default; Method 2 (break-glass disable/enable) is the only *programmatic*
+  method that reliably terminates all of a user's clients. `ABORT_SESSION` is a stun, not
+  a kill — keep it only for interrupting a runaway query in a session you can positively id.

@@ -376,6 +376,25 @@ the snapshot by append would fan out the worklist; resolve when the seed/diff Py
 lands. **Status NOT flipped to applied** — objects not yet applied; awaiting the
 commit + `make infra` go-aheads.
 
+**APPLIED — 2026-05-31 (owner sign-off + execution).** Owner committed Phase 1 (the 18
+reconciled files) on `donkey-kong-sandbox` and ran `make infra` locally on their Mac.
+The orchestrator applied all 11 manifest scripts cleanly and idempotently
+(pre-existing objects → "already exists, statement succeeded"; new objects created):
+`MET_ENRICHMENT_CONTROL`, `MET_CSV_SNAPSHOT`, `MET_WORKLIST` (view), and
+`MET_LEASE_RECLAIM_TASK` (created + `RESUME`d). Privilege preflight passed live
+("ARTWORK_ADMIN holds CREATE DATABASE, CREATE WAREHOUSE, EXECUTE TASK"), validating the
+`bootstrap.py` ↔ `create_roles.sql` contract incl. the `EXECUTE TASK` ghost edit. LOADER
+VIEW grant landed (`refresh_grants`: "ALL VIEWS … 1 objects affected"). Worklist returns
+0 rows pre-seed (both base tables empty), as designed. **Correction to the mentor-flag
+above:** the DDL that applied DOES declare `CONSTRAINT pk_met_csv_snapshot PRIMARY KEY
+(object_id)` (and `pk_met_enrichment_control`), so uniqueness INTENT is now declared;
+Snowflake does not ENFORCE PK, so the runtime 1:1 guarantee still rides on the MERGE load
+pattern (Section C). **Dual-instance note:** this block was originally written by a prior
+aborted run; a second concurrent instance also wrote to the shared docs/log this arc —
+owner confirmed a single living session, this window authoritative (full incident in
+`session-3-progress-log.md`). **Section C (data seed, AUTH-01 key-pair, dead-code
+removal, PIPE-06 lease-claim MERGE, DATA-06 guard, AUTO-03 writes) = NEXT session.**
+
 ## When to escalate to full source
 
 - Changing apply/teardown order → edit `scripts/manifest.txt` (only source of order).

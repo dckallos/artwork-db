@@ -13,6 +13,12 @@ substantive source is documented. The `Verified` column records provenance:
 a date = read end-to-end that window; `prior` = trusted from an earlier window's
 summary, not re-read; trivial files (`.gitignore`, `LICENSE`) and the
 `docs/context/*.md` docs themselves are intentionally not row-mapped.
+**Session-3 APPLIED (2026-05-31):** owner committed Phase 1 + ran `make infra` — the
+2 new view files + renamed `create_grants.sql` are now live IaC (see
+`ddl-infrastructure.md`/`met-deepdive.md` Session-3 "APPLIED" blocks). Effective count
+is now **79 files** (the 2 new bronze-view scripts) once committed; this header's
+"77/12" line predates the new files and should be re-reconciled against `ls -R` next
+edit window.
 
 ## scripts/snowflake_cli/ (Workflow 1 — reviewed)
 

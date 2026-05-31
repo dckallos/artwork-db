@@ -112,7 +112,7 @@ Rules of thumb:
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
 | `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. **Session 2b inserted 2026-05-30** (owner-directed, DOCS-ONLY): full `infrastructure/` DDL review pass; `create_bronze_tables.sql` exposed that the worklist can't prioritize *pending* rows → new `DDL-05` `BRONZE.MET_CSV_SNAPSHOT` (Option A, owner-preferred, gated); `AUTO-03` corrected (`extraction_log` already exists). Arc now S1→S2→S2b→S3. **Session-2b DDL review completed 2026-05-31** (DOCS-ONLY): all 19 `infrastructure/` files read and reconciled against the strawman; DDL build-impact map produced (5 new/modified objects; 1 grant gap found; 4 gated decisions confirmed orthogonal). Gate still DOWN — nothing newly `decided`; positions recorded for Session-3 sign-off. **Independently re-verified 2026-05-31 (second window):** 4 load-bearing claims (VIEW grant gap, bronze-tables home, tasks placeholder, EXECUTE TASK comment) re-read against source — all hold; file-count corrected to 19 (9 drops, not 8); Session-3 build prompt drafted for owner review. |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. **Session 2b inserted 2026-05-30** (owner-directed, DOCS-ONLY): full `infrastructure/` DDL review pass; `create_bronze_tables.sql` exposed that the worklist can't prioritize *pending* rows → new `DDL-05` `BRONZE.MET_CSV_SNAPSHOT` (Option A, owner-preferred, gated); `AUTO-03` corrected (`extraction_log` already exists). Arc now S1→S2→S2b→S3. **Session-2b DDL review completed 2026-05-31** (DOCS-ONLY): all 19 `infrastructure/` files read and reconciled against the strawman; DDL build-impact map produced (5 new/modified objects; 1 grant gap found; 4 gated decisions confirmed orthogonal). Gate still DOWN — nothing newly `decided`; positions recorded for Session-3 sign-off. **Independently re-verified 2026-05-31 (second window):** 4 load-bearing claims (VIEW grant gap, bronze-tables home, tasks placeholder, EXECUTE TASK comment) re-read against source — all hold; file-count corrected to 19 (9 drops, not 8); Session-3 build prompt drafted for owner review. **Session-3 APPLIED 2026-05-31** (owner sign-off + execution): owner committed Phase 1 (18 reconciled files) + ran `make infra` on their Mac; all 11 manifest scripts applied clean/idempotent. New live IaC in `ARTWORK_DB.BRONZE`: `MET_ENRICHMENT_CONTROL`, `MET_CSV_SNAPSHOT`, `MET_WORKLIST` (view), `MET_LEASE_RECLAIM_TASK` (resumed). Register flips (dated): `DDL-04`/`DDL-05` → applied; 4 cosmetic decisions → applied. **Dual-instance incident** this arc (two concurrent windows wrote shared docs/log; owner confirmed one living session, authoritative window resolved it) — durable restart trail now in `docs/context/session-3-progress-log.md`. Section C (data seed, AUTH-01 key-pair, PIPE-06 lease-claim MERGE, DATA-06, AUTO-03, dead-code removal) = NEXT session. |
 
 ## Roadmap & deferred work
 
@@ -207,11 +207,25 @@ Rules of thumb:
   Recorded in `met-deepdive.md` → "Session-2b DDL review" + `ddl-infrastructure.md`
   → "Session-2b reconciliation notes". **Nothing newly `decided`; gate DOWN.**
   Arc: S1→S2→S2b(done)→S3. Session 3 = the build (gate lifts only on owner sign-off).
-- **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
-  UPPERCASE identifiers, wire `drop_grants.sql` via renaming
-  `grant_privileges.sql → create_grants.sql`, reword stale V/R/B comments). Full
-  spec in "Approved decisions — pending application" in
-  `docs/context/ddl-infrastructure.md`.
+- **Session-3 build arc COMPLETE — APPLIED 2026-05-31 (owner sign-off + execution).**
+  Owner picked **Option A**, committed Phase 1 (the 18 reconciled staged files) on
+  `donkey-kong-sandbox`, and ran `make infra` on their Mac. All 11 manifest scripts
+  applied clean + idempotent. New live IaC objects in `ARTWORK_DB.BRONZE`:
+  `MET_ENRICHMENT_CONTROL`, `MET_CSV_SNAPSHOT` (both PK'd), `MET_WORKLIST` view,
+  `MET_LEASE_RECLAIM_TASK` (hourly cron / 30-min TTL / resumed). The privilege-contract
+  preflight passed live (`bootstrap.py` ↔ `create_roles.sql` agree incl. `EXECUTE TASK`).
+  A **read-only provenance/reconciliation audit** preceded the apply (18/18 staged files
+  on-spec, 0 off-spec; byte-diff vs baseline blocked by the sandbox — judged by content
+  + mtime + the S2b spec). **Dual-instance incident** recurred this arc: two concurrent
+  Cortex windows wrote the shared docs/log; resolved by owner confirming a single living
+  session + an authoritative window. Durable fix landed: **`docs/context/session-3-progress-log.md`**,
+  an append-only restart trail with a resumption contract (read-first, skip `[x]`,
+  never assume sole instance). Section C = NEXT session.
+- **Decided AND APPLIED 2026-05-31 (was GATED):** the four DDL cosmetic decisions
+  (idempotency split, UPPERCASE identifiers, `grant_privileges.sql → create_grants.sql`
+  rename wiring `drop_grants.sql`, reworded stale V/R/B comments) landed via the
+  Session-3 `make infra`. The "Approved decisions — pending application" section in
+  `docs/context/ddl-infrastructure.md` is now historical.
 - **New gated items surfaced (record only — do NOT apply):**
   1. Reword stale V/R/B refs found outside infrastructure: `config.py:53-54`,
      `extraction/met/README.md:37`, `/.env.example:9,13`, `apply_sql.sh:38`

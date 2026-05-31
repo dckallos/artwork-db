@@ -619,6 +619,24 @@ drain query should carry its own `ORDER BY`.
 entry flipped to `decided`/`applied`** — objects are not yet applied; status changes
 await explicit owner sign-off + date per register discipline.
 
+**APPLIED — 2026-05-31 (owner sign-off + execution).** Owner committed Phase 1 (18
+reconciled files) and ran `make infra` on their Mac; all 11 manifest scripts applied
+clean + idempotent. New objects live in `ARTWORK_DB.BRONZE`: `MET_ENRICHMENT_CONTROL`,
+`MET_CSV_SNAPSHOT`, `MET_WORKLIST` (view), `MET_LEASE_RECLAIM_TASK` (resumed). Register
+flips (owner-authorized, dated 2026-05-31): **`DDL-04` (control table + worklist) →
+applied; `DDL-05` (`MET_CSV_SNAPSHOT`, Option A VARIANT) → applied; PIPE-06 lease
+housekeeping task → applied (the lease-CLAIM MERGE itself is Section C).** The four
+cosmetic decisions (idempotency split, UPPERCASE, `grant_privileges→create_grants`
+rename, V/R/B reword) → applied. **Mentor-flag correction:** the applied DDL declares
+`pk_met_csv_snapshot` / `pk_met_enrichment_control` PRIMARY KEYs (uniqueness intent
+declared; runtime 1:1 still rides on the MERGE load — Section C). **Dual-instance
+incident:** two concurrent Cortex instances wrote to the shared docs/log this arc; owner
+confirmed one living session, this window authoritative (full trail +
+restart-resumption contract in `session-3-progress-log.md`). **Still open / Section C
+(next session):** data seed (control + `MET_CSV_SNAPSHOT` empty), `AUTH-01` key-pair,
+`DATA-01`/`DATA-06`, `AUTO-03` extraction_log writes, `PIPE-06` lease-claim MERGE,
+`rename_and_update.py` removal.
+
 ---
 
 ## Cross-references
