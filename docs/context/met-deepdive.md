@@ -106,7 +106,7 @@ is about *policy and hardening decisions on top of that*, not a rebuild.
 
 | ID | Status | Question | Notes / position |
 |---|---|---|---|
-| `DATA-01` | open | **(Owner did not raise — mentor-flagged, high value.)** The CSV is a full snapshot; bootstrap is UPSERT-only. When the Met deaccessions a work it just vanishes from the next CSV — nothing deletes the stale row. How do we propagate removal? | Snapshot-diff: compare the new CSV `object_id` set vs. existing; tombstone the missing rows so removal flows Bronze→Silver→Gold and drops from sellable Gold fast. Directly serves AGENTS.md "timeliness/deaccession" + "delete propagation" cornerstones. Strong learning fork — pairs with `DDL-02`. |
+| `DATA-01` | open | **(Owner did not raise — mentor-flagged, high value.)** The CSV is a full snapshot; bootstrap is UPSERT-only. When the Met deaccessions a work it just vanishes from the next CSV — nothing deletes the stale row. How do we propagate removal? | Snapshot-diff: compare the new CSV `object_id` set vs. existing; tombstone the missing rows so removal flows Bronze→Silver→Gold and drops from sellable Gold fast. Directly serves AGENTS.md "timeliness/deaccession" + "delete propagation" cornerstones. Strong learning fork — pairs with `DDL-02`. **Session-2b note 2026-05-30:** `BRONZE.MET_CSV_SNAPSHOT` (`DDL-05`, owner-preferred) is the natural Snowflake home for the snapshot-diff — compare the new bootstrap snapshot's `object_id` set vs the prior one to detect vanished rows. |
 | `DATA-02` | open | How do we detect/handle CSV schema drift (columns added, renamed, removed)? | 47 columns are mapped 1:1 today. Need a column-contract check at bootstrap so a silent header change doesn't corrupt the load. |
 | `DATA-03` | exploring | How do we use `Metadata Date` to drive incremental work? | CSV `Metadata Date` + API `metadataDate` deltas together identify the minimal re-enrich set. Pairs with `IMG-03`. |
 | `DATA-04` | exploring | "Most of the data" is in the CSV — what's authoritative where? | CSV = descriptive truth (continuously updated upstream). API = image URLs only. Model accordingly: CSV-sourced columns vs. API-sourced image block. |
@@ -120,7 +120,8 @@ is about *policy and hardening decisions on top of that*, not a rebuild.
 | `DDL-01` | open | Which DDL decisions are we already prepared to make now? | Few, honestly — most should wait until a Silver table is large enough that pruning/clustering *matters* (avoid premature optimization). Capture candidates here as they surface; don't pre-commit. |
 | `DDL-02` | open | Clustering so deaccession/delete prunes cheaply? | Tie to `DATA-01`: choose a clustering key so tombstoned/affected rows cluster together and delete cheaply. Only worth designing once data volume justifies it. |
 | `DDL-03` | open | How do we model images as a first-class high-value column across Bronze→Silver→Gold? | Bronze keeps the raw API block; Silver conforms to `primary_image_url` + flags; Gold exposes the sellable, validated subset. Ties `LEG-02`, `IMG-04`, `IMG-07`. |
-| `DDL-04` | exploring | **(Strawman 2026-05-30.)** What is the thin Bronze enrichment-control table schema (the `PIPE-05` system of record)? | `BRONZE.MET_ENRICHMENT_CONTROL` strawman: `object_id` PK, `enrichment_status` (outcome enum), `last_enriched_at`, `metadata_date`, `has_primary_image`, `image_status` (liveness enum), `last_head_check_at`, `claimed_by_batch`, `claimed_at`. Narrow orchestration state only — descriptive/image *data* stays in `RAW_MET_OBJECTS`. Claim = lease (not a status value); priority inputs joined via the worklist view, not duplicated. **NON-FINAL** — reconcile + sign off in Session 2. See Session-1 strawman §1. Ties `PIPE-05`, `AUTO-01/02`, `IMG-02/04`, `DDL-03`. **Session-2 review 2026-05-30 — two under-specifications found:** (i) **seed path** — the strawman never says how control gets its initial ~471k `pending` rows; options are a bootstrap-time seed-COPY of `(object_id, metadata_date, gate flags)` or derive from `RAW_MET_OBJECTS`. (ii) **worklist descriptive-source tension** — `MET_WORKLIST` joins control → `is_public_domain/is_highlight/department`, but no Silver table exists yet (only `BRONZE.raw_met_objects` VARIANT). Fork: (a) join to VARIANT extractions, or (b) relax the "narrow" rule and carry the 3 priority flags *in* control. Both `exploring`, for Session-3 design. |
+| `DDL-04` | exploring | **(Strawman 2026-05-30.)** What is the thin Bronze enrichment-control table schema (the `PIPE-05` system of record)? | `BRONZE.MET_ENRICHMENT_CONTROL` strawman: `object_id` PK, `enrichment_status` (outcome enum), `last_enriched_at`, `metadata_date`, `has_primary_image`, `image_status` (liveness enum), `last_head_check_at`, `claimed_by_batch`, `claimed_at`. Narrow orchestration state only — descriptive/image *data* stays in `RAW_MET_OBJECTS`. Claim = lease (not a status value); priority inputs joined via the worklist view, not duplicated. **NON-FINAL** — reconcile + sign off in Session 2. See Session-1 strawman §1. Ties `PIPE-05`, `AUTO-01/02`, `IMG-02/04`, `DDL-03`. **Session-2 review 2026-05-30 — two under-specifications found:** (i) **seed path** — the strawman never says how control gets its initial ~471k `pending` rows; options are a bootstrap-time seed-COPY of `(object_id, metadata_date, gate flags)` or derive from `RAW_MET_OBJECTS`. (ii) **worklist descriptive-source tension** — `MET_WORKLIST` joins control → `is_public_domain/is_highlight/department`, but no Silver table exists yet (only `BRONZE.raw_met_objects` VARIANT). Fork: (a) join to VARIANT extractions, or (b) relax the "narrow" rule and carry the 3 priority flags *in* control. Both `exploring`, for Session-3 design. **Resolved toward (a) 2026-05-30 (owner-preferred, gated):** land the full CSV into Snowflake at bootstrap as a new `BRONZE.MET_CSV_SNAPSHOT` table (see `DDL-05`); `MET_WORKLIST` joins `control → MET_CSV_SNAPSHOT` for priority ordering. Keeps control narrow and makes the descriptive truth queryable for *pending* (not-yet-enriched) rows — which `raw_met_objects` cannot, since it's only populated post-upload. |
+| `DDL-05` | exploring | **(Session-2b setup 2026-05-30, owner-preferred Option A.)** Land the full Met CSV into Snowflake at bootstrap so the worklist can prioritize *pending* rows and deaccession can be detected. | `BRONZE.MET_CSV_SNAPSHOT` — **VARIANT raw-blob** (one JSON row per `object_id`, mirroring the `raw_met_objects` shape: `object_id INT`, `raw_payload VARIANT`, `_batch_id`, audit cols), seeded at **bootstrap** independent of enrichment. Rationale (plain): to fetch the *best* artworks first (public-domain → highlight → department), Snowflake needs the descriptive fields **before** fetching; today those live only in local SQLite for pending rows, and only reach Bronze (`raw_met_objects.raw_payload:csv.*`) *after* enrichment+upload — too late to rank. Discipline: **land the whole raw row in Bronze, promote selectively in Silver** — sparse columns (`locus/excavation/river/subregion/reign/dynasty`) cost ~nothing as VARIANT; `artist_ulan_url`/`artist_wikidata_url`/`object_wikidata_url` are the cross-museum entity-normalization hooks worth keeping. **Bonus:** this same full-list-in-Snowflake is the natural home for the `DATA-01` deaccession snapshot-diff. **Fork (for 2b/build):** VARIANT raw-blob (chosen default, max flexibility) vs typed columns. **GATED.** Ties `DDL-04`, `DATA-01`, `AUTO-01/02`, `IMG-02`, Track 4 (entity normalization). |
 
 ### COST
 
@@ -137,7 +138,7 @@ is about *policy and hardening decisions on top of that*, not a rebuild.
 |---|---|---|---|
 | `AUTO-01` | exploring | Can Snowflake Tasks/Streams *schedule detection* of stale/missing images? | Yes — a scheduled Task can compute "needs discovery or revalidation" (null image ∨ `metadataDate` advanced ∨ last-checked age exceeded) into a worklist table. (Note: `infrastructure/create_tasks.sql` is currently a placeholder.) **Strawman 2026-05-30:** the "needs work" predicate is realized as the `MET_WORKLIST` **view's** `WHERE` clause (no separate worklist table to maintain); a Task's job shrinks to lease-reclaim/housekeeping rather than recomputing a materialized list. Streams rejected for the queue role (see §2). See Session-1 strawman §2. |
 | `AUTO-02` | exploring | **Worklist pattern** to reconcile "automate from Snowflake" with "fetch cheaply on the Mac." | Snowflake (Task) writes a prioritized worklist table → the Mac polls/drains it, fetches, and uploads results → Snowflake marks them done. Snowflake decides *what*; the Mac does the *fetch*. Resolves the `PIPE-01`/`PIPE-05`/`IMG-06` tension at minimal cost. **Strawman 2026-05-30:** "writes a worklist table" sharpened to a **view + lease columns** — drain = read bounded slice then atomic `MERGE` claim (`claimed_by_batch`/`claimed_at`); "marks them done" = the single batch status-callback MERGE (O(1)/batch guard). See Session-1 strawman §2–§3. |
-| `AUTO-03` | open | **(Mentor-flagged.)** How do we get run history into Snowflake so automation is auditable? | Today `extraction_runs` lives only in SQLite and the Bronze `extraction_log` table is never written (per `extraction.md`). For Snowflake-driven scheduling we need run/phase history *in* Snowflake — land each phase's `running→success/failed` + counts into `BRONZE.extraction_log` so Tasks and dashboards can see it. Ties `AUTO-01`, `PIPE-05`. **Session-2 review 2026-05-30:** confirmed `extraction_log` is still written nowhere; `run.py`'s `status` reads only SQLite `extraction_runs`. Design-only this session — the batch status-callback path (strawman §3) is the natural carrier for a phase-level run record too. Build deferred to Session 3. |
+| `AUTO-03` | open | **(Mentor-flagged.)** How do we get run history into Snowflake so automation is auditable? | Today `extraction_runs` lives only in SQLite and the Bronze `extraction_log` table is never written (per `extraction.md`). For Snowflake-driven scheduling we need run/phase history *in* Snowflake — land each phase's `running→success/failed` + counts into `BRONZE.extraction_log` so Tasks and dashboards can see it. Ties `AUTO-01`, `PIPE-05`. **Session-2 review 2026-05-30:** confirmed `extraction_log` is still written nowhere; `run.py`'s `status` reads only SQLite `extraction_runs`. Design-only this session — the batch status-callback path (strawman §3) is the natural carrier for a phase-level run record too. Build deferred to Session 3. **Session-2b correction 2026-05-30:** the target table **already exists** — `infrastructure/create_bronze_tables.sql` defines `BRONZE.extraction_log` (`log_id AUTOINCREMENT, source_system, batch_id, records_loaded, started_at, completed_at, status, error_message`). So `AUTO-03` needs **no DDL** — only the Python write path. Build-ready. |
 
 ### AUTH — authentication / service-identity
 
@@ -435,6 +436,45 @@ anyway — deserves a "trusted inputs" comment. `STRIP_OUTER_ARRAY=FALSE` correc
 The actual build (apply DDL → Python); `DDL-02` clustering (premature pre-volume);
 `PIPE-02` IaC-vs-operational placement; `AUTO-03` `extraction_log` implementation
 (design-only here).
+
+---
+
+## Session-2b setup — DDL scope correction + `MET_CSV_SNAPSHOT` decision (appended 2026-05-30)
+
+> **DOCS-ONLY (gate down).** Owner-flagged scope correction. Nothing newly `decided`;
+> Option A below is **owner-preferred + gated**, flips to `decided` only at sign-off.
+
+**Scope correction.** Session 2 (per its prompt) reviewed Python + `extraction/met/sql/`
+only; the `infrastructure/*` DDL was carried as `trusted-prior` and **not re-read this
+arc**. Reconciling a control-table/worklist design without reading the Bronze DDL it
+sits beside was a gap. The owner inserted **Session 2b** = a dedicated review of the
+**full `infrastructure/` DDL set**. Revised arc: **S1 (Python strawman) → S2 (Python
+review) → S2b (DDL review) → S3 (build)**.
+
+**Findings from `infrastructure/create_bronze_tables.sql`** (owner-supplied, read 2026-05-30):
+- `[H]` **No descriptive data in Snowflake for *pending* rows.** `raw_met_objects` is
+  VARIANT-only and is populated **only by the uploader, only for `done` rows** (CSV
+  descriptive block rides inside `raw_payload:csv.*`). The 47 CSV fields for *pending*
+  objects live only in local SQLite. So `MET_WORKLIST` cannot prioritize the work it
+  hasn't done yet — it has no `is_public_domain/is_highlight/department` to sort on.
+  This is the concrete root of `DDL-04` under-spec (ii). → resolved via `DDL-05`.
+- `[correction]` **`extraction_log` already exists** (see `AUTO-03`) — no DDL needed,
+  only the Python write path.
+- `[build note]` `raw_met_objects` defaults (`_extracted_at`, `_source_system`) match
+  the uploader's `COPY INTO (object_id, raw_payload, _batch_id)` — that contract is
+  fine; the genuinely-new objects are `MET_ENRICHMENT_CONTROL` + `MET_WORKLIST`
+  (+ `MET_CSV_SNAPSHOT`), which will also need **grants** (loader: SELECT/MERGE;
+  created by `ARTWORK_ADMIN` like the rest of `create_bronze_tables.sql`).
+
+**Decision (owner-preferred, gated) — Option A: `BRONZE.MET_CSV_SNAPSHOT`.** Land the
+full Met CSV into Snowflake at bootstrap (VARIANT raw-blob default), independent of
+enrichment, so the worklist can prioritize pending rows and deaccession can be
+detected. Full entry: `DDL-05`. Discipline carried into `engineering-playbook.md`:
+**land the whole raw row in Bronze (sparse columns ~free as VARIANT), promote
+selectively in Silver; keep `*_ulan_url`/`*_wikidata_url` for entity normalization.**
+Note this does **not** relitigate `PIPE-03` — the Mac↔Snowflake *contract surface*
+stays two tables; `MET_CSV_SNAPSHOT` is a Snowflake-internal feeder behind the
+worklist view.
 
 ---
 

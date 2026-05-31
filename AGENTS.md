@@ -112,7 +112,7 @@ Rules of thumb:
 | `docs/context/file-map.md` | Complete — reconciled vs `ls -R` (77 files / 12 dirs); see `Verified` column for per-file provenance |
 | `docs/context/engineering-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Snowflake-doc-grounded; Track 4 CMA/AIC/Smithsonian API facts web-verified 2026-05-30) |
 | `docs/context/cortex-ai-agents-playbook.md` | Complete (forward-learning reference; written 2026-05-30; Cortex AI/Agents + Web Search enablement) |
-| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. |
+| `docs/context/met-deepdive.md` | Active register (created 2026-05-30; seeded with 30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO (+`AUTH` class added Session-2); Met facts web-verified; grows as we work). **PIPE-01/03/05 `decided` 2026-05-30** (owner sign-off) — pipeline execution-locus + state-authority architecture settled. **Session-1 strawman landed 2026-05-30** (DOCS-ONLY): control-table/worklist contract + SQLite→control demotion delta recorded as a "Session-1 strawman" section; seeded `DDL-04`, advanced `AUTO-01/02`+`IMG-04` to `exploring`. NON-FINAL — Session-2 reconciliation + owner sign-off pending; nothing newly `decided`. **Session-2 review landed 2026-05-30** (DOCS-ONLY): full per-module readability+optimization review of `extraction/met/` + a strawman→code build-impact map appended; new IDs `PIPE-06`/`DATA-06`/`AUTH-01` seeded `exploring`; `DDL-04` got two under-specification notes. Gate still DOWN — nothing newly `decided`; key-pair loader migration (`AUTH-01`) is owner-preferred. **Session 2b inserted 2026-05-30** (owner-directed, DOCS-ONLY): full `infrastructure/` DDL review pass; `create_bronze_tables.sql` exposed that the worklist can't prioritize *pending* rows → new `DDL-05` `BRONZE.MET_CSV_SNAPSHOT` (Option A, owner-preferred, gated); `AUTO-03` corrected (`extraction_log` already exists). Arc now S1→S2→S2b→S3. |
 
 ## Roadmap & deferred work
 
@@ -182,6 +182,20 @@ Rules of thumb:
   key-pair migration. **NON-FINAL — nothing newly `decided`; gate still DOWN.**
   Session 3 = build (apply control-table DDL → Python changes), gate lifts only on
   owner sign-off at end of Session 2.
+- **Session 2b inserted (owner-directed 2026-05-30, DOCS-ONLY) — DDL review pass.**
+  Scope correction: Session 2 reviewed Python only; the `infrastructure/*` DDL was
+  `trusted-prior` and never re-read this arc. Owner reading of
+  `create_bronze_tables.sql` exposed a real gap — `raw_met_objects` is VARIANT-only and
+  populated *only* post-enrichment, so the `MET_WORKLIST` has no descriptive fields to
+  prioritize **pending** rows. **Decision (owner-preferred, gated): Option A —
+  `BRONZE.MET_CSV_SNAPSHOT`** (land the full CSV into Snowflake at bootstrap as a
+  VARIANT raw-blob; feeds the worklist + `DATA-01` deaccession diff; see `met-deepdive.md`
+  `DDL-05` + "Session-2b setup" block; playbook Track 2 "land raw in Bronze, promote in
+  Silver" note). Also corrected: `BRONZE.extraction_log` already exists (`AUTO-03` needs
+  no DDL). Revised arc: **S1 (Python strawman) → S2 (Python review) → S2b (full
+  `infrastructure/` DDL review) → S3 (build)**. Gate still DOWN — nothing newly
+  `decided`. Session 2b = review the full `infrastructure/` DDL set; sign-off at its end
+  opens Session 3.
 - **Decided, but GATED — do NOT apply yet:** four DDL edits (idempotency split,
   UPPERCASE identifiers, wire `drop_grants.sql` via renaming
   `grant_privileges.sql → create_grants.sql`, reword stale V/R/B comments). Full

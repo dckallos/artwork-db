@@ -86,6 +86,23 @@ https://docs.snowflake.com/en/user-guide/dynamic-tables/supported-queries).
 **Goal.** Move new and changed Met records into Bronze idempotently, then keep
 Silver/Gold fresh — and *detect deaccessions/deletes*.
 
+**Bronze principle — land the whole raw row, promote selectively in Silver.**
+At Bronze, store the *complete* source record as a VARIANT raw-blob — don't pre-select
+columns. Sparse/niche fields (Met's `locus/excavation/river/subregion/reign/dynasty`)
+cost essentially nothing inside a compressed JSON blob and incur **zero schema
+maintenance**, so "is this column worth keeping?" stops being a per-column fight at the
+bottom layer. Three payoffs: (1) Bronze stays a faithful, replayable copy of source —
+a column you decide you need later is a Silver query, not a re-extraction; (2) the full
+row is exactly what deaccession snapshot-diff needs (Track 3); (3) some "noise" columns
+are secretly high-value — Met's `artist_ulan_url`/`artist_wikidata_url`/
+`object_wikidata_url` are the authority links that make cross-museum entity
+normalization possible (Track 4). **Be picky in Silver, not Bronze:** promote only the
+columns that earn analytical/Gold value (`title`, `artist`, `date`, `medium`,
+`classification`, `department`, image fields, the authority URLs). *(Met realization
+2026-05-30: `BRONZE.MET_CSV_SNAPSHOT`, owner-preferred Option A — see `met-deepdive.md`
+`DDL-05`. It also gives the Snowflake-side worklist descriptive fields to prioritize
+**pending** rows, which the post-enrichment `raw_met_objects` cannot.)*
+
 ### 2a. Landing into Bronze with COPY INTO
 
 **The why.** Snowflake's `COPY INTO <table>` tracks **load metadata per file** for
