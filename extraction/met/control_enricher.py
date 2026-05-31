@@ -40,7 +40,7 @@ import snowflake.connector
 
 from .config import Config
 from .db import load_sql, strip_sql_comments
-from .image_enricher import _RateLimiter, _fetch_one
+from .image_enricher import _RateLimiter, _ThrottleGate, _fetch_one
 from .snowflake_uploader import _snowflake_connect
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,7 @@ async def _fetch_blocks(config: Config, object_ids: List[int]) -> Tuple[List[Dic
     after `asyncio.run` returns -- P-T2.
     """
     rate_limiter = _RateLimiter(config.api_requests_per_second)
+    throttle_gate = _ThrottleGate()  # global backoff shared by all workers
     semaphore = asyncio.Semaphore(config.api_max_concurrency)
     timeout = aiohttp.ClientTimeout(
         total=None, connect=15, sock_read=config.api_request_timeout_seconds,
@@ -160,7 +161,8 @@ async def _fetch_blocks(config: Config, object_ids: List[int]) -> Tuple[List[Dic
         async def worker(oid: int) -> None:
             async with semaphore:
                 object_id, status, payload, error = await _fetch_one(
-                    session, rate_limiter, config.api_base, oid, config.api_max_retries,
+                    session, rate_limiter, throttle_gate,
+                    config.api_base, oid, config.api_max_retries,
                 )
             additional = (payload or {}).get("additionalImages") or [] if payload else []
             block = {
