@@ -1609,3 +1609,245 @@ YOUR FIRST RESPONSE:
 - **End of this window (sixth; per AGENTS.md ritual the next window MUST again
   emit a new entry with prompt at close).**
 
+### 2026-05-31 (new window, follow-on 7) | P-V1 + P-V2 + P-V3 APPLIED (workspace only)
+- **What changed this turn (workspace stage; applied-to-account: no; pushed-to-Mac:
+  no):** ONE file edited -- `extraction/met/image_enricher.py`. No IaC, no SQL, no
+  other file. AST-parse clean (`ast.parse` OK). mtime scan (`find -mmin -15`) shows
+  only `image_enricher.py` + this log changed. No git in workspace; Mac is the git
+  source of truth, so nothing committed here -- the owner syncs + commits on the Mac.
+- **Exact edits applied (post-edit line numbers):**
+  - **P-V3** -- floor signal in `_RateLimiter.note_throttle()`, lines 126-130: after
+    the `_rps = max(self._min_rps, ...)` mutation, log when `_rps <= _min_rps`.
+    **UN-GUARDED** (no `_at_floor_logged` flag). This DEVIATES from follow-on 5's spec
+    (which asked for a once-per-cascade flag reset in `cool_up()`); the owner's current
+    handoff explicitly overrode that: "this fires every floor-throttle ... intentional"
+    to make the sustained-floor sit visible. Owner-approved deviation, recorded here.
+  - **P-V2** -- 60.0s cap on the computed exponential, BOTH sites, as written:
+    - throttle branch line 223 (only inside `if delay is None:` -- Retry-After NOT capped).
+    - network-exception branch line 256 (`min(60.0, ...) + jitter`).
+    NOTE for the record: the pasted prior project actually used `min(30.0, ...)` and
+    only on the exception path, with NO cap on the 403/429 path. So "60s both sites" is
+    STRICTER/BROADER than the prior project, not a literal match -- the owner confirmed
+    60.0 both sites is intended; the spec text wins over the "matches prior project" note.
+  - **P-V1** -- per-attempt INFO log before each `asyncio.sleep(delay)`:
+    - throttle branch lines 234-237: `oid / attempt / HTTP / sleeping / rps`.
+    - network-exception branch lines 257-260: same shape, "network exception" label
+      (no `status` in scope on that path).
+- **Scope discipline this turn:** owner's inline "maximize the rate limiting and logging
+  of my previous implementation" was NOT taken as license to port prior-project machinery
+  (per-host limiters, `max_rps=20`, `From` header, contact-shaped UA, unconditional
+  `cool_up`). All of that is fenced by the HARD RULES (no UA/header/concurrency change in
+  this PR; one knob; do-not-undo adaptive limiter). Interpreted as "make V1/V2/V3 logging
+  rich" only. Prior-project deltas filed as next-step candidates (see decision tree).
+- **Cumulative workspace state vs Mac:** workspace now = P-D1 + P-D2 + P-B1 + adaptive
+  `_RateLimiter` + P-T2 + **P-V1 + P-V2 + P-V3**. Mac still = P-D1 + P-D2 applied; pending
+  sync to Mac now carries: P-B1 deletions, adaptive `image_enricher` rewrite, P-T2
+  counters (two files), AND this V1/V2/V3 patch.
+- **Solo-session check this turn:** 1 distinct `cortex_code_snowsight` session in the last
+  10 min. `ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS` = 0 rows (clean).
+- **WHAT TO SYNC + RE-RUN (owner action on the Mac):**
+  1. Sync `extraction/met/image_enricher.py` (and the still-pending P-B1 / adaptive /
+     P-T2 deltas if the Mac has not already taken them) from workspace -> Mac.
+  2. Commit on `donkey-kong-sandbox` (Mac is git source of truth). Do NOT push to main.
+  3. Re-run: `python -m extraction.met.run enrich-met --limit 200`
+  4. Paste back: the final counters line AND a sample of the new per-attempt log lines
+     (especially any "Adaptive RPS at floor" lines and their timestamps).
+  - Expect: the log is now CHATTY -- ~130+ `sleeping=` lines on a 200-row batch plus
+    repeated floor lines during each ~50-90s floor sit. That volume is intentional (P-V3).
+- **First-action options for the next window:**
+  (a) Interpret the V1/V2/V3 log output; if error < 5% and floor lines are brief, drain the
+      rest of European Paintings with no `--limit`. Adaptive limiter is sufficient.
+  (b) If error ~10% with RPS pinned at 1.00 whole batch -> identity rejection on specific
+      oids: propose UA-shape change ONLY (one knob), per follow-on 3 decision tree (a).
+  (c) If error >> 10% or backoff_s > ~1500s on 200 rows: bump `max_retries` 8->12 OR lower
+      `MET_API_RPS` 10->5. One knob at a time.
+- **Read-only verification queries after the next Mac re-run:**
+  - `SELECT enrichment_status, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+     GROUP BY 1 ORDER BY 2 DESC;`  -- expect error <= 20, no_image 0, done >= 180.
+  - `SELECT LEFT(enrichment_error, 30), COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+     WHERE enrichment_error IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;`
+  - `SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;`
+- **Decision tree from the V1/V2/V3 run (next-run gate):**
+  - error/claimed < 5%, throttles still high: keep draining (no `--limit`). Done.
+  - error ~10%, throttles high, RPS pinned at 1.00 all batch: identity rejection -> propose
+    UA-shape change ONLY (follow-on 3 (a)).
+  - error >> 10% OR backoff_s > ~1500s on 200 rows: max_retries 8->12 OR MET_API_RPS 10->5.
+  - If "Adaptive RPS at floor" never appears in the log: P-V3 not firing -- check that
+    `note_throttle` reaches the floor branch (burst >= 3 AND `_rps` at `_min_rps`).
+- **Deferred patches (priority order, DO NOT TOUCH without explicit go):** P-B2 doc reword;
+  P-H1 autocommit/BEGIN/COMMIT; P-H4 `--where` env gate; P-H3 paramstyle=qmark; P-H2
+  DATA-01 deaccession; P-L1 legacy SQLite delete. Plus prior-project port candidates
+  (per-host limiters, UA/From shape, max_rps ceiling) -- only if owner opens a new gate.
+- **What MUST NOT happen in the next window:**
+  - Do NOT `make iac` from the workspace; V1/V2/V3 are code-only.
+  - Do NOT push to main.
+  - Do NOT change UA / headers / concurrency in the same PR as any throttle tuning -- one
+    knob at a time.
+  - Do NOT cap a server-supplied `Retry-After` value.
+  - Do NOT undo P-D1 / P-D2 / P-B1 / adaptive limiter / P-T2 / P-V1 / P-V2 / P-V3.
+  - Do NOT re-add `met_enricher.py`.
+  - Do NOT re-stage 403/410 -> no_image (proven WAF-shaped, not semantic).
+
+#### Hand-off prompt for next window (paste verbatim into a new Cortex window)
+
+```
+SESSION HANDOFF -- artwork-db / Met extraction Phase 3 (V1/V2/V3 applied; interpret next run)
+
+You are Cortex Code (Snowsight) resuming an in-flight learning project on account
+pa37992 (Porchanalytics). Branch: donkey-kong-sandbox. Senior-DE mentor tone:
+explain the why and the trade-offs; the OWNER decides, you honor it.
+
+SESSION-OPEN RITUAL (in order, before any write):
+1. Read /workspace/AGENTS.md fully.
+2. Read ONLY the LAST dated entry of
+   /workspace/docs/context/session-3-progress-log.md (ends with "End of this
+   window"; supersedes all earlier markers). It is titled "follow-on 7".
+3. Solo-session check (must return 1):
+     SELECT COUNT(DISTINCT SESSION_ID) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+   Then SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY 1 DESC LIMIT 5;
+4. DUAL-FS HAZARD: re-read every file via the file tool immediately before reasoning
+   about it. When in doubt, ask me to paste the Mac copy.
+5. State the plan and wait for "proceed (today's date)" before any write or push.
+
+STATE (do not re-derive):
+- Phase 1 DONE: BRONZE.MET_CSV_SNAPSHOT = 484,956 rows.
+- Phase 2 DONE: BRONZE.MET_ENRICHMENT_CONTROL seeded 2,327 European Paintings PD rows.
+- Phase 3 IN FLIGHT. P-V1+P-V2+P-V3 APPLIED in workspace (per-attempt backoff log;
+  60s cap both sites; un-guarded floor log). Last run BEFORE these patches:
+  done=180 error=20 throttles={'403':133} backoff_s=573.6 rps_end=5.00.
+- Workspace = P-D1+P-D2+P-B1+adaptive limiter+P-T2+P-V1+P-V2+P-V3.
+  Mac = P-D1+P-D2; pending sync carries everything since.
+
+YOUR FIRST TASK: I will sync to Mac, run `enrich-met --limit 200`, and paste the
+counters + new log lines. Interpret them against the decision tree in follow-on 7:
+  - error<5%, throttles high: drain rest of European Paintings (no --limit).
+  - error~10%, RPS pinned 1.00 whole batch: identity rejection -> propose UA-shape
+    change ONLY (one knob), per follow-on 3 (a).
+  - error>>10% or backoff_s>~1500s/200 rows: max_retries 8->12 OR MET_API_RPS 10->5.
+  - no "Adaptive RPS at floor" line at all: P-V3 not firing -- debug note_throttle.
+
+HARD RULES: ONE knob at a time. No make iac from workspace. No push to main. Do NOT
+change UA/headers/concurrency in the same PR as throttle tuning. Do NOT cap a
+server-supplied Retry-After. Do NOT undo P-D1/P-D2/P-B1/adaptive limiter/P-T2/
+P-V1/P-V2/P-V3. Do NOT re-add met_enricher.py. Do NOT re-stage 403/410 -> no_image.
+DEFERRED (need explicit go): P-B2, P-H1, P-H4, P-H3, P-H2, P-L1, prior-project port.
+
+FIRST RESPONSE: quote back the LAST "End of this window" header (mentions
+"follow-on 7"); confirm solo-session=1 + CORTEX_FORK_INCIDENTS clean; then wait for
+my pasted run output before proposing the one-knob next step.
+```
+
+- **End of this window (seventh; supersedes the "sixth" marker above. V1/V2/V3 are
+  applied in the workspace only -- not synced, not committed, not applied to account.
+  Next window interprets the post-sync re-run and picks ONE knob.).**
+
+### 2026-05-31 (new window, follow-on 8) | P-V1/P-V3 logs demoted INFO -> DEBUG
+- **What changed this turn (workspace stage; applied-to-account: no; pushed-to-Mac:
+  no):** ONE file edited -- `extraction/met/image_enricher.py`. Three `logger.info`
+  -> `logger.debug` swaps. No behavior change, no IaC, no SQL. AST-parse clean. mtime
+  scan shows only `image_enricher.py` + this log touched. Owner go: `proceed 2026-05-31`.
+- **Why:** owner wants clean, infrequent logs (one line per batch + one completion
+  line). That format ALREADY EXISTS at INFO in `control_enricher.py` (per-batch summary
+  L320; "Enrichment complete" L380). The noise was the P-V1 per-attempt lines added
+  earlier this window, which fire once per retry at INFO and interleave across the
+  asyncio.gather workers. Demoting them keeps the INFO stream = batch summary +
+  completion only; the per-attempt detail survives at `--log-level DEBUG`.
+- **Exact lines demoted (post-edit):**
+  - L127 -- P-V3 floor line ("Adaptive RPS at floor ... identity rejection").
+  - L234 -- P-V1 throttle-branch per-attempt line ("oid=.. HTTP=.. sleeping=..").
+  - L257 -- P-V1 network-exception per-attempt line.
+- **Deliberately LEFT at INFO (not demoted):**
+  - L132 -- "Adaptive RPS dropped to %.2f after throttle burst": this is P-T2 /
+    adaptive-limiter behavior, fires only on the 1-in-3 burst-decay event (infrequent),
+    NOT a P-V3 line. Demoting it would have hidden RPS decay from the default stream.
+  - L341 / L405 -- legacy SQLite enrich-path INFO lines, unrelated to V1/V2/V3.
+- **Reconciliation note vs HARD RULES:** the standing rule "do NOT undo P-V1/P-V2/P-V3"
+  was honored in substance -- P-V1's signal is NOT deleted, only moved to DEBUG; P-V2's
+  60s caps and the `_fetch_one` return contract are untouched; P-V3's floor detection
+  still runs, only its log verbosity dropped. Owner explicitly directed this demotion
+  and gave the dated go, overriding the INFO-level intent of P-V1/P-V3.
+- **Cumulative workspace state vs Mac:** workspace = P-D1+P-D2+P-B1+adaptive limiter+
+  P-T2+P-V1+P-V2+P-V3 (V1/V3 logs now at DEBUG). Mac = P-D1+P-D2; pending sync carries
+  everything since, including this demotion.
+- **Solo-session check this turn:** not re-run this turn (no account read needed for a
+  logging-only edit); last check earlier this window = 1 session, CORTEX_FORK_INCIDENTS
+  clean. Re-run the solo check at the next window open per ritual.
+- **WHAT TO SYNC + RE-RUN (owner action on the Mac):** unchanged from follow-on 7 --
+  sync `image_enricher.py` -> Mac, commit on donkey-kong-sandbox (no push to main),
+  `python -m extraction.met.run enrich-met --limit 200`. Default INFO output should now
+  be ~2 lines (the batch summary + "Enrichment complete"). To see per-attempt/floor
+  detail, re-run with `--log-level DEBUG` (verify run.py exposes that flag; if not, that
+  is a separate, un-gated change -- do NOT bundle it here).
+- **First-action options for the next window:** (a) interpret the clean INFO output
+  from the re-run against the follow-on 7 decision tree; (b) if the owner needs the
+  per-attempt detail and run.py lacks a log-level flag, propose adding one (separate
+  gate); (c) drain the rest of European Paintings if error < 5%.
+- **Decision tree from the re-run:** unchanged from follow-on 7 (error<5% -> drain;
+  error~10% + RPS pinned 1.00 -> identity rejection, UA-shape one knob; error>>10% or
+  backoff_s>~1500s -> max_retries 8->12 OR MET_API_RPS 10->5). NOTE: the "no Adaptive
+  RPS at floor line" diagnostic now requires `--log-level DEBUG` to observe, since that
+  line moved to DEBUG.
+- **Deferred (need explicit go):** P-B2, P-H1, P-H4, P-H3, P-H2, P-L1; prior-project
+  limiter/header port; `--log-level` CLI flag on run.py if not already present.
+- **What MUST NOT happen next window:** no make iac from workspace; no push to main; one
+  knob at a time; do NOT change UA/headers/concurrency alongside throttle tuning; do NOT
+  cap a server-supplied Retry-After; do NOT undo P-D1/P-D2/P-B1/adaptive limiter/P-T2/
+  P-V1/P-V2/P-V3 (the DEBUG demotion stands -- do not silently re-promote to INFO);
+  do NOT re-add met_enricher.py; do NOT re-stage 403/410 -> no_image.
+
+#### Hand-off prompt for next window (paste verbatim into a new Cortex window)
+
+```
+SESSION HANDOFF -- artwork-db / Met extraction Phase 3 (logs cleaned; interpret next run)
+
+You are Cortex Code (Snowsight) resuming an in-flight learning project on account
+pa37992 (Porchanalytics). Branch: donkey-kong-sandbox. Senior-DE mentor tone:
+explain the why and the trade-offs; the OWNER decides, you honor it.
+
+SESSION-OPEN RITUAL (in order, before any write):
+1. Read /workspace/AGENTS.md fully.
+2. Read ONLY the LAST dated entry of
+   /workspace/docs/context/session-3-progress-log.md (ends with "End of this
+   window"). It is titled "follow-on 8".
+3. Solo-session check (must return 1):
+     SELECT COUNT(DISTINCT SESSION_ID) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+   Then SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY 1 DESC LIMIT 5;
+4. DUAL-FS HAZARD: re-read every file via the file tool immediately before reasoning
+   about it. When in doubt, ask me to paste the Mac copy.
+5. State the plan and wait for "proceed (today's date)" before any write or push.
+
+STATE (do not re-derive):
+- Phase 1 DONE (MET_CSV_SNAPSHOT 484,956). Phase 2 DONE (control seeded 2,327 EP PD).
+- Phase 3 IN FLIGHT. Workspace = P-D1+P-D2+P-B1+adaptive limiter+P-T2+P-V1+P-V2+P-V3.
+  This window: P-V1 per-attempt lines + P-V3 floor line moved INFO->DEBUG, so default
+  INFO output is just the per-batch summary (control_enricher.py:320) + "Enrichment
+  complete" (L380). Per-attempt/floor detail is at --log-level DEBUG.
+- Mac = P-D1+P-D2; pending sync carries everything since.
+
+YOUR FIRST TASK: I will sync to Mac, run enrich-met --limit 200, and paste the (now
+clean) INFO output. Interpret it against the decision tree in follow-on 7/8:
+  - error<5% -> drain rest of European Paintings (no --limit).
+  - error~10%, RPS pinned 1.00 -> identity rejection -> propose UA-shape change ONLY.
+  - error>>10% or backoff_s>~1500s/200 rows -> max_retries 8->12 OR MET_API_RPS 10->5.
+  - to see floor/per-attempt detail I must run with --log-level DEBUG.
+
+HARD RULES: ONE knob at a time. No make iac from workspace. No push to main. Do NOT
+change UA/headers/concurrency with throttle tuning. Do NOT cap server Retry-After. Do
+NOT undo P-D1/P-D2/P-B1/adaptive limiter/P-T2/P-V1/P-V2/P-V3 (DEBUG demotion stands).
+Do NOT re-add met_enricher.py. Do NOT re-stage 403/410 -> no_image.
+DEFERRED (need go): P-B2, P-H1, P-H4, P-H3, P-H2, P-L1, prior-project port, --log-level
+CLI flag.
+
+FIRST RESPONSE: quote back the LAST "End of this window" header (mentions "follow-on
+8"); confirm solo-session=1 + CORTEX_FORK_INCIDENTS clean; then wait for my pasted run
+output before proposing the one-knob next step.
+```
+
+- **End of this window (eighth; supersedes the "seventh" marker above. The INFO->DEBUG
+  demotion is applied in the workspace only -- not synced, not committed, not applied to
+  account. P-V1/V2/V3 behavior is otherwise intact; only log verbosity changed.).**
+

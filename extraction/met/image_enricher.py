@@ -124,7 +124,7 @@ class _RateLimiter:
         if self._throttle_burst >= 3:
             self._rps = max(self._min_rps, self._rps * 0.7)
             if self._rps <= self._min_rps:
-                logger.info(
+                logger.debug(
                     "Adaptive RPS at floor (%.2f); further throttles indicate "
                     "identity rejection, not rate.", self._rps,
                 )
@@ -231,7 +231,7 @@ async def _fetch_one(
                         rate_limiter.throttle_other += 1
                     rate_limiter.backoff_seconds += delay
                     rate_limiter.note_throttle()
-                    logger.info(
+                    logger.debug(
                         "oid=%s attempt=%s HTTP=%s sleeping=%.1fs (rps=%.2f)",
                         object_id, attempt, status, delay, rate_limiter.rps,
                     )
@@ -254,7 +254,7 @@ async def _fetch_one(
         except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             delay = min(60.0, base_backoff * (2 ** (attempt - 1))) + random.uniform(0, 0.5)
-            logger.info(
+            logger.debug(
                 "oid=%s attempt=%s network exception sleeping=%.1fs (rps=%.2f)",
                 object_id, attempt, delay, rate_limiter.rps,
             )
