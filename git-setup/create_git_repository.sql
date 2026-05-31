@@ -41,22 +41,31 @@
 -- Because create_git_ops_db.sql injects the real PAT at apply time via
 --   snow sql ... -D "github_pat=${GITHUB_PAT}"
 -- the github_pat_artwork_db secret already holds a working credential by the
--- time create_git_repository.sql runs, so create_git_repository.sql succeeds in the same make iac run. There is no
--- placeholder PAT, no ALTER SECRET step, and no rollback / re-apply cycle.
+-- time create_git_repository.sql runs, so create_git_repository.sql succeeds in the same make iac run.
 --
--- Idempotent: uses CREATE OR REPLACE so re-running picks up any change to
--- ORIGIN, API_INTEGRATION, or GIT_CREDENTIALS wiring.
+-- Idempotent (ADDITIVE, NOT destructive): CREATE GIT REPOSITORY IF NOT EXISTS keeps
+-- the clone's object identity stable across re-applies; a convergent ALTER GIT
+-- REPOSITORY ... SET re-applies the mutable wiring (API_INTEGRATION, GIT_CREDENTIALS).
+-- ORIGIN is create-only and cannot be altered, so an ORIGIN change (rare) still needs
+-- a manual CREATE OR REPLACE. See create_git_ops_db.sql header "WHY NOT CREATE OR
+-- REPLACE" for the rationale (avoids churning object identity / the Workspace Git
+-- push binding).
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;
 USE DATABASE ARTWORK_OPS;
 USE SCHEMA GIT;
 
-CREATE OR REPLACE GIT REPOSITORY artwork_db
+CREATE GIT REPOSITORY IF NOT EXISTS artwork_db
     API_INTEGRATION = github_artwork_db_integration
     GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db
     ORIGIN          = 'https://github.com/dckallos/artwork-db.git'
     COMMENT         = 'Read-only mirror of the artwork-db repo for in-Snowflake IaC.';
+
+-- Converge the mutable wiring in place on every run (object identity preserved).
+ALTER GIT REPOSITORY IF EXISTS artwork_db SET
+    API_INTEGRATION = github_artwork_db_integration
+    GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db;
 
 -- Pull the latest contents of all branches right away so subsequent
 -- EXECUTE IMMEDIATE FROM statements work without a manual FETCH.

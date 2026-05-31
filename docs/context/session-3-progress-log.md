@@ -422,3 +422,49 @@
   (3) docs reconciliation; (4) **Met data seed = Section C** (the actual goal); (5) Track-D
   record-back into `track-d-checklist.md`.
 
+### 2026-05-31 (new window) | RESUME + TASK 1 PREP | TYPE=SERVICE convergence authored (NOT applied)
+- **Solo check:** 4 sessions for PORCHANALYTICS in last 5 min; current = `3946258901631134`
+  (advancing, this window). Other 3 (`...516506`, `...639322`, `...491958`) ran ONLY Snowsight
+  UI telemetry (`SYSTEM$GET_EXTERNAL_MCP_SERVER_PROVIDERS`, NPS timestamps) and were FROZEN at
+  identical mtimes across a 65s re-check → husks, no live ghost. `CORTEX_FORK_INCIDENTS` EMPTY.
+  **SOLO confirmed.**
+- **Gap confirmed LIVE (read-only DESCRIBE USER ARTWORK_LOADER_SVC):** `TYPE=PERSON`,
+  `PASSWORD=********` (PASSWORD_LAST_SET_TIME 2026-05-29), `RSA_PUBLIC_KEY` set
+  (RSA_PUBLIC_KEY_LAST_SET_TIME 2026-05-31 16:48). Both password AND key-pair auth live →
+  hardening goal still unmet, exactly as the prior entry diagnosed.
+- **Syntax research (cortex search docs + web, docs.snowflake.com / prequel migration guide /
+  select.dev):**
+  - `ALTER USER <u> SET TYPE = SERVICE` converts an existing PERSON user; a SERVICE user is
+    programmatic-only and CANNOT auth by password/MFA → this stmt ALONE disables password login
+    (stored password goes inert; "stored but disabled" per select.dev).
+  - `UNSET PASSWORD` and `SET PASSWORD = NULL` are equivalent removals; `UNSET PASSWORD` is the
+    documented service-conversion idiom. **No ordering requirement** — TYPE-first is the
+    documented order; password does NOT need clearing before SET TYPE.
+  - Both ALTERs idempotent (re-SET TYPE on SERVICE user / UNSET absent password = no-op success).
+- **File CONVERGED (write only, NOT executed):** appended to `infrastructure/create_service_user.sql`
+  after the GRANT — three idempotent `ALTER USER IF EXISTS ARTWORK_LOADER_SVC` stmts: SET TYPE=SERVICE,
+  UNSET PASSWORD, SET COMMENT (converges the stale DESCRIBE comment too). `CREATE ... IF NOT EXISTS`
+  kept above. Header comment left intact.
+- **GATED — STOPPING for owner go + date before any execution.** `make iac` is owner-run on the Mac.
+  Post-apply verification plan: DESCRIBE USER shows TYPE=SERVICE + PASSWORD=null; confirm password
+  auth dead; `snow connection test -c loader` still OK via SNOWFLAKE_JWT.
+- **Next:** owner sign-off → owner `make iac` → I verify read-only → then Task 2 (commit) etc.
+
+### 2026-05-31 (new window) | OWNER GO RECORDED | Task 1 approved (all 3 ALTERs)
+- Owner gave explicit GO 2026-05-31 to apply the converging DDL (keep all 3 ALTERs incl. SET COMMENT).
+- **Sequencing note surfaced:** the converged `create_service_user.sql` lives in the Snowsight
+  Workspace stage; the Mac clone needs it before `make iac`. Recommended order = commit (Task 2,
+  Workspace Git panel) → pull on Mac → `git_mark_executable.sh` → `make iac` → I verify read-only.
+  Owner to confirm apply, then I run DESCRIBE USER + the auth checks.
+
+### 2026-05-31 (new window) | COMPILE-CHECK PASS (non-mutating) | awaiting owner make iac
+- Owner requested a compile-check before applying. Ran `only_compile=true` on all 3 ALTERs
+  (SET TYPE=SERVICE; UNSET PASSWORD; SET COMMENT) → **all "SQL compiled successfully."**
+- **Proved non-mutating:** re-ran DESCRIBE USER immediately after — still `TYPE=PERSON`,
+  `PASSWORD=********`, old COMMENT. Compile validated syntax without applying. Good teaching point:
+  compile-only resolves syntax/identifiers/privileges but does not execute DDL; no Mac-CLI
+  equivalent for `ALTER USER` (DDL can't be EXPLAINed) — `make iac` idempotency IS the Mac check.
+- **STATE: WAITING.** Owner will commit (Git panel) + pull + `git_mark_executable.sh` + `make iac`
+  on the Mac, then ping me to verify (DESCRIBE shows TYPE=SERVICE + PASSWORD=null; password auth
+  dead; `snow connection test -c loader` still OK). I am paused until then (owner chose "wait").
+

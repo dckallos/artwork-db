@@ -13,10 +13,18 @@
 -- in ARTWORK_OPS.GIT exists at this point in the chain. See Phase 0.6 IaC
 -- strategy section 3.3.3.
 --
--- Idempotent: CREATE OR REPLACE handles both first-time apply and later
--- changes to API_ALLOWED_PREFIXES / ALLOWED_AUTHENTICATION_SECRETS. Snowflake
--- only rejects the REPLACE if a GIT REPOSITORY currently depends on the
--- integration; create_git_repository.sql's rollback handles that case.
+-- Idempotent (ADDITIVE, NOT destructive): CREATE API INTEGRATION IF NOT EXISTS
+-- keeps the integration's object identity stable across re-applies, followed by a
+-- convergent ALTER API INTEGRATION ... SET that re-applies the mutable properties
+-- (prefixes, allowed secrets, enabled). API_PROVIDER is create-only and cannot be
+-- altered, so the IF NOT EXISTS form carries it on the first apply.
+--
+-- WHY NOT CREATE OR REPLACE (regression fixed 2026-05-31): OR REPLACE drop+recreates
+-- the integration on every run, churning its object identity and contributing to the
+-- Snowsight Workspace Git binding breakage (see create_git_ops_db.sql header). The
+-- additive form leaves the live object in place. Snowflake also only rejects an OR
+-- REPLACE if a GIT REPOSITORY currently depends on the integration; the additive form
+-- sidesteps that ordering hazard entirely.
 --
 -- Paired rollback: git-setup/drop_api_integration.sql.
 --
@@ -30,8 +38,15 @@
 
 USE ROLE ACCOUNTADMIN;
 
-CREATE OR REPLACE API INTEGRATION github_artwork_db_integration
+CREATE API INTEGRATION IF NOT EXISTS github_artwork_db_integration
     API_PROVIDER                   = GIT_HTTPS_API
+    API_ALLOWED_PREFIXES           = ('https://github.com/dckallos/')
+    ALLOWED_AUTHENTICATION_SECRETS = (ARTWORK_OPS.GIT.github_pat_artwork_db)
+    ENABLED                        = TRUE
+    COMMENT                        = 'Git integration for the artwork-db repo.';
+
+-- Converge the mutable properties in place on every run (object identity preserved).
+ALTER API INTEGRATION IF EXISTS github_artwork_db_integration SET
     API_ALLOWED_PREFIXES           = ('https://github.com/dckallos/')
     ALLOWED_AUTHENTICATION_SECRETS = (ARTWORK_OPS.GIT.github_pat_artwork_db)
     ENABLED                        = TRUE
