@@ -295,3 +295,55 @@
   tab) as the default; Method 2 (break-glass disable/enable) is the only *programmatic*
   method that reliably terminates all of a user's clients. `ABORT_SESSION` is a stun, not
   a kill — keep it only for interrupting a runaway query in a session you can positively id.
+
+### 2026-05-31 | INCIDENT | dual-instance recurred mid-session-resilience-research (scenario-B confirmed)
+- **What happened:** during a connection blip in this very session, a ghost Cortex Code
+  fork executed in parallel and wrote 7 files of high-quality IaC implementing
+  `connection-resilience.md` recs #2 + #3 (the same recommendations the live window had
+  just authored). Owner confirmed scenario B (ghost fork, not local Mac authoring).
+- **Files written by the ghost (NOT applied; awaiting owner review):**
+  - `infrastructure/create_account_parameters.sql` + `drop_account_parameters.sql`
+    (`ALTER ACCOUNT SET ABORT_DETACHED_QUERY = TRUE`).
+  - `infrastructure/create_alerts.sql` + `drop_alerts.sql` (`BRONZE.CORTEX_FORK_ALERT`
+    + `BRONZE.CORTEX_FORK_INCIDENTS` audit table; 5-min schedule; INSERT-not-email
+    action).
+  - `infrastructure/create_roles.sql` (added `EXECUTE ALERT` + `MONITOR EXECUTION`
+    grants in lockstep with the alert).
+  - `scripts/bootstrap.py` (added the same two privileges to the preflight contract).
+  - `scripts/manifest.txt` (placed `create_account_parameters.sql` FIRST in Phase 1;
+    `create_alerts.sql` after `create_tasks.sql`).
+- **Quality:** the ghost's work is materially **better** than the live window's strawman
+  in `connection-resilience.md §6.F` — it filtered by `USER_NAME='PORCHANALYTICS'`,
+  used real-time `INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER` not 45-min-lagged
+  `ACCOUNT_USAGE`, declined `SYSTEM$SEND_EMAIL` in favor of a self-contained audit
+  table, and got the non-obvious `MONITOR EXECUTION` privilege right. Indistinguishable
+  from human-polished IaC.
+- **Detection:** the live window's `find -newer connection-resilience.md` initially
+  missed the ghost edits (it only catches files newer than the *most recent* live write,
+  not files written between live writes). Owner spotted the discrepancy as "11 staged
+  changes" vs the live window's "I made 4 changes". Re-running with
+  `find -L /workspace -type f -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort -r` exposed
+  the ghost's 7 files at mtimes 15:13–15:14, between the live writes at 15:06 and 15:20.
+- **Why discipline didn't prevent this:** the ghost obviously did not run `check.sh` or
+  `claim.sh` (claim.sh doesn't exist yet anyway). Fork-detection ritual relies on the
+  ghost obeying it — which it doesn't, because each fork is a fresh-context Cortex Code
+  instance reasoning from the same prompt as the live one.
+- **Implication for the recommendations themselves:** rec #1 (the `RUN_CONTROL` advisory
+  lease) the live window had recommended *deferring* now has a stronger case. Even with
+  rec #2 + #3 in IaC, neither prevents the *file-writes* of a ghost fork — they only cap
+  query bleed and surface forks 5 min after the fact. A server-side or human-side
+  mutual-exclusion is the only thing that would actually stop scenario B from happening
+  again. **No flip yet — owner decision pending.**
+- **What was NOT done in the live window after detection:**
+  1. Did not modify any of the 7 ghost-written files.
+  2. Did not commit / `make infra`.
+  3. Did not flip `connection-resilience.md` Status from "Top-3 actions await owner pick"
+     to anything else — the IaC exists but is UNAPPLIED + UNREVIEWED.
+  4. Did not flip the AGENTS.md gated items.
+- **Owner action items (NEXT, not this session):**
+  1. Code review the 7 ghost-written files. They look right; verify privately.
+  2. Decide: keep the ghost's IaC, modify it, or discard and re-author.
+  3. Decide: flip recs #2 + #3 to `decided` and apply via `make infra`, or hold.
+  4. Re-evaluate rec #1 (the advisory lease) given scenario B is now empirically
+     confirmed inside the very session that recommended deferring it.
+

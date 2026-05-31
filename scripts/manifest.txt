@@ -15,6 +15,7 @@
 # and which now applies in place.
 
 # --- Phase 1: core infrastructure (ACCOUNTADMIN bootstrap, then ARTWORK_ADMIN) ---
+infrastructure/create_account_parameters.sql
 infrastructure/create_roles.sql
 infrastructure/create_warehouses.sql
 infrastructure/create_databases_and_schemas.sql
@@ -26,6 +27,7 @@ infrastructure/create_run_control.sql
 infrastructure/create_bronze_views.sql
 infrastructure/create_service_user.sql
 infrastructure/create_tasks.sql
+infrastructure/create_alerts.sql
 infrastructure/refresh_grants.sql
 
 # --- Phase 2: optional in-Snowflake Git mirror (ACCOUNTADMIN; runs LAST) ---

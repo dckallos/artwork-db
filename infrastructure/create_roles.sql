@@ -43,3 +43,10 @@ GRANT CREATE DATABASE  ON ACCOUNT TO ROLE ARTWORK_ADMIN;  -- create_databases_an
 -- executing role. Enabled IN LOCKSTEP with create_tasks.sql, which defines
 -- MET_LEASE_RECLAIM_TASK (Session-3 build, 2026-05-31).
 GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN;   -- create_tasks.sql
+-- Alerts require EXECUTE ALERT on the account to run; MONITOR EXECUTION lets
+-- the alert's QUERY_HISTORY_BY_USER call see other users' (PORCHANALYTICS's)
+-- session activity, which is the whole point of the cortex-fork detector.
+-- Enabled IN LOCKSTEP with create_alerts.sql (CORTEX_FORK_ALERT,
+-- connection-resilience hardening, 2026-05-31).
+GRANT EXECUTE ALERT     ON ACCOUNT TO ROLE ARTWORK_ADMIN; -- create_alerts.sql
+GRANT MONITOR EXECUTION ON ACCOUNT TO ROLE ARTWORK_ADMIN; -- create_alerts.sql

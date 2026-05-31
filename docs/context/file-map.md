@@ -9,14 +9,15 @@ The `Verified` column records provenance: a date = read end-to-end that window;
 `prior` = trusted from an earlier window, not re-read. Trivial files (`.gitignore`,
 `LICENSE`) and the `docs/context/*.md` docs themselves are intentionally not row-mapped.
 
-**Session-3 (2026-05-31) — APPLIED** (owner committed Phase 1 + ran `make infra`). Live
-IaC additions: `create_bronze_views.sql`/`drop_bronze_views.sql` (`MET_WORKLIST`);
+**Session-3 (2026-05-31) — APPLIED + connection-resilience research.** Live IaC
+additions: `create_bronze_views.sql`/`drop_bronze_views.sql` (`MET_WORKLIST`);
 `create_run_control.sql`/`drop_run_control.sql` (`RUN_CONTROL` checkpoint table);
 `MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT` in `create_bronze_tables.sql`; real
 `MET_LEASE_RECLAIM_TASK` in `create_tasks.sql`; and the `grant_privileges.sql →
 create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/check.sh`,
 `scripts/checkpoint.sh`, `scripts/sql/show_{active_sessions,run_control,pipeline_status}.sql`
-— and the append-only `docs/context/session-3-progress-log.md` restart trail. Rows below.
+— and two append-only docs: `docs/context/session-3-progress-log.md` (restart trail)
++ `docs/context/connection-resilience.md` (research + advisory-lease design).
 
 ## scripts/snowflake_cli/ (Workflow 1 — reviewed)
 
