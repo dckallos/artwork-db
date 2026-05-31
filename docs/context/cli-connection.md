@@ -43,8 +43,8 @@ this doc alone. Escalate to source only via the triggers at the bottom.
 | 03 | lock_config_permissions | chmod 600 config.toml + private key |
 | 04 | register_admin_public_key | **only password-auth call**; `ALTER USER … SET RSA_PUBLIC_KEY` |
 | 05 | verify_admin_jwt | `verify_admin_jwt_full` against current admin warehouse |
-| 06 | rotate_loader_password | rotate `ARTWORK_LOADER_SVC` pw via admin JWT (**see gap**) |
-| 07 | test_loader_connection | source `.env`, `snow connection test -c loader` |
+| 06 | setup_loader_keypair | generate loader key-pair (lazy) → register pubkey via admin JWT → upsert `[connections.loader]` to SNOWFLAKE_JWT |
+| 07 | test_loader_connection | `snow connection test -c loader` (key-pair; no `.env`/password) |
 | 08 | promote_admin_warehouse | verify ARTWORK_WH exists → rewrite config.toml warehouse → re-verify JWT |
 
 ## Conventions to carry forward
@@ -62,10 +62,14 @@ this doc alone. Escalate to source only via the triggers at the bottom.
 
 ## Known gaps (fix candidates)
 
-1. **`git-setup/operator/rotate_loader_password.sql` is EMPTY (0 bytes)** on this
-   branch, yet `06_rotate_loader_password.sh` applies it via `--filename` expecting
-   `ALTER USER &{ loader_user } SET PASSWORD = '&{ loader_password }'`. Rotation
-   currently no-ops. Likely unfinished.
+1. **Loader auth → KEY-PAIR (RESOLVED 2026-05-31, branch `donkey-kong-sandbox`,
+   not yet `make iac`'d).** The old empty `rotate_loader_password.sql` +
+   `06_rotate_loader_password.sh` are **deleted**. `ARTWORK_LOADER_SVC` is now
+   `TYPE = SERVICE` (no password possible); `06_setup_loader_keypair.sh` mints the
+   loader key, registers it via the admin JWT connection
+   (`git-setup/operator/register_loader_public_key.sql`), and upserts
+   `[connections.loader]` to SNOWFLAKE_JWT. Python + `.env.example` moved to
+   `SNOWFLAKE_PRIVATE_KEY_FILE`. See `met-deepdive.md` `AUTH-01`.
 2. **`profiles.yml.example` uses `env_var()`** — valid for local dbt, but
    **incompatible with Snowflake-native dbt projects** (no env vars inside
    Snowflake). Matters when designing the CLI-driven production version.

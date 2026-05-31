@@ -15,7 +15,7 @@
 - `Makefile` (already read — see notes below).
 - `git-setup/*` — full chain reviewed 2026-05-30: `create_git_ops_db.sql`,
   `create_api_integration.sql`, `create_git_repository.sql`, all three paired
-  `drop_*.sql`, `operator/rotate_loader_password.sql` (empty), `README.md`,
+  `drop_*.sql`, `operator/register_loader_public_key.sql`, `README.md`,
   `.env.example`. See "git-setup — Git bind chain" below.
 
 ## Naming convention (CURRENT — authoritative)
@@ -165,11 +165,12 @@ DROP SECRET fully-qualified to avoid `090105` with no current DB).
 (`.env.example` ships blank `GITHUB_PAT=`). Rotate = edit `.env` + re-run `make
 iac` (no `ALTER SECRET`).
 
-**Gaps:** `git-setup/operator/rotate_loader_password.sql` is **empty (0 ln)** — no
-SQL body (also noted in Gaps). `git-setup/README.md` (112 ln) is the narrative
+**Gaps:** `git-setup/README.md` (112 ln) is the narrative
 runbook but is written entirely in the retired `B###`/`V###`/`R###` prefix scheme
 (stale — see Stale references). SQL comments reference an external "Phase 0.6 IaC
-strategy section 3.3.3" (Notion, not in repo).
+strategy section 3.3.3" (Notion, not in repo). (The former empty
+`rotate_loader_password.sql` gap is RESOLVED 2026-05-31 — replaced by
+`operator/register_loader_public_key.sql`; loader is now key-pair.)
 
 ## Role / grant model
 
@@ -230,10 +231,9 @@ cascade from dropped parents) but means its only use is manual.
 - `create_tasks.sql` + `drop_tasks.sql` — Phase-4 placeholders (bare `SELECT`); no
   real tasks yet. `EXECUTE TASK ON ACCOUNT` grant stays commented out in
   `create_roles.sql` until tasks are defined.
-- `create_service_user.sql` ships a placeholder password requiring rotation before
-  first run.
-- `git-setup/operator/rotate_loader_password.sql` — empty (carried over from
-  Workflow 1; the loader-password rotate has no SQL body).
+- `create_service_user.sql` creates `ARTWORK_LOADER_SVC` as `TYPE = SERVICE`
+  (no password possible); the RSA key is registered out-of-band by
+  `setup.sh --phase loader` (key-pair only). [updated 2026-05-31]
 
 ## Stale `V***` / `R***` / `B***` references to clean up (flagged, not fixed)
 

@@ -144,7 +144,7 @@ is about *policy and hardening decisions on top of that*, not a rebuild.
 
 | ID | Status | Question | Notes / position |
 |---|---|---|---|
-| `AUTH-01` | exploring | **(Session-2 review.)** Should the `ARTWORK_LOADER_SVC` loader identity authenticate by password or key-pair (or PAT)? | `create_service_user.sql:16-17` creates the user with `PASSWORD='CHANGE_ME_BEFORE_FIRST_RUN'`; the password is consumed at runtime via `SNOWFLAKE_PASSWORD` env by (a) the Python extractor (`config.py:57` → `snowflake.connector`) and (b) `snow sql -c loader` (the `[connections.loader]` toml block omits authenticator/password, so the CLI falls back to password via env precedence). The `admin` CLI connection is key-pair/JWT and unaffected — so `rotate_loader_password.sql` rotates *only* the loader's password. **Owner-preferred 2026-05-30: MIGRATE TO KEY-PAIR** (mirror `admin`): generate a loader key-pair, `ALTER USER ARTWORK_LOADER_SVC SET RSA_PUBLIC_KEY=…`, add `authenticator`/`private_key_file` to `[connections.loader]`, switch `config.py`/uploader to key-pair, and **remove/repurpose** the empty `git-setup/operator/rotate_loader_password.sql` + `06_rotate_loader_password.sh`. Rationale: eliminates a single-factor secret from `.env`, matches the DDL's own guidance (`create_service_user.sql:9-10,28-30`) and Snowflake's deprecation of password-only sign-in for service users. Alternative C (PAT) noted, not chosen. **GATED — exploring, not applied; owner sign-off at session end opens the build.** Ties cli-connection, `PIPE-03`. |
+| `AUTH-01` | APPLIED (code) 2026-05-31 | Should `ARTWORK_LOADER_SVC` authenticate by password or key-pair (or PAT)? | **DECIDED + BUILT: KEY-PAIR.** On branch `donkey-kong-sandbox` (committed; not yet `make iac`'d): `create_service_user.sql` now creates the user `TYPE = SERVICE` (no password possible). New `06_setup_loader_keypair.sh` (replaces the deleted `06_rotate_loader_password.sh`) lazily mints `~/.snowflake/keys/loader_rsa_key.{p8,pub}`, registers the pubkey via the admin JWT connection (`git-setup/operator/register_loader_public_key.sql`, replaces the deleted empty `rotate_loader_password.sql`), and upserts `[connections.loader]` to `authenticator=SNOWFLAKE_JWT` + `private_key_file` (via `_lib.sh upsert_toml_value_in_section`). `config.py`/`snowflake_uploader.py` use `private_key_file`; `.env.example` (root + met) dropped `SNOWFLAKE_PASSWORD` for `SNOWFLAKE_PRIVATE_KEY_FILE`. No chicken-and-egg: loader key registered by admin over JWT after `make iac`. Alternative C (PAT) not chosen. **NEXT: owner runs `make iac` + `setup.sh --phase loader` on Mac to apply.** Ties cli-connection, `PIPE-03`. |
 
 ---
 
@@ -425,11 +425,12 @@ anyway — deserves a "trusted inputs" comment. `STRIP_OUTER_ARRAY=FALSE` correc
 - **`rename_and_update.py` (91 ln) → REMOVE.** Spent one-shot `git mv` migration; tree
   is already prefix-free, so it's dead, and it's a dense source of stale `V###/R###`
   strings that pollute future greps. Git history preserves it. Gated.
-- **Loader service-user auth → MIGRATE TO KEY-PAIR (owner-preferred 2026-05-30).** See
-  new `AUTH-01`. The empty `git-setup/operator/rotate_loader_password.sql` + its
-  `06_rotate_loader_password.sh` are slated for **removal/repurpose** under that
-  migration (a password-rotation file is obsolete once the loader uses key-pair).
-  Gated.
+- **Loader service-user auth → KEY-PAIR: APPLIED (code) 2026-05-31.** See `AUTH-01`
+  (now flipped). The empty `git-setup/operator/rotate_loader_password.sql` + its
+  `06_rotate_loader_password.sh` are **deleted**; replaced by
+  `06_setup_loader_keypair.sh` + `operator/register_loader_public_key.sql`.
+  Committed on `donkey-kong-sandbox`; **owner still needs to run `make iac` +
+  `setup.sh --phase loader`** to apply to the account.
 
 ### Deferred to Session 3 (noted, not solved here)
 

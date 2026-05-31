@@ -367,3 +367,58 @@
   4. Re-evaluate rec #1 (the advisory lease) given scenario B is now empirically
      confirmed inside the very session that recommended deferring it.
 
+### 2026-05-31 | TRACK D BLOCKED (trial) + loader key-pair APPLIED (with a gap)
+- **Track D Stage 0:** CLEAN — solo, `ABORT_DETACHED_QUERY=TRUE`, `CORTEX_FORK_ALERT`
+  started, `CORTEX_FORK_INCIDENTS` empty, `SHOW AGENTS` enabled (0 agents).
+- **Track D Stage 1 BLOCKED:** agent chat throws **"Access denied for trial accounts."**
+  Cortex inference (agents AND the Cortex Code CLI, which rides the Cortex API) is gated
+  behind a payment method on this trial. `HELLO_AGENT` object created in
+  `ARTWORK_DB.PUBLIC` but cannot be invoked → thread-persistence UNTESTED. Decision gate:
+  **NO — by account billing state, not agent quality.** Owner chose: stop Track D, ship Met.
+  (Re-opening Track D OR the rec-#1 advisory lease both now hinge on the same single
+  decision: attach a payment method, or not.)
+- **Fork lesson (new):** aborting a session triggers a client reconnect that spawns a
+  NEW session; the aborted husk lingers ~5 min in the query window. **Stop aborting; let
+  husks drain.** Distinguish husk vs live ghost by whether `last_query` ADVANCES across two
+  checks ~60s apart (frozen=husk, advancing=live).
+- **Loader key-pair conversion — APPLIED** (owner ran `make iac` + `setup.sh --phase loader`
+  on the Mac, 2026-05-31 ~12:46–12:48 local):
+  - New `scripts/snowflake_cli/06_setup_loader_keypair.sh` minted `~/.snowflake/keys/loader_rsa_key.{p8,pub}`,
+    registered the RSA public key via the **admin JWT** connection (new
+    `git-setup/operator/register_loader_public_key.sql`), and upserted `[connections.loader]`
+    → `authenticator=SNOWFLAKE_JWT` + `private_key_file` (timestamped config.toml backups).
+  - `snow connection test -c loader` = **OK** as `ARTWORK_LOADER_SVC` / role `ARTWORK_LOADER`
+    via `SNOWFLAKE_JWT`; `CURRENT_USER`/`CURRENT_ROLE` round-trip confirmed. **KEY-PAIR AUTH IS LIVE.**
+  - `_lib.sh::upsert_toml_value_in_section` (insert-if-missing) was already present from a
+    prior window; reused, verified correct.
+  - Retired `06_rotate_loader_password.sh` + the empty `git-setup/operator/rotate_loader_password.sql`
+    (resolves AGENTS.md gated #4). Fixed `scripts/executable_files.txt` (the deleted script
+    name had broken the `make iac` chmod gate; new script added, alphabetized).
+- **GAP — PRIORITY for next window (security, NOT a functional break):** `DESCRIBE USER
+  ARTWORK_LOADER_SVC` after the apply shows **`TYPE = PERSON`** and **`PASSWORD = ********`**
+  (PASSWORD_LAST_SET_TIME 2026-05-29), with the OLD comment. Root cause: `create_service_user.sql`
+  uses `CREATE USER **IF NOT EXISTS**`; the user pre-existed (created 2026-05-29 by the old
+  password DDL), so the new `TYPE=SERVICE` + password-removal were a **SILENT NO-OP**
+  ("ARTWORK_LOADER_SVC already exists, statement succeeded"). **Password auth still works →
+  the hardening goal is NOT met.** The code is correct for a fresh account; it cannot
+  *converge* a pre-existing one. This is the exact `IF NOT EXISTS`-doesn't-alter idempotency
+  trap discussed earlier this session ("what if a table is outdated").
+  - **Fix:** make `create_service_user.sql` CONVERGE — keep `CREATE … IF NOT EXISTS`, then
+    append idempotent `ALTER USER ARTWORK_LOADER_SVC SET TYPE = SERVICE` + password removal
+    (verify exact syntax/ordering: `UNSET PASSWORD` vs `SET PASSWORD = NULL`, and whether a
+    password must be cleared before converting to SERVICE). Re-run `make iac`; verify
+    `DESCRIBE USER` shows `TYPE=SERVICE` + `PASSWORD=null`; confirm password auth is dead and
+    key-pair still works.
+- **NOT yet committed:** all this window's file changes (9 code files + `executable_files.txt`
+  + new `06_setup_loader_keypair.sh` + `register_loader_public_key.sql` + 2 deletions) are
+  uncommitted on `donkey-kong-sandbox`. After committing, run `bash scripts/git_mark_executable.sh`
+  once so the new script's +x is stored in git's tree.
+- **Docs still stale (deferred):** 10 refs across `cli-connection.md`, `ddl-infrastructure.md`,
+  `file-map.md`, `met-deepdive.md` (AUTH-01 `exploring`→ should be `applied-with-gap`),
+  `AGENTS.md` gated #4 (now resolved). Mechanical; line numbers known.
+- **Minor/gated:** `register_admin/loader_public_key.sql` use deprecated `&{ }` CLI var syntax
+  (warned, still works) → migrate to `<% %>` someday (pre-existing pattern, not introduced here).
+- **Next:** (1) close the TYPE=SERVICE convergence gap; (2) commit + `git_mark_executable.sh`;
+  (3) docs reconciliation; (4) **Met data seed = Section C** (the actual goal); (5) Track-D
+  record-back into `track-d-checklist.md`.
+

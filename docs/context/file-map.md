@@ -31,8 +31,8 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 | `03_lock_config_permissions.sh` | 34 | chmod 600 config.toml + key | prior | — |
 | `04_register_admin_public_key.sh` | 81 | ONLY password-auth call; registers RSA pubkey | prior | changing bootstrap auth |
 | `05_verify_admin_jwt.sh` | 54 | JWT verify vs current warehouse | prior | — |
-| `06_rotate_loader_password.sh` | 47 | rotate loader pw via admin JWT | prior | **paired .sql is empty (gap)** |
-| `07_test_loader_connection.sh` | 40 | source .env, test loader conn | prior | — |
+| `06_setup_loader_keypair.sh` | 107 | loader key-pair: lazy keygen → register pubkey via admin JWT → upsert `[connections.loader]` | 2026-05-31 | changing loader auth |
+| `07_test_loader_connection.sh` | 24 | `snow connection test -c loader` (key-pair; no `.env`) | 2026-05-31 | — |
 | `08_promote_admin_warehouse.sh` | 152 | promote admin warehouse → ARTWORK_WH, rewrite config | prior | changing promotion logic |
 
 ## git-setup/ (reviewed 2026-05-30 — see `ddl-infrastructure.md` "Git bind chain")
@@ -46,7 +46,7 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 | `drop_api_integration.sql` | 39 | rollback step 2: `DROP API INTEGRATION IF EXISTS` | 2026-05-30 | rolling back |
 | `drop_git_ops_db.sql` | 60 | rollback step 3: FQ `DROP SECRET`+`SCHEMA`+`DATABASE` | 2026-05-30 | rolling back |
 | `operator/register_admin_public_key.sql` | 33 | `ALTER USER … SET RSA_PUBLIC_KEY` (+ DESCRIBE) | prior | — |
-| `operator/rotate_loader_password.sql` | 0 | **EMPTY — expected ALTER USER SET PASSWORD (gap)** | 2026-05-30 | implementing the fix |
+| `operator/register_loader_public_key.sql` | 33 | `ALTER USER … SET RSA_PUBLIC_KEY` for the loader (+ DESCRIBE); applied by `06_setup_loader_keypair.sh` | 2026-05-31 | — |
 | `.env.example` | 6 | gitignored `git-setup/.env` template; ships blank `GITHUB_PAT=` | 2026-05-30 | — |
 | `README.md` | 112 | git-setup runbook; **written in retired B###/V###/R### scheme (stale)** | 2026-05-30 | need narrative context |
 

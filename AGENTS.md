@@ -171,18 +171,23 @@ Rules of thumb:
   never assume sole instance). Section C = NEXT session.
 - **Decided AND APPLIED 2026-05-31:** the four DDL cosmetic decisions (idempotency split, UPPERCASE identifiers, `grant_privileges.sql → create_grants.sql` rename wiring `drop_grants.sql`, reworded stale V/R/B comments) — landed via Session-3 `make infra`. Was previously gated; now historical.
 - **New gated items surfaced (record only — do NOT apply):**
-  1. Reword stale V/R/B refs found outside infrastructure: `config.py:53-54`,
+  1. Reword stale V/R/B refs found outside infrastructure:
      `extraction/met/README.md:37`, `/.env.example:9,13`, `apply_sql.sh:38`
      ("B001"), and **`git-setup/README.md` (whole file — B001/B002/B003, V###,
-     R### scheme)**.
+     R### scheme)**. (`config.py:53-54` V### ref FIXED 2026-05-31 during the
+     loader key-pair change.)
   2. Decide the fate of `rename_and_update.py` — a spent one-shot rename migration
      (now dead; dense V###/R### source). Candidate for removal.
   3. `profiles.yml.example` uses `env_var()` + key-pair (dbt-core only) — add a
      Snowflake-native dbt profile if/when the project moves to managed dbt.
-  4. **`git-setup/operator/rotate_loader_password.sql` is empty (0 ln)** — no SQL
-     body; implement the `ALTER USER … SET PASSWORD` or remove.
-  5. Minor: hardcoded sample account in `extraction/met/.env.example:14`;
-     `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+  4. **RESOLVED 2026-05-31:** loader auth migrated to key-pair. The empty
+     `rotate_loader_password.sql` + `06_rotate_loader_password.sh` are deleted;
+     `ARTWORK_LOADER_SVC` is now `TYPE = SERVICE` with key registered by
+     `setup.sh --phase loader`. Committed on `donkey-kong-sandbox`; **not yet
+     `make iac`'d** (owner runs it + `--phase loader` on the Mac). See `AUTH-01`.
+  5. Minor: `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+     (The hardcoded sample account in `extraction/met/.env.example` was FIXED
+     2026-05-31.)
   6. **Web Search enablement — account toggle now ON (2026-05-30).**
      Account-level `web_search` was **enabled at the account level 2026-05-30**
      (`pa37992`) via the ACCOUNTADMIN Snowsight UI toggle (AI & ML » Agents »
