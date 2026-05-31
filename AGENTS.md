@@ -29,6 +29,38 @@ over-API are blocked — see the Track-D notes), so ship data, not agent tooling
    `make iac` (manifest-driven), never inline. Then verify end state (DESCRIBE/SHOW) —
    a successful run is not proof a change applied.
 
+## Session-close ritual (do this last, every window)
+
+The owner asks for a hand-off prompt at the end of nearly every session, so this is
+codified. **Before signing off, every window MUST produce two artifacts:**
+
+1. **A final dated entry appended to `docs/context/session-3-progress-log.md`** that
+   supersedes any prior `End of this window` markers in the same date. The entry MUST
+   include, in this order:
+   - **What changed this turn** (workspace stage; `applied-to-account: yes/no`;
+     `pushed-to-Mac: yes/no`).
+   - **Cumulative workspace state** vs. the Mac (the delta the next sync will carry).
+   - **Solo-session check result.**
+   - **First-action options (a)/(b)/(c)** for the next window — concrete, paste-ready.
+   - **Read-only verification queries** for any new schema / data state.
+   - **Decision tree** keyed off the next run's expected output shapes.
+   - **Deferred patches** in priority order.
+   - **What MUST NOT happen in the next window** (foot-guns).
+   - **The hand-off prompt block** (item 2 below).
+   - **An explicit `End of this window` marker** as the final line.
+2. **A paste-ready hand-off prompt** as the last code block in that entry, fenced so
+   the owner can copy it verbatim into a new Cortex window. The prompt MUST contain:
+   reading order (AGENTS.md → latest log entry only); solo-session SQL; dual-FS
+   reminder; the gating rule ("state the plan, wait for proceed + date"); a one-line
+   project-context recap (branch, account, current Phase, key Snowflake objects); and
+   a closing instruction telling the new window to quote the latest `End of this
+   window` header back to the owner before proposing its first action. Keep it under
+   ~50 lines so it pastes cleanly.
+
+The hand-off prompt is not boilerplate; it is tailored to where the project is at
+session-close (e.g. Phase 2 done, Phase 3 in progress, awaiting curl evidence). When
+in doubt, copy the prior session's prompt and edit only the parts that have changed.
+
 ## What this repo is
 
 A **learning project** (see "Project mission" below) whose mechanics are

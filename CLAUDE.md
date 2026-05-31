@@ -9,6 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. Read ONLY the relevant Tier-1 domain doc for your task from docs/context/
 4. Stop reading once you know enough to act
 
+## Session-close ritual
+
+Before signing off, every window MUST produce two artifacts (see AGENTS.md "Session-close ritual" for the full spec):
+
+1. A final dated entry appended to `docs/context/session-3-progress-log.md` that supersedes any prior `End of this window` markers in the same date. Required sections: what changed this turn (workspace stage; applied-to-account yes/no; pushed-to-Mac yes/no), cumulative workspace state vs Mac, solo-session check result, first-action options for the next window, read-only verification queries, decision tree, deferred patches in priority order, MUST-NOT-DO foot-guns, the hand-off prompt block, and an explicit `End of this window` marker.
+2. A paste-ready hand-off prompt as the last code block in that entry, fenced so the owner can copy it verbatim. The prompt MUST contain: reading order (AGENTS.md -> latest log entry only); solo-session SQL; dual-FS reminder; the gating rule (state the plan, wait for proceed + date); one-line project-context recap; and a closing instruction telling the new window to quote the latest `End of this window` header back to the owner before proposing its first action. Keep it under ~50 lines.
+
+The hand-off prompt is tailored to where the project is at session-close, not boilerplate. Copy the prior session's prompt and edit only the parts that have changed.
+
 ## Core conventions (NEVER violate)
 
 - ASCII-only everywhere (no smart quotes, em dashes, arrows)

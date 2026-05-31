@@ -1131,5 +1131,334 @@
            or you cannot attribute the cause.
          - Do NOT undo P-D1 / P-D2 / P-B1 / the adaptive limiter / P-T2.
          - Do NOT re-add `met_enricher.py`.
+
+#### Hand-off prompt for next window (paste verbatim into a new Cortex window)
+
+```
+You are Cortex Code (Snowsight) resuming the artwork-db learning project on
+account pa37992 (Porchanalytics) -- a Medallion-architecture (Bronze/Silver/Gold)
+data-engineering teach-me build over the Met Museum OpenAccess CSV + API. Branch:
+donkey-kong-sandbox. Senior-DE mentor tone: explain the why and the tradeoffs;
+the OWNER decides, you honor it.
+
+SESSION-OPEN RITUAL (do this in order before anything else):
+1. Read AGENTS.md fully (it is the cheapest read in the repo).
+2. Read ONLY the FINAL dated entry of docs/context/session-3-progress-log.md
+   (search for "follow-on 3" -- that is the current end of window).
+3. Solo-session check (must return 1):
+     SELECT COUNT(DISTINCT SESSION_ID)
+     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+     WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+       AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+   Then SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY EVENT_TS
+   DESC LIMIT 5; -- expect no new rows since the last entry.
+4. DUAL-FS HAZARD: re-read every file with the file tool immediately before
+   reasoning about it. Workspace, Mac, and the file-tool view can each show
+   different versions of the same file. When in doubt, ask me to paste the Mac
+   copy.
+5. STATE THE PLAN AND WAIT for my explicit "proceed" + date before any write,
+   any account write, or any push. No make iac from the workspace. No push to
+   main. Ever.
+
+CURRENT STATE (per follow-on 3):
+- Account: ARTWORK_DB.BRONZE has MET_ENRICHMENT_CONTROL (PK + enrichment_error
+  col), MET_CSV_SNAPSHOT (PK, 484,956 rows), MET_WORKLIST (view), RAW_MET_OBJECTS,
+  EXTRACTION_LOG, MET_LEASE_RECLAIM_TASK (hourly).
+- Mac is AT P-D1 + P-D2 (already applied).
+- Workspace is AHEAD with: P-B1 (3 dead files removed), the adaptive
+  image_enricher (403-as-throttle + Retry-After + adaptive RPS), and P-T2
+  (per-batch throttle counters in the INFO log alongside err_breakdown).
+- Open question: whether the 213 errored rows in MET_ENRICHMENT_CONTROL drain
+  cleanly with the adaptive limiter alone, or whether a UA / header tweak is
+  needed (WAF hypothesis from follow-on 2 -- 403 body is Akamai HTML, not API
+  JSON). The 3-way curl in follow-on 2 step 5 is the next piece of evidence.
+
+WHAT I AM ABOUT TO DO ON THE MAC (and will paste back to you):
+1. git pull on donkey-kong-sandbox -> Mac.
+2. python -m extraction.met.run enrich-met --limit 200
+3. The new INFO line plus, on ARTWORK_DB.BRONZE:
+     SELECT enrichment_status, COUNT(*) FROM MET_ENRICHMENT_CONTROL
+       GROUP BY 1 ORDER BY 2 DESC;
+     SELECT LEFT(enrichment_error, 30), COUNT(*) FROM MET_ENRICHMENT_CONTROL
+       WHERE enrichment_error IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;
+     SELECT COUNT(*) FROM RAW_MET_OBJECTS;
+
+YOUR FIRST RESPONSE:
+- Quote the latest `End of this window (fourth and final-final).` header back to
+  me so I know you read the right entry.
+- Do NOT propose code changes before I paste the run results above. Walk the
+  decision tree from follow-on 3 step 6 only AFTER you have the data.
+- If the 213 drain cleanly: propose draining the rest of European Paintings
+  (no --limit). If they don't: propose ONE knob (UA shape OR Accept-Language OR
+  lower MET_API_RPS) -- one knob at a time, gated.
+
+DEFERRED (do NOT touch without explicit go): P-B2 doc reword; P-H1
+autocommit/BEGIN/COMMIT; P-H4 --where env gate; P-H3 paramstyle=qmark;
+P-H2 DATA-01 deaccession; P-L1 legacy SQLite delete.
+
+HARD RULES: do NOT make iac from the workspace; do NOT push to main; do NOT
+re-stage 403/410 -> no_image (proven WAF, not API refusal); do NOT change UA +
+headers + concurrency in one PR; do NOT undo P-D1 / P-D2 / P-B1 / adaptive
+limiter / P-T2; do NOT re-add met_enricher.py.
+```
+
 - **End of this window (fourth and final-final).**
+
+### 2026-05-31 (same window, follow-on 4) | HAND-OFF PROMPT (codified)
+- **Codified `Session-close ritual` in `AGENTS.md` and `CLAUDE.md`** (this turn,
+  workspace; NOT pushed). Every future window MUST end by appending a final progress-log
+  entry + a paste-ready hand-off prompt block. Spec lives in `AGENTS.md` "Session-close
+  ritual"; mirror in `CLAUDE.md`.
+- **Hand-off prompt for the NEXT window (paste this verbatim into a fresh Cortex Code
+  window, then attach this repo as the workspace):**
+
+```
+SESSION HANDOFF -- artwork-db / Met extraction pipeline (Phase 3 in flight)
+
+You are picking up an in-flight learning project. Before doing anything:
+
+1. Read /workspace/AGENTS.md fully. It is Tier 0; cheapest read; tells you how much more to read.
+2. Read ONLY the LAST dated entry in /workspace/docs/context/session-3-progress-log.md
+   that ends with "End of this window". That entry supersedes every earlier
+   "End of this window" marker. It contains: cumulative workspace state vs Mac,
+   solo-session check requirement, first-action options (a)/(b)/(c), read-only
+   verification queries, decision tree, deferred patches, MUST-NOT-DO foot-guns.
+3. Run the solo-session check (AGENTS.md ritual #1):
+     SELECT COUNT(DISTINCT SESSION_ID)
+       FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+     SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS
+      ORDER BY incident_at DESC LIMIT 5;
+   Exactly 1 distinct session = solo. >1 = stop and ask. Husks are not a problem.
+4. DUAL-FS HAZARD: the workspace symlink, the Mac git checkout, and the file-tool
+   view can each show different versions of the same file. Re-read a file via the
+   file tool immediately before reasoning about it. The workspace file-tool view is
+   authoritative for the workspace; the Mac is authoritative for the running pipeline.
+   When in doubt, ask me to paste the Mac copy.
+5. State the plan and wait for my explicit "proceed (today's date)" before any write
+   to a shared file or any execution. No `make iac`, no push, no destructive ops
+   without sign-off.
+
+Project context (do not re-derive from logs):
+- Branch: donkey-kong-sandbox. Account: pa37992 (trial). Role: ACCOUNTADMIN for me;
+  ARTWORK_LOADER (key-pair) for the Mac loader; ARTWORK_ADMIN for IaC.
+- Phase 1 (snapshot) DONE: BRONZE.MET_CSV_SNAPSHOT = 484,956 rows (PK on object_id).
+- Phase 2 (seed) DONE: BRONZE.MET_ENRICHMENT_CONTROL has 2,327 European Paintings
+  public-domain rows; idempotent re-seed = 0 inserts.
+- Phase 3 (enrich) IN FLIGHT. Workspace is AT P-D1 + P-D2 + P-B1 + adaptive
+  _RateLimiter (403-as-throttle, Retry-After, RPS adapt) + P-T2 throttle counters.
+  Mac is one sync behind.
+- Key Snowflake objects: ARTWORK_DB.BRONZE.{MET_ENRICHMENT_CONTROL,
+  MET_CSV_SNAPSHOT, MET_WORKLIST (view), MET_LEASE_RECLAIM_TASK (hourly cron),
+  RAW_MET_OBJECTS, EXTRACTION_LOG, CORTEX_FORK_INCIDENTS}.
+- Open question awaiting Mac evidence: WAF vs adaptive-throttle. The latest log
+  entry has the 3-way curl test and the decision tree.
+
+Mentor mode: senior data/platform engineer pairing with a learner. Explain the why
+and the trade-offs, propose the next learning step, but I decide and you honor it.
+
+Now:
+- Quote back to me the LAST "End of this window" header from the progress log
+  (so I know you read the right one).
+- Confirm solo-session = 1.
+- Propose your first action (one of (a)/(b)/(c) from the latest entry, or a
+  different concrete action with reasoning), and ask for my "proceed".
+```
+
+- **What this turn changed (workspace stage; NOT applied to account; NOT pushed to Mac):**
+    - `AGENTS.md` -- added `Session-close ritual` section (between `Session-open ritual`
+      and `What this repo is`).
+    - `CLAUDE.md` -- added matching `Session-close ritual` section.
+    - This entry + the prompt above.
+- **Cumulative workspace state across this multi-turn arc:** unchanged from
+  `follow-on 3` plus the doc-process additions above. Code: P-D1 + P-D2 + P-B1 +
+  adaptive limiter + P-T2. IaC delta still pending sync: only the new
+  `enrichment_error VARCHAR(500)` column in `MET_ENRICHMENT_CONTROL` (idempotent ALTER).
+- **Solo-session check this turn:** 1 distinct session.
+- **First-action options for the next window:** SAME as `follow-on 3` -- (a) UA/header
+  knob if Mac curl shows browser-style succeeds, (b) re-run `enrich-met --limit 200`
+  to test the adaptive limiter alone, (c) chase a deferred patch.
+- **Read-only verification queries / decision tree / deferred patches / MUST-NOT-DO:**
+  unchanged from `follow-on 3`. Quoted by reference rather than re-pasted to keep
+  this entry from sprawling.
+- **End of this window (fifth and ACTUALLY final; the ritual is now codified so
+  future entries follow the AGENTS.md spec).**
+
+### 2026-05-31 (same window, follow-on 5) | RUN RESULT + V1/V2/V3 GATED FOR NEXT WINDOW
+- **What changed this turn (workspace stage; applied-to-account: no; pushed-to-Mac:
+  no):** nothing in code or IaC. This entry only -- the codified close ritual + a
+  paste-ready prompt for the next window. P-V1 / P-V2 / P-V3 are AUTHORIZED by the
+  owner ("proceed P-V1+P-V2+P-V3") but explicitly scoped to a NEW context window
+  (this is what this hand-off prompt sets up).
+- **Run result, 17:22:35 -> 17:25:11 (Mac, post-adaptive-limiter, post-P-T2):**
+  `claimed=200 done=180 no_image=0 error=20 assembled=180`
+  `err_breakdown={'http_4xx_403': 20}`
+  `throttles={'403': 133, '429': 0, 'other': 0}`
+  `backoff_s=573.6  rps_end=5.00`
+- **Read of that result:**
+  - **Adaptive limiter MATERIALLY helped.** Done went from 96 -> 180 (44% -> 90%);
+    error went from 104 -> 20. Pacing IS part of the story; the WAF-only hypothesis
+    is partially refuted.
+  - **Two visible RPS-collapse cascades:** 17:22:44 (20 -> 1.00 in ~10s) and 17:23:55
+    (likely on a fresh batch worker bringing rps back up via cool_up, then collapsing
+    again). The system spends ~50s pinned at floor=1.0 each time before recovering.
+  - **The 20 remaining errors** are objects that exhausted all 8 retries while the
+    limiter was at floor and the WAF kept rejecting. Likely fixable with: (a) lower
+    concurrency so fewer simultaneous throttle events trigger the cascade in the first
+    place; (b) cap per-attempt sleep (currently up to 102s on attempt 8 -- wasteful);
+    (c) make per-attempt backoff visible in the log so we can audit the sleeps.
+  - **`backoff_s=573.6`** = 9.5 minutes of cumulative backoff sleep across the batch.
+    rps_end=5.0 means the limiter cooled back up from 1.0 to 5.0 between bursts.
+- **Solo-session check this turn:** 1 distinct session. CORTEX_FORK_INCIDENTS clean.
+- **AUTHORIZED for the next window (do these in this order, one PR each):**
+    - **P-V1 -- per-attempt backoff log line** in `_fetch_one`'s throttle branch
+      (`extraction/met/image_enricher.py`):
+      ```python
+      logger.info(
+          "oid=%s attempt=%s HTTP=%s sleeping=%.1fs (rps=%.2f)",
+          object_id, attempt, status, delay, rate_limiter.rps,
+      )
+      ```
+      Place AFTER `delay` is finalized (post-jitter, post-Retry-After) and BEFORE
+      `await asyncio.sleep(delay)`. Mirror it in the network-exception branch so
+      ClientError / TimeoutError sleeps are equally visible.
+    - **P-V2 -- cap per-attempt sleep at 60s** (defensive; matches prior project):
+      ```python
+      delay = min(60.0, base_backoff * (2 ** (attempt - 1)))
+      ```
+      In BOTH the throttle branch (when `_retry_after_seconds` returned None) and the
+      network-exception branch. Do NOT cap a server-supplied Retry-After; honor that
+      verbatim.
+    - **P-V3 -- floor-reached signal** in `_RateLimiter.note_throttle()`:
+      after the `_rps = max(self._min_rps, ...)` line, log once when we LAND at floor:
+      ```python
+      if self._rps <= self._min_rps:
+          logger.info(
+              "Adaptive RPS at floor (%.2f). Further throttles indicate identity "
+              "rejection (WAF / UA / TLS), not rate. Slowing further will not help.",
+              self._rps,
+          )
+      ```
+      Guard with a `_at_floor_logged` flag so it fires once per cascade, not on every
+      subsequent throttle (otherwise the log will spam during the ~50s floor sit).
+      Reset the flag in `cool_up()` once `_rps > _min_rps` again so the NEXT cascade
+      can re-warn.
+    - All three changes: AST-parse + `python -c "import extraction.met.image_enricher"`
+      smoke before commit.
+- **NOT yet authorized (owner decides AFTER seeing V1/V2/V3 output):**
+  - Lower `MET_API_CONCURRENCY` from 8 -> 2 or 3 (would prevent the cascade from
+    triggering 8 simultaneous throttles in the first place).
+  - Change `User-Agent` to the prior project's
+    `split-monogram-met-oa-sync/2.0 (+contact)` shape.
+  - Add `Accept-Language` / `Accept-Encoding` headers.
+  - One knob at a time; pick after the next run shows what V1/V2/V3 reveal.
+- **First-action options for the next window:**
+  (a) Apply P-V1+P-V2+P-V3 (workspace, no `make iac` needed -- code only).
+      Owner syncs to Mac, re-runs, pastes log. Then decide concurrency / UA.
+  (b) Skip directly to lowering MET_API_CONCURRENCY=2 (config.py change). Risk:
+      we lose the per-attempt visibility from V1, so we'd be blind again.
+  (c) Skip directly to UA shape change. Risk: same.
+  Owner already chose (a) -- "proceed P-V1+P-V2+P-V3".
+- **Read-only verification queries after the next Mac re-run:**
+    - `SELECT enrichment_status, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+       GROUP BY 1 ORDER BY 2 DESC;` -- expect error <= 20, no_image still 0, done > 180.
+    - `SELECT LEFT(enrichment_error, 30), COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+       WHERE enrichment_error IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;`
+    - `SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;`
+- **Decision tree from the V1/V2/V3 run:**
+  - error -> 0: drain the rest of European Paintings (no --limit). Done.
+  - error similar (~20) AND log shows "Adaptive RPS at floor" hits early: lower
+    concurrency to 2 or 3 and re-test.
+  - error similar AND no floor-hit log line: V3 isn't firing -- check the flag logic.
+  - error WORSE: revert; backoff cap may be too aggressive.
+- **Deferred patches (priority order):** P-B2 doc reword; P-H1 autocommit/BEGIN/COMMIT;
+  P-H4 `--where` env gate; P-H3 paramstyle=qmark; P-H2 DATA-01 deaccession; P-L1
+  legacy SQLite delete.
+- **What MUST NOT happen in the next window:**
+  - Do NOT `make iac` from the workspace; V1/V2/V3 are code-only.
+  - Do NOT push to main.
+  - Do NOT change concurrency / UA / headers in the same PR as V1/V2/V3 -- one
+    knob at a time.
+  - Do NOT cap a server-supplied `Retry-After` value.
+  - Do NOT undo P-D1 / P-D2 / P-B1 / adaptive limiter / P-T2.
+  - Do NOT re-add `met_enricher.py`.
+  - Do NOT re-stage 403/410 -> no_image (proven WAF-shaped, not semantic).
+
+#### Hand-off prompt for next window (paste verbatim into a new Cortex window)
+
+```
+SESSION HANDOFF -- artwork-db / Met extraction Phase 3 (V1/V2/V3 authorized)
+
+You are Cortex Code (Snowsight) resuming an in-flight learning project on
+account pa37992 (Porchanalytics). Branch: donkey-kong-sandbox. Senior data /
+platform engineer mentor tone: explain the why and the trade-offs; the OWNER
+decides, you honor it.
+
+SESSION-OPEN RITUAL (do this FIRST, in order, before anything else):
+1. Read /workspace/AGENTS.md fully. Tier 0; cheapest read.
+2. Read ONLY the LAST dated entry of
+   /workspace/docs/context/session-3-progress-log.md -- it ends with "End of
+   this window" and supersedes every earlier "End of this window" marker.
+   Look for the section titled "follow-on 5".
+3. Solo-session check (must return 1):
+     SELECT COUNT(DISTINCT SESSION_ID)
+       FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+     SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS
+      ORDER BY incident_at DESC LIMIT 5;
+   Exactly 1 = solo. >1 = stop and ask.
+4. DUAL-FS HAZARD: re-read every file via the file tool immediately before
+   reasoning about it. Workspace, Mac, and the file-tool view can each show
+   different versions. When in doubt, ask me to paste the Mac copy.
+5. State the plan. Wait for "proceed (today's date)" before any write.
+
+PROJECT CONTEXT (do not re-derive):
+- Phase 1 DONE: BRONZE.MET_CSV_SNAPSHOT = 484,956 rows.
+- Phase 2 DONE: BRONZE.MET_ENRICHMENT_CONTROL seeded with 2,327 European
+  Paintings public-domain rows.
+- Phase 3 IN FLIGHT. Last run (17:22-17:25, with adaptive limiter + P-T2):
+  claimed=200 done=180 error=20 throttles={'403': 133} backoff_s=573.6
+  rps_end=5.00. Adaptive throttle handling materially helped (104 -> 20
+  errors). 20 stragglers exhausted retries while limiter was at floor=1.0.
+- Workspace state: P-D1 + P-D2 + P-B1 + adaptive _RateLimiter + P-T2.
+- Mac state: P-D1 + P-D2 applied. Pending sync: P-B1 deletions, adaptive
+  image_enricher rewrite, P-T2 counters in two files.
+
+WHAT YOU ARE AUTHORIZED TO DO (and ONLY this -- one PR per V):
+- P-V1: per-attempt INFO log inside _fetch_one's throttle branch (and the
+  network-exception branch) showing oid / attempt / HTTP / sleeping / rps.
+  Spec in follow-on 5.
+- P-V2: cap per-attempt exponential sleep at 60s (both branches). Do NOT cap
+  a server-supplied Retry-After.
+- P-V3: in _RateLimiter.note_throttle(), log ONCE when rps lands at min_rps;
+  reset the flag in cool_up() so the next cascade can warn again. Spec in
+  follow-on 5.
+- After all three: AST-parse + import smoke. Commit on donkey-kong-sandbox.
+  Then ask me to sync + re-run on the Mac and paste the new log.
+
+WHAT IS EXPLICITLY NOT AUTHORIZED YET:
+- Changing MET_API_CONCURRENCY (8 -> 2/3). I decide AFTER seeing V1/V2/V3.
+- Changing User-Agent or adding headers. Same.
+- Anything in the deferred list (P-B2, P-H1, P-H4, P-H3, P-H2, P-L1).
+- make iac from the workspace. push to main. Either is a defect.
+- Rewriting V/D/B/T patches that are already applied.
+
+HARD RULES:
+- ONE knob at a time so we can attribute outcomes.
+- ASCII only, UPPERCASE Snowflake identifiers, IaC via manifest only.
+- Explain the why and the trade-offs as you go (mentor mode).
+
+YOUR FIRST RESPONSE:
+1. Quote back to me the LAST "End of this window" header from the progress log
+   so I know you read the right one (it should mention "follow-on 5").
+2. Confirm solo-session = 1 and CORTEX_FORK_INCIDENTS is clean.
+3. Re-read /workspace/extraction/met/image_enricher.py with the file tool and
+   tell me: which exact line numbers will V1, V2, V3 touch?
+4. Then ask me for "proceed (date)" before applying.
+```
+
+- **End of this window (sixth; per AGENTS.md ritual the next window MUST again
+  emit a new entry with prompt at close).**
 
