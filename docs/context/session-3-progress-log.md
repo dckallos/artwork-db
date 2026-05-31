@@ -1285,6 +1285,153 @@ Now:
 - **End of this window (fifth and ACTUALLY final; the ritual is now codified so
   future entries follow the AGENTS.md spec).**
 
+### 2026-05-31 (same window, follow-on 6) | RUN-2 RESULTS + P-V1/P-V2/P-V3 GATED FOR NEXT WINDOW
+- **What changed this turn:** owner ran `enrich-met --limit 200` on the Mac after sync.
+  Result: `claimed=200 done=180 no_image=0 error=20 assembled=180
+  err_breakdown={'http_4xx_403': 20} throttles={'403': 133, '429': 0, 'other': 0}
+  backoff_s=573.6 rps_end=5.00`. Wall clock 17:22:35 -> 17:25:11 (~2:36).
+  applied-to-account: NO (read-only diagnosis). pushed-to-Mac: NO new edits this turn.
+- **Operational verdict:** the prior-project adaptive pattern works. Error rate
+  52% (run 1, pre-P-T2) -> 10% (run 2, post-adaptive limiter + max_retries=8).
+  WAF identity rejection is not the dominant cause -- aggressive concurrency on
+  cold start was. Two RPS-storm cycles visible in the log (drop to 1.00 floor at
+  17:22:51 + 17:24:02), separated by a brief cool_up recovery. 180 objects
+  rode the storms; 20 exhausted 8 retries each on 403.
+- **Owner observation that prompted P-V1/P-V2/P-V3:** the log shows the adaptive
+  RPS layer collapsing to 1.0 but does NOT show the per-request exponential
+  backoff at all (no `_fetch_one` retry log). Owner reasonably concluded "looks
+  like we're just dropping to 1 RPS." The exponential backoff IS in the code
+  (verified: `delay = base_backoff * (2 ** (attempt - 1))` at
+  `image_enricher.py:218` and `:247`) but invisible. Fix: add a tight per-attempt
+  log line. Plus a 60s cap (prior-project pattern) and a "floor reached" hint.
+- **Cumulative workspace state:** unchanged from `follow-on 4`. Code: P-D1 + P-D2
+  + P-B1 + adaptive limiter + P-T2. Docs: `Session-close ritual` codified in
+  AGENTS.md + CLAUDE.md. Mac one sync behind on the workspace deltas.
+- **Solo-session check this turn:** 1 distinct session.
+- **Read-only verification queries (run on the Mac after the next enrich run):**
+    - `SELECT enrichment_status, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+       GROUP BY 1 ORDER BY 2 DESC;` -- expect error count smaller than 20.
+    - `SELECT LEFT(enrichment_error, 30), COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+       WHERE enrichment_error IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;`
+    - `SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;` -- expect 180+.
+- **First-action options for the next window:**
+    (a) Apply P-V1 + P-V2 + P-V3 (gated; owner approved this turn). Then re-run
+        and read the new per-attempt INFO log to confirm the exponential ramp is
+        visible. Recommended first action.
+    (b) Skip the visibility patches and just drain (`enrich-met` no `--limit`)
+        -- 180/200 success rate is good enough that the remaining 2,127 PD rows
+        likely converge similarly. Tradeoff: less observability if the next
+        batch misbehaves.
+    (c) Chase a deferred patch (P-B2 / P-H1 / etc).
+- **Decision tree from the next run after P-V1/V2/V3:**
+    - Per-attempt log shows the exponential ramp clearly (0.8s -> 1.6s -> ... ->
+      60s cap), some retries succeed mid-ramp -> system is healthy; drain.
+    - Per-attempt log shows every attempt 403'ing through to retries-exhausted
+      -> WAF really is rejecting those specific oids; consider the UA flip
+      (still gated as a separate PR) OR accept the ~10% loss as deaccession-shaped.
+    - Floor message ("identity rejection, not rate") fires consistently -> same
+      conclusion; UA flip is the next knob.
+- **Deferred patches (priority unchanged):** P-B2 doc reword; P-H1
+  autocommit/BEGIN/COMMIT; P-H4 `--where` env gate; P-H3 paramstyle=qmark;
+  P-H2 DATA-01 deaccession; P-L1 legacy SQLite delete.
+- **What MUST NOT happen in the next window:**
+    - Do NOT `make iac` from the workspace.
+    - Do NOT push to main.
+    - Do NOT bundle P-V1+P-V2+P-V3 with a UA change (one knob at a time).
+    - Do NOT undo the adaptive limiter / P-T2 / P-D1 / P-D2 / P-B1.
+    - Do NOT re-stage the 403/410 -> no_image reclassification.
+    - Do NOT re-add `met_enricher.py`.
+
+#### Hand-off prompt for next window (paste verbatim into a new Cortex window)
+
+```
+SESSION HANDOFF -- artwork-db / Met extraction Phase 3 (apply P-V1+P-V2+P-V3)
+
+You are Cortex Code in Snowsight resuming the artwork-db learning project on
+account pa37992 (Porchanalytics). Branch: donkey-kong-sandbox. Senior data /
+platform engineer mentor tone -- explain the why and the trade-offs; the OWNER
+decides, you honor it.
+
+SESSION-OPEN RITUAL (do this in order before anything else):
+1. Read /workspace/AGENTS.md fully (Tier 0; cheapest read).
+2. Read ONLY the LAST dated entry in /workspace/docs/context/session-3-progress-log.md
+   (search "follow-on 6"). It supersedes every earlier "End of this window".
+3. Solo-session check (must return 1):
+     SELECT COUNT(DISTINCT SESSION_ID)
+       FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+   Then SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS
+        ORDER BY incident_at DESC LIMIT 5;
+4. DUAL-FS HAZARD: workspace, Mac, and file-tool view can disagree. Re-read every
+   file with the file tool immediately before reasoning about it. When in doubt,
+   ask me to paste the Mac copy.
+5. State the plan and wait for my explicit "proceed (today's date)" before any
+   write. No `make iac`, no push to main.
+
+PROJECT CONTEXT (do not re-derive):
+- Phase 1 DONE: BRONZE.MET_CSV_SNAPSHOT = 484,956 rows (PK).
+- Phase 2 DONE: BRONZE.MET_ENRICHMENT_CONTROL has 2,327 European Paintings PD rows.
+- Phase 3 IN FLIGHT. Run-2 result: 200 claimed -> 180 done / 20 error (all 403 +
+  retries-exhausted). Adaptive limiter + exponential backoff WORKED; error rate
+  dropped from 52% to 10% vs run-1. throttles={'403': 133} backoff_s=573.6
+  rps_end=5.00 over a 2:36 wall-clock run.
+- Workspace AHEAD of Mac with: P-B1, adaptive image_enricher, P-T2 throttle counters.
+- Open work for THIS window: apply P-V1 + P-V2 + P-V3 (visibility patches; owner
+  pre-approved). NO UA change in this window -- one knob at a time.
+
+YOUR FIRST RESPONSE:
+- Quote back the latest "End of this window" header so I know you read the right
+  entry.
+- Confirm solo-session = 1.
+- State the apply plan for P-V1+P-V2+P-V3 (file paths, exact lines, render of the
+  new INFO format strings) and wait for my "proceed (date)".
+
+P-V1 -- per-attempt INFO log inside _fetch_one's throttle branch.
+  File: extraction/met/image_enricher.py
+  After the `delay = ... + jitter` line and BEFORE `await asyncio.sleep(delay)`,
+  add:
+    logger.info(
+        "oid=%s attempt=%s/%s HTTP=%s sleeping=%.1fs (rps=%.2f)",
+        object_id, attempt, max_retries, status, delay, rate_limiter.rps,
+    )
+  Mirror the same shape in the network-exception path (line ~247) using
+  `last_error` instead of `status`.
+
+P-V2 -- 60s cap on per-attempt sleep (matches the prior-project pattern).
+  File: extraction/met/image_enricher.py
+  Replace BOTH occurrences of `base_backoff * (2 ** (attempt - 1))` with
+  `min(60.0, base_backoff * (2 ** (attempt - 1)))`. Keep the `+ jitter` after.
+
+P-V3 -- floor warning on the adaptive limiter.
+  File: extraction/met/image_enricher.py, in `_RateLimiter.note_throttle()`,
+  AFTER the `self._rps = max(self._min_rps, self._rps * 0.7)` line, add:
+    if self._rps <= self._min_rps:
+        logger.info(
+            "Adaptive RPS at floor (%.2f); further throttles indicate identity "
+            "rejection (WAF), not rate. Consider UA / header change next.",
+            self._rps,
+        )
+  Fire it AT MOST once per limiter instance via a `self._floor_warned` flag if
+  noise is a concern.
+
+After applying:
+- AST-parse the file.
+- Append a new follow-on entry to the progress log per AGENTS.md ritual.
+- Hand back to me; I sync to Mac and re-run `enrich-met --limit 200`.
+
+DEFERRED (do NOT touch without explicit go): P-B2 doc reword; P-H1
+autocommit/BEGIN/COMMIT; P-H4 `--where` env gate; P-H3 paramstyle=qmark;
+P-H2 DATA-01 deaccession; P-L1 legacy SQLite delete; UA / header changes.
+
+HARD RULES: ASCII only; UPPERCASE Snowflake identifiers; no make iac from
+workspace; no push to main; one knob at a time; mentor tone; quote the End of
+window header back to me first.
+```
+
+- **End of this window (sixth -- the visibility patches are gated for the next
+  window per the codified Session-close ritual).**
+
 ### 2026-05-31 (same window, follow-on 5) | RUN RESULT + V1/V2/V3 GATED FOR NEXT WINDOW
 - **What changed this turn (workspace stage; applied-to-account: no; pushed-to-Mac:
   no):** nothing in code or IaC. This entry only -- the codified close ritual + a

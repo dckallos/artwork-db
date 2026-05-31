@@ -123,6 +123,11 @@ class _RateLimiter:
         self._throttle_burst += 1
         if self._throttle_burst >= 3:
             self._rps = max(self._min_rps, self._rps * 0.7)
+            if self._rps <= self._min_rps:
+                logger.info(
+                    "Adaptive RPS at floor (%.2f); further throttles indicate "
+                    "identity rejection, not rate.", self._rps,
+                )
             self._throttle_burst = 0
             logger.info("Adaptive RPS dropped to %.2f after throttle burst", self._rps)
 
@@ -215,7 +220,7 @@ async def _fetch_one(
                     last_error = f"HTTP {status}"
                     delay = _retry_after_seconds(resp)
                     if delay is None:
-                        delay = base_backoff * (2 ** (attempt - 1))
+                        delay = min(60.0, base_backoff * (2 ** (attempt - 1)))
                     delay += random.uniform(0, 0.5)  # jitter
                     # P-T2: surface the throttle picture in the per-batch log.
                     if status == 403:
@@ -226,6 +231,10 @@ async def _fetch_one(
                         rate_limiter.throttle_other += 1
                     rate_limiter.backoff_seconds += delay
                     rate_limiter.note_throttle()
+                    logger.info(
+                        "oid=%s attempt=%s HTTP=%s sleeping=%.1fs (rps=%.2f)",
+                        object_id, attempt, status, delay, rate_limiter.rps,
+                    )
                     await asyncio.sleep(delay)
                     continue
 
@@ -244,7 +253,11 @@ async def _fetch_one(
 
         except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             last_error = f"{type(exc).__name__}: {exc}"
-            delay = base_backoff * (2 ** (attempt - 1)) + random.uniform(0, 0.5)
+            delay = min(60.0, base_backoff * (2 ** (attempt - 1))) + random.uniform(0, 0.5)
+            logger.info(
+                "oid=%s attempt=%s network exception sleeping=%.1fs (rps=%.2f)",
+                object_id, attempt, delay, rate_limiter.rps,
+            )
             await asyncio.sleep(delay)
 
     # All retries exhausted.
