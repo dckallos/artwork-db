@@ -48,7 +48,18 @@ advisory lease) is no longer "build belt-and-suspenders later"; it is the
 *only* recommendation that would have prevented this specific failure mode,
 because #2 and #3 only address queries and detection — neither stops a ghost
 agent from writing files. Detail in `session-3-progress-log.md` 2026-05-31
-INCIDENT entry. Owner decision on the re-prioritization pending.
+INCIDENT entry.
+
+**Status update (2026-05-31, owner-applied):** recs **#2 + #3 are LIVE in the
+account** as of `make infra` 2026-05-31 — `ABORT_DETACHED_QUERY=TRUE` set
+account-wide, `BRONZE.CORTEX_FORK_ALERT` resumed, `BRONZE.CORTEX_FORK_INCIDENTS`
+ready to receive rows. **Rec #1 explicitly DEFERRED in favor of Track D**
+(see `docs/context/track-d-resumable-agents.md` + `docs/context/track-d-checklist.md`).
+Rationale: Track D removes the substrate the ghost-fork pattern depends on
+(the Cortex Code "fresh session" defect) by moving repeat workflows onto a
+thread-persistent Cortex Agent. If Track D succeeds, rec #1 becomes
+unnecessary. If `CORTEX_FORK_INCIDENTS` accrues rows during Track-D buildout,
+rec #1 returns to the table.
 
 ---
 

@@ -296,6 +296,26 @@
   method that reliably terminates all of a user's clients. `ABORT_SESSION` is a stun, not
   a kill — keep it only for interrupting a runaway query in a session you can positively id.
 
+### 2026-05-31 | APPLIED | connection-resilience recs #2 + #3 LIVE (post-ghost reconciliation)
+- **What happened:** owner reviewed the 7 ghost-written files privately (scenario B confirmed: ghost fork, NOT local Mac authoring), accepted them as-is (quality assessed materially better than the live window's strawman), committed to `donkey-kong-sandbox`, and ran `make infra` — successfully and idempotently.
+- **Now LIVE in the account (verified read-only at apply-time, owner-reported):**
+  - `ABORT_DETACHED_QUERY = TRUE` at account level (was FALSE/default). Caps any orphaned query at 5 min after client disconnect.
+  - `BRONZE.CORTEX_FORK_INCIDENTS` audit table created.
+  - `BRONZE.CORTEX_FORK_ALERT` created + RESUMED — fires every 5 min; inserts a row when >1 distinct `cortex_code_snowsight` session is active for `PORCHANALYTICS` in the prior 10 min.
+  - `ARTWORK_ADMIN` granted `EXECUTE ALERT` + `MONITOR EXECUTION` ON ACCOUNT.
+  - `bootstrap.py` privilege-contract preflight updated in lockstep.
+  - `manifest.txt` extended with `create_account_parameters.sql` (Phase 1 FIRST) + `create_alerts.sql` (after `create_tasks.sql`).
+- **Status flips (owner sign-off — apply this run):**
+  - `connection-resilience.md` Top-3: rec #2 → APPLIED. Rec #3 → APPLIED. Rec #1 (advisory lease) → **explicitly DEFERRED (re-prioritized) but evidence-strengthened by the scenario-B incident**.
+  - `AGENTS.md` Status row for connection-resilience.md: flip from "await owner pick" to "recs #2+#3 APPLIED 2026-05-31".
+- **Empirical question now answerable:** the alert is the experimental probe. If `BRONZE.CORTEX_FORK_INCIDENTS` accrues rows in the next N days, scenario B happens at a measurable rate and the lease (#1) becomes mandatory. If it stays empty, the discipline + #2 + #3 is sufficient.
+- **Pivot recorded:** owner is moving to **Track D (Cortex Agents Run + threads as a Code-UI alternative)** as the next session — see `docs/context/track-d-resumable-agents.md` (planning) + `docs/context/track-d-checklist.md` (flexible growth checklist; written this session). The motivation is bluntly time: Met data extraction + dbt pipeline work is the actual project, and connection instability has consumed a full work-cycle. Track D is the structural fix that lets data work resume reliably; rec #1 (the lease) is parked behind it.
+- **What was NOT done in this final stretch (single-instance discipline maintained):**
+  1. Did not invent additional IaC.
+  2. Did not flip register entries beyond what the apply justifies.
+  3. Did not start authoring the actual Track-D agent — that is explicitly the next window's job.
+
+
 ### 2026-05-31 | INCIDENT | dual-instance recurred mid-session-resilience-research (scenario-B confirmed)
 - **What happened:** during a connection blip in this very session, a ghost Cortex Code
   fork executed in parallel and wrote 7 files of high-quality IaC implementing
