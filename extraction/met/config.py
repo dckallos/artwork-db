@@ -16,8 +16,11 @@ from dotenv import load_dotenv
 # Load .env from current working directory if present.
 load_dotenv()
 
+# MetObjects.csv is stored via Git LFS. raw.githubusercontent.com serves the
+# ~130-byte LFS *pointer*, not the file; the media host serves real LFS content
+# (DATA-06). Override with MET_CSV_URL if the path ever changes.
 MET_CSV_URL = (
-    "https://raw.githubusercontent.com/metmuseum/openaccess/master/MetObjects.csv"
+    "https://media.githubusercontent.com/media/metmuseum/openaccess/master/MetObjects.csv"
 )
 MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1"
 
@@ -32,7 +35,7 @@ class Config:
     )
 
     # CSV bootstrap inputs.
-    csv_url: str = MET_CSV_URL
+    csv_url: str = field(default_factory=lambda: os.getenv("MET_CSV_URL", MET_CSV_URL))
     csv_local_path: Path = field(
         default_factory=lambda: Path(
             os.getenv("MET_CSV_LOCAL_PATH", "./data/MetObjects.csv")
