@@ -1,0 +1,109 @@
+{
+  "permissions": {
+    "file_system": {
+      "read": {
+        "allowlist": [
+          "**/*.sql",
+          "**/*.py",
+          "**/*.sh",
+          "**/*.md",
+          "**/*.txt",
+          "**/*.yml",
+          "**/*.yaml",
+          "**/*.json",
+          "**/*.toml",
+          "Makefile",
+          ".env.example",
+          ".gitignore",
+          "requirements.txt",
+          "profiles.yml.example"
+        ]
+      },
+      "write": {
+        "allowlist": [
+          "**/*.sql",
+          "**/*.py",
+          "**/*.sh",
+          "**/*.md",
+          "docs/context/**",
+          "infrastructure/**",
+          "extraction/**",
+          "scripts/sql/**",
+          ".claude/**"
+        ],
+        "denylist": [
+          "**/config.toml",
+          "**/*.pem",
+          "**/*.p8",
+          ".env"
+        ]
+      },
+      "execute": {
+        "denylist": [
+          "**/drop_*.sql",
+          "scripts/rollback_sql.sh",
+          "rename_and_update.py"
+        ]
+      }
+    },
+    "bash": {
+      "allowlist": [
+        "python -m extraction.met.run*",
+        "scripts/check.sh*",
+        "scripts/checkpoint.sh*",
+        "snow sql --connection admin --query*",
+        "git status",
+        "git diff*",
+        "git log*",
+        "git branch*",
+        "git checkout donkey-kong-sandbox",
+        "ls*",
+        "find*",
+        "grep*",
+        "cat*",
+        "head*",
+        "tail*"
+      ],
+      "require_confirmation": [
+        "make iac",
+        "make infra",
+        "make bootstrap",
+        "make rollback FILE=*",
+        "make dbt-*",
+        "make down*",
+        "git push*",
+        "git commit*",
+        "snow sql*drop*",
+        "snow sql*delete*",
+        "snow sql*purge*",
+        "*accountadmin*"
+      ],
+      "denylist": [
+        "git push*main",
+        "git checkout main",
+        "rm -rf /*",
+        "ALTER ACCOUNT*"
+      ]
+    },
+    "web_fetch": {
+      "allowlist": [
+        "https://docs.snowflake.com/**",
+        "https://github.com/dckallos/artwork-db/**",
+        "https://metmuseum.github.io/**",
+        "https://api.artic.edu/docs/**",
+        "https://openaccess.clevelandart.org/**",
+        "https://edan.si.edu/openaccess/**"
+      ]
+    }
+  },
+  "environment": {
+    "DEFAULT_CONNECTION": "admin",
+    "SNOW_CONNECTION": "admin",
+    "ARTWORK_REPO_ROOT": "/Users/daniel/dev/artwork-db"
+  },
+  "tools": {
+    "mcp": {
+      "enabled": true
+    }
+  }
+}
