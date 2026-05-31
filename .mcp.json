@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "mcp-server-github",
+      "args": [],
+      "env": {
+        "GITHUB_API_TOKEN": "${GITHUB_PAT}"
+      },
+      "config": {
+        "repositories": [
+          "dckallos/artwork-db"
+        ],
+        "features": {
+          "issues": true,
+          "pull_requests": true,
+          "commits": true,
+          "files": true,
+          "search": true
+        }
+      }
+    },
+    "snowflake": {
+      "command": "mcp-server-snowflake",
+      "args": [],
+      "env": {
+        "SNOWFLAKE_ACCOUNT": "pa37992",
+        "SNOWFLAKE_USER": "${SNOWFLAKE_USER}",
+        "SNOWFLAKE_PRIVATE_KEY_PATH": "${HOME}/.snowflake/keys/admin_key.p8"
+      },
+      "config": {
+        "warehouse": "ARTWORK_WH",
+        "database": "ARTWORK_DB",
+        "role": "ARTWORK_ADMIN",
+        "enabled": false
+      },
+      "_comment": "Snowflake MCP server placeholder - enable when available"
+    }
+  },
+  "auth": {
+    "github": {
+      "note": "Requires GITHUB_PAT environment variable or git-setup/.env file",
+      "setup": "Create PAT at github.com/settings/tokens with repo scope"
+    },
+    "snowflake": {
+      "note": "Uses key-pair auth from ~/.snowflake/config.toml",
+      "setup": "Run scripts/snowflake_cli/setup.sh --phase admin"
+    }
+  }
+}
