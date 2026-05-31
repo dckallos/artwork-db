@@ -1,14 +1,22 @@
 """
 Command-line entry point for the Met extractor pipeline.
 
-Subcommands:
+The Snowflake-authoritative pipeline (Option B; the current architecture):
+  snapshot    Load the full Met OpenAccess CSV into BRONZE.MET_CSV_SNAPSHOT
+              (descriptive truth; no API calls). [Phase 1]
+  seed        Insert 'pending' control rows for a bounded slice of the snapshot
+              into BRONZE.MET_ENRICHMENT_CONTROL -- this is where the costly
+              enrichment is bounded. [Phase 2]
+  enrich      Drain BRONZE.MET_WORKLIST: lease-claim a batch, fetch image URLs from
+              the Met API locally, assemble RAW_MET_OBJECTS server-side from the
+              snapshot, and write outcomes back to the control table. [Phase 3]
+
+Legacy SQLite path (kept for now; superseded by the above -- pending removal):
   bootstrap   Download the Met OpenAccess CSV and upsert it into SQLite.
-  snapshot    Load the Met OpenAccess CSV into BRONZE.MET_CSV_SNAPSHOT (the
-              Snowflake-authoritative descriptive truth; Option B, no API calls).
-  enrich      Call the Met API to fetch image URLs for every pending row.
-  upload      Upload enriched rows (status=done, not yet uploaded) to Bronze.
-  status      Print row counts by enrichment_status / upload state.
-  all         Run bootstrap, enrich, then upload in sequence.
+  upload      Upload enriched SQLite rows (status=done, not yet uploaded) to Bronze.
+  all         Run bootstrap, the legacy SQLite enrich, then upload in sequence.
+
+  status      Print row counts by enrichment_status / upload state (SQLite).
 
 Usage:
   python -m extraction.met.run <command> [-v]
@@ -21,9 +29,11 @@ import sys
 from typing import Optional, Sequence
 
 from .config import Config
+from .control_enricher import enrich_from_control
+from .control_seeder import seed_control
 from .csv_bootstrap import bootstrap
 from .db import connect, initialize_database
-from .image_enricher import enrich
+from .image_enricher import enrich as enrich_sqlite_legacy
 from .snapshot_loader import load_snapshot
 from .snowflake_uploader import upload
 
@@ -106,6 +116,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Cap objects loaded (smoke testing). Default: full file.",
     )
 
+    p_seed = sub.add_parser(
+        "seed-control",
+        help="Phase 2: seed MET_ENRICHMENT_CONTROL from a bounded snapshot slice.",
+    )
+    p_seed.add_argument(
+        "--department", default=None,
+        help="Exact Met department to seed (snapshot value). Default: all public-domain departments.",
+    )
+    p_seed.add_argument(
+        "--include-non-public-domain", action="store_true",
+        help="Drop the public-domain gate (seed the slice regardless of license).",
+    )
+    p_seed.add_argument(
+        "--limit", type=int, default=None,
+        help="Cap rows seeded (smoke testing). Default: the full slice.",
+    )
+
+    p_enrich_met = sub.add_parser(
+        "enrich-met",
+        help="Phase 3: claim a worklist batch, fetch images, assemble Bronze.",
+    )
+    p_enrich_met.add_argument(
+        "--limit", type=int, default=None,
+        help="Max objects to claim+enrich this run (batch bound). Default: whole worklist.",
+    )
+
     sub.add_parser("enrich", help="Fetch image URLs from the Met API for pending rows.")
     sub.add_parser("upload", help="Upload enriched rows to Snowflake Bronze.")
     sub.add_parser("status", help="Print pipeline status counts.")
@@ -120,6 +156,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         bootstrap(config, refresh_csv=not args.no_refresh)
     elif args.command == "snapshot":
         load_snapshot(config, refresh_csv=not args.no_refresh, limit=args.limit)
+    elif args.command == "seed-control":
+        seed_control(
+            config,
+            department=args.department,
+            public_domain_only=not args.include_non_public_domain,
+            limit=args.limit,
+        )
+    elif args.command == "enrich-met":
+        enrich_met(config, limit=args.limit)
     elif args.command == "enrich":
         enrich(config)
     elif args.command == "upload":

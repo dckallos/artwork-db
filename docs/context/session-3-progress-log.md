@@ -635,4 +635,50 @@
 - No packaging config exists (`no setup.py/pyproject/setup.cfg`); package is used via `python -m`.
 - file-map.md note added under the extraction/met section.
 
+### 2026-05-31 (new window) | RESUME → SNAPSHOT LOADED + PHASE 2/3 SEAM FIX (gated; not run)
+- **Owner reported:** snapshot load DONE on the Mac. Verified live read-only:
+  `MET_CSV_SNAPSHOT` = **484,956 rows** (248,472 public-domain); `MET_ENRICHMENT_CONTROL`
+  / `MET_WORKLIST` / `RAW_MET_OBJECTS` = 0. Owner ran `analysis/met_snapshot_profile.sql`
+  and shared output. Resume point per prior "Next" = pick slice → Phase 2 → Phase 3.
+- **Solo:** exactly 1 `cortex_code_snowsight` session (re-checked 3x incl. after a mid-turn
+  connection interruption); `CORTEX_FORK_INCIDENTS` = 0.
+- **RECONCILIATION FINDING (dropped-turn / dual-FS).** The prior log said "Phases 2 & 3 NOT
+  authored yet," but the authoritative workspace-stage tree ALREADY contains them:
+  `control_seeder.py` (Phase 2), `met_enricher.py` (Phase 3), and SQL templates
+  `seed_enrichment_control.sql`, `claim_worklist.sql`, `assemble_raw_met_objects.sql`,
+  `callback_enrichment_control.sql`, `release_lease.sql`, `copy_into_enrich_stg.sql`,
+  `update_enrichment_done.sql`. run.py wires `seed-control` + `enrich-met`. Quality is high
+  and matches the locked design (Option B + PIPE-06 hybrid; PIPE-05 batch-grained callback;
+  AUTO-03 logging). Reused primitives (`_fetch_one`, `_RateLimiter`, `_snowflake_connect`,
+  `load_sql`) all match their call sites.
+- **DUAL-FS HAZARD HIT (documented gotcha confirmed):** my FIRST reads of `control_seeder.py`
+  (137-line variant, default `public_domain_only=True`, `filters`/`limit_clause` names) and
+  `run.py` (143-line variant, NOT wired) were STALE snapshots. The edit tool + subsequent
+  reads showed the true current files (`control_seeder.py` 158 lines with `_build_predicate`
+  + `highlight_only`/`where` + unbounded-seed guard; `run.py` 179 lines fully wired). Lesson
+  re-confirmed: an `edit` refreshes to the true file; a lone `read` can be stale — re-read
+  after any edit anomaly. Solo throughout (no live ghost; the variants are stale cache, not a
+  concurrent writer).
+- **ONE REAL BUG FIXED (workspace edit; NOT executed):** `control_seeder.py` rendered the seed
+  SQL with `.format(... predicate=filters ...)` but the variable is `predicate` (and `filters`
+  never existed in the authoritative version) → `NameError`/`KeyError` at runtime. Fixed to
+  `.format(control=…, snapshot=…, predicate=predicate, limit=limit_clause)`. No other file
+  changed; run.py wiring needed nothing.
+- **VERIFIED (read-only / compile-only — no data mutation):**
+  - Rendered seed MERGE for the European Paintings PD slice **compiled clean** (`only_compile`).
+  - Predicate `is_public_domain=TRUE AND department='European Paintings'` resolves to **2,327**
+    rows live — exactly the profile's count. Slice logic correct.
+- **SLICE RECOMMENDATION (mentor):** first bounded seed = **European Paintings** (2,327 PD,
+  worklist department_priority 1) — smallest high-value slice, enriches in <1 min at 80 rps;
+  validates the whole untested Phase-3 path before scaling to Drawings/Prints (65k) etc.
+- **NOT done (owner-run on the Mac — has loader key + the API egress):**
+  1. Commit the `control_seeder.py` one-line fix on `donkey-kong-sandbox`.
+  2. `python -m extraction.met.run seed-control --department "European Paintings" -v`
+     (expect inserted=2327; idempotent re-run = 0). Optional `--limit 50` smoke first.
+  3. `python -m extraction.met.run enrich-met --limit 200 -v` smoke, then no `--limit` to drain.
+  4. Report back: `MET_ENRICHMENT_CONTROL` / `MET_WORKLIST` / `RAW_MET_OBJECTS` counts +
+     `EXTRACTION_LOG` rows.
+- **Next window:** verify control seeded (2327 pending) + first enrich batch landed in
+  RAW_MET_OBJECTS; then DATA-01 deaccession diff, AUTO-03 audit review, and widening the slice.
+
 
