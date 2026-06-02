@@ -52,7 +52,8 @@ this doc alone. Escalate to source only via the triggers at the bottom.
 - Heavy header banners: purpose, zero-export resolution order, idempotency note,
   paired rollback, optional env. `==>` progress echoes.
 - `snow sql --filename <f> --variable k=v --enhanced-exit-codes`; SQL templates use
-  `&{ var }` substitution. **Credentials only via runtime `--variable`, never
+  `<% var %>` substitution (the current CLI syntax; migrated 2026-06-01 from the
+  deprecated `&{ var }`). **Credentials only via runtime `--variable`, never
   literals in `.sql`.**
 - Strict perms: `~/.snowflake` & `keys` → 700; `config.toml` & `.p8` → 600; `.pub` → 644.
 - Atomic config edits: timestamped `.bak`, temp file same dir, `mv`, re-chmod 600,

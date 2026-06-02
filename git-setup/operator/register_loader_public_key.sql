@@ -16,8 +16,11 @@
 --       --enhanced-exit-codes
 --
 -- The 'loader_user' and 'rsa_public_key' variables are substituted at runtime
--- by the snow CLI. After this script runs, DESCRIBE USER reports a populated
--- RSA_PUBLIC_KEY_FP and 'snow connection test -c loader' succeeds.
+-- by the snow CLI. After this script runs, the key is registered; proof that it
+-- works is the JWT handshake in 07_test_loader_connection.sh ('snow connection
+-- test -c loader' + a CURRENT_USER round-trip), a stronger check than echoing
+-- DESCRIBE USER. We deliberately do NOT run DESCRIBE USER here (it would dump
+-- the full service-user record for no added assurance).
 --
 -- Prerequisite: `make iac` must have already created ARTWORK_LOADER_SVC via
 -- infrastructure/create_service_user.sql (TYPE = SERVICE).
@@ -26,7 +29,5 @@
 -- new key rotates the credential.
 -- =============================================================================
 
-ALTER USER &{ loader_user }
-    SET RSA_PUBLIC_KEY = '&{ rsa_public_key }';
-
-DESCRIBE USER &{ loader_user };
+ALTER USER <% loader_user %>
+    SET RSA_PUBLIC_KEY = '<% rsa_public_key %>';

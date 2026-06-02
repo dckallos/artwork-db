@@ -2165,6 +2165,14 @@ landed in one canonical state:
   `default_connection_name` safely above all sections); pruning + dup-guard wired into
   `replace_*`/`upsert_*`.
 - `04`/`08`: friendly "run --phase init-profile" hint on a missing config.toml.
+- **Register-SQL cleanup (post-review tweaks this session):** removed the
+  `DESCRIBE USER` from `git-setup/operator/register_{admin,loader}_public_key.sql`
+  (it dumped the full ~45-row user record on every 04/05/06/08 apply for no added
+  assurance — the JWT `connection test` is stronger proof), and migrated those
+  files' templating from the deprecated `&{ var }` to `<% var %>`, matching the
+  rest of the repo (`create_git_ops_db.sql`, `checkpoint.sql`, `orchestrate.sh`),
+  which clears the CLI deprecation warning. Each file is now a single `ALTER USER
+  ... SET RSA_PUBLIC_KEY` statement.
 
 **Arc B — production-grade multi-account (owner approved; item 4 INCLUDED):**
 - Connection names are now variables `SNOW_LIB_ADMIN_CONN` / `SNOW_LIB_LOADER_CONN`
