@@ -23,8 +23,9 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `setup.sh` | ~ | Entry point; `--phase` dispatcher, chmods + runs 00–08 | prior | changing phase routing |
-| `_lib.sh` | ~ | Shared helpers (TOML parse/rewrite, JWT verify, resolvers) | prior | need exact awk/TOML logic |
+| `setup.sh` | ~ | Entry point; `--phase` dispatcher (prereq/init-profile/admin/loader/promote/all/**list/switch**), `--profile`/`--admin-conn`/`--loader-conn` selectors, chmods + runs 00–08 | 2026-06-01 | changing phase routing |
+| `_lib.sh` | ~ | Shared helpers (TOML parse/rewrite incl. top-level keys, JWT verify, conn-aware resolvers, key-path derivation, `list_connections`/`set_default_connection`, `prune_backups`) | 2026-06-01 | need exact awk/TOML logic |
+| `init_profile.sh` | ~120 | Local-only: seed `[connections.<admin>]` non-destructively (prompts/env) + set `default_connection_name`; runs inside `prereq` between 02 and 03 | 2026-06-01 | changing config.toml seeding |
 | `00_install_snowflake_cli.sh` | 29 | brew/pipx install, idempotent | prior | changing install path |
 | `01_init_snowflake_home.sh` | 25 | mkdir ~/.snowflake/{keys,logs}, chmod 700 | prior | changing perms/layout |
 | `02_generate_admin_keypair.sh` | 40 | PKCS#8 keypair, overwrite-guarded | prior | changing key type/encryption |

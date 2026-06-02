@@ -2135,3 +2135,169 @@ solo-session=1 + CORTEX_FORK_INCIDENTS clean; then present your research plan
   added, multi-artist simplification documented. No account changes. Owner's next step:
   sync to Mac, then open a new window with the hand-off prompt above to execute M1.)**
 
+---
+
+## 2026-06-01 — follow-on 11 (Snowflake CLI setup: resilience hardening + multi-account)
+
+> This single entry SUPERSEDES the two earlier duplicate "follow-on 11" blocks that
+> a concurrent (forked) Cortex window appended this date. It is the canonical record.
+
+### What changed this turn
+
+Workspace-only edits to `scripts/snowflake_cli/` + the three context docs. Two arcs,
+landed in one canonical state:
+
+**Arc A — resilience hardening (single-account):**
+- NEW `init_profile.sh`: seeds `[connections.<admin>]` in `config.toml`. INTERACTIVE
+  wizard — prompts per-field for account, login user, role [default ACCOUNTADMIN],
+  warehouse [default COMPUTE_WH]; each value is also overridable via its env var
+  (`SNOWFLAKE_ACCOUNT`/`SNOWFLAKE_ADMIN_USER`/`SNOWFLAKE_ROLE`/`SNOWFLAKE_WAREHOUSE`)
+  for non-interactive/CI use. The login PASSWORD is NOT collected here — it stays a
+  hidden one-time `read -rs` prompt in `--phase admin` (key-pair-only; never stored).
+  Non-destructive (skips if `account` already set); sets `default_connection_name`
+  when unset. Closes the gap where 04/08 READ the admin block but nothing CREATED it.
+  Runs inside `prereq` between 02 and 03.
+  (Note: evaluated `snow connection add` — it prompts per-field + hides password
+  natively, but always stores a password and validates `--private-key` exists,
+  conflicting with our key-pair-only convention; chose to extend our own seeder.)
+- `_lib.sh`: `prune_backups` (keep newest 5 `.bak.*`), `warn_duplicate_section`,
+  `parse_toml_toplevel_key` / `upsert_toml_toplevel_key` (manage
+  `default_connection_name` safely above all sections); pruning + dup-guard wired into
+  `replace_*`/`upsert_*`.
+- `04`/`08`: friendly "run --phase init-profile" hint on a missing config.toml.
+
+**Arc B — production-grade multi-account (owner approved; item 4 INCLUDED):**
+- Connection names are now variables `SNOW_LIB_ADMIN_CONN` / `SNOW_LIB_LOADER_CONN`
+  (default `admin`/`loader`). Key files derive from the conn name
+  (`admin_key_path`/`loader_key_path`) — defaults preserve `admin_rsa_key.p8` /
+  `loader_rsa_key.p8`; `clientb` → `clientb_rsa_key.p8` / `clientb_loader_rsa_key.p8`.
+- `_lib.sh`: `validate_conn_name`, conn-aware `resolve_admin_*` + `verify_admin_jwt_full`,
+  `list_connections`, `set_default_connection`.
+- All of `02`–`08` + `init_profile.sh` derive their section + key paths from the conn
+  vars (every script that uses `SNOW_LIB_*` sources `_lib.sh` — verified).
+- `setup.sh`: `--profile LABEL` / `--admin-conn` / `--loader-conn` selectors
+  (validated + exported), new `list` and `switch` phases (functions + dispatch arms).
+- Docs: `file-map.md` (init_profile row + setup/_lib rows refreshed), `cli-connection.md`
+  ("Multi-account" section), `AGENTS.md` (cli-connection Status row updated).
+- **Item 4 (Makefile `CONN=` passthrough) LANDED:** `Makefile` has `CONN ?= admin`,
+  threaded as `--connection $(CONN)` through `iac`/`infra`/`bootstrap`/`down`/
+  `down-from`/`rollback`. `make iac CONN=clientb` now targets a 2nd account end-to-end.
+  Verified via `make -n` dry-runs (default → `admin`; `CONN=clientb` → `clientb`).
+
+- workspace stage: **edited (validated)**.  applied-to-account: **no**.  pushed-to-Mac: **no**.
+
+### DUAL-INSTANCE INCIDENT (important)
+
+A second, forked Cortex window ran this SAME approved plan concurrently. Detected when
+`02` already contained edits I had not made (using the exact helper names invented this
+turn), and `init_profile.sh` + `setup.sh` changed ON DISK between consecutive reads
+(duplicate `list)`/`switch)` case arms appeared). This window HALTED, surfaced it, and —
+after owner said "proceed with reconciliation" — reconciled rather than re-applied:
+read fresh, kept the other window's consistent edits, fixed only the genuine gaps
+(`setup.sh` missing `list`/`switch` dispatch + a duplicate arm; `08:85` literal `-c
+admin`), then validated end-to-end. The earlier duplicate log blocks are collapsed into
+this one entry. Root-cause + mechanism: `docs/context/connection-resilience.md`.
+
+### Cumulative workspace state vs the Mac
+
+Mac is behind by: follow-on 10 (dbt-plan.md + AGENTS.md) AND all of follow-on 11
+(the `scripts/snowflake_cli/` suite + file-map.md + cli-connection.md + AGENTS.md row).
+Next sync carries the whole delta. Nothing committed; owner decides when to stage on
+`donkey-kong-sandbox`.
+
+### Solo-session check result
+
+NOT cleanly solo this turn — a forked window was active (see incident above). Account
+interaction was ZERO (pure local file edits + `mktemp` smoke tests), so no account
+writes raced. Owner should confirm a single live session before the NEXT window writes.
+
+### Validation performed this window
+
+- `bash -n` clean on all 12 scripts.
+- Every script using `SNOW_LIB_*` confirmed to `source _lib.sh`.
+- E2E smoke (temp `HOME`/config): default flow seeds `[connections.admin]` +
+  `default_connection_name="admin"` with historical key paths; `--profile clientb`
+  adds `[connections.clientb]` non-destructively (admin untouched); `--phase list`
+  marks the default; `--phase switch` repoints it (with backup); `--phase list` then
+  reflects it; `validate_conn_name "bad.name"` rejected; `prune_backups` kept newest 5.
+
+### First-action options for the next window
+
+(a) **Sync workspace → Mac** (git add + commit on `donkey-kong-sandbox`), then
+    field-test `setup.sh --profile clientb --phase list/switch` on the Mac against a
+    TEMP config (never the live `~/.snowflake`).
+(b) **Resume dbt M1** per the follow-on 10 hand-off prompt (the primary roadmap).
+(c) **Clear a deferred patch** (dbt_orchestrate.sh `-c admin` literals; stale V/R/B refs).
+
+### Read-only verification queries
+
+N/A — no schema or data state changed this turn.
+
+### Decision tree for next window
+
+```
+Owner confirms single live session
+  -> wants the CLI work durable        -> (a) sync to Mac + temp-config field test
+  -> wants forward data work           -> (b) dbt M1 (follow-on 10 hand-off)
+  -> wants cleanup                     -> (c) deferred patches
+```
+
+### Deferred patches (priority order)
+
+1. Met enrichment Phase 3 drain (full EP collection) — whenever owner is ready.
+2. Stale V/R/B refs outside infrastructure; `rename_and_update.py` removal decision.
+3. `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+
+> RESOLVED this turn: `dbt_orchestrate.sh` teardown no longer hardcodes `-c admin`
+> or `ARTWORK_DB` — it now uses `ADMIN_CONN="${SNOW_CONNECTION:-admin}"` (+ a
+> `--connection` flag) and `${SNOWFLAKE_DATABASE}`, and `make dbt-teardown CONN=...`
+> threads it. The multi-account model now reaches the dbt teardown path too.
+
+### What MUST NOT happen in the next window
+
+- Do NOT run `init_profile.sh` / `setup.sh --phase prereq|all|switch` against the
+  owner's LIVE `~/.snowflake/config.toml` without sign-off (it backs up + chmods it).
+- Do NOT write ANY shared file before confirming a single live Cortex session.
+- Do NOT run `make iac` from the workspace; do NOT push to `main`.
+- Do NOT install dbt in the workspace sandbox (dbt runs on the Mac only).
+
+### Hand-off prompt (paste into a new Cortex window)
+
+```
+SESSION HANDOFF — artwork-db / Snowflake CLI setup (resilience + multi-account landed)
+
+ROLE: Senior Data/Platform Engineer mentor for a Snowflake learning project.
+Account: pa37992 (config.toml org id HXCNOII-RS05429). Branch: donkey-kong-sandbox.
+Explain the WHY and trade-offs; the OWNER decides, you honor it.
+
+SESSION-OPEN RITUAL (in order, before any write):
+1. Read /workspace/AGENTS.md (cheapest read; orientation).
+2. Read ONLY the last "End of this window" entry in
+   /workspace/docs/context/session-3-progress-log.md (titled "follow-on 11").
+3. SOLO-SESSION CHECK before any write (a forked window raced the last session!):
+     SELECT COUNT(DISTINCT SESSION_ID) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+      WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%'
+        AND START_TIME > DATEADD(minute, -10, CURRENT_TIMESTAMP());
+     SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY 1 DESC LIMIT 5;
+   Exactly 1 = solo; >1 = STOP and ask. Re-read any shared file immediately before editing.
+4. DUAL-FS: workspace edits are NOT on the Mac until synced. State the plan and wait for
+   "proceed (date)" before any write or execution.
+
+STATE (do not re-derive):
+- scripts/snowflake_cli/ is hardened + multi-account: init_profile.sh, conn-aware
+  _lib.sh, setup.sh --profile/--admin-conn/--loader-conn + list/switch phases. Defaults
+  admin/loader unchanged. Makefile threads CONN= (make iac CONN=clientb). LOCAL-ONLY,
+  validated, not applied to account, not synced to Mac.
+- dbt M1 (follow-on 10) still pending and is the primary roadmap item.
+
+YOUR TASK: ask the owner whether to (a) sync to Mac + field-test on a TEMP config,
+(b) resume dbt M1, or (c) clear a deferred patch. Plan, then wait for proceed.
+
+HARD RULES: No make iac from workspace. No push to main. No dbt install in workspace.
+Never run init_profile.sh/switch against the live ~/.snowflake/config.toml without sign-off.
+
+FIRST RESPONSE: Quote back the "End of this window (eleventh...)" header; confirm
+solo-session=1 + CORTEX_FORK_INCIDENTS clean; then ask which of (a)/(b)/(c) and wait.
+```
+
+- **End of this window (eleventh; CANONICAL — supersedes the two duplicate follow-on 11 blocks from the forked window AND the "tenth" marker. Snowflake CLI setup suite hardened AND made multi-account: NEW init_profile.sh; conn-aware _lib.sh (SNOW_LIB_ADMIN_CONN/LOADER_CONN, key-path derivation, list_connections/set_default_connection, prune_backups, dup-guard); setup.sh --profile/--admin-conn/--loader-conn + list/switch phases; 02-08 parameterized; docs updated (file-map, cli-connection, AGENTS). Defaults admin/loader unchanged. Dual-instance incident this turn — reconciled, not re-applied. **Item 4 Makefile CONN= passthrough LANDED** (make iac CONN=clientb; verified via make -n). All LOCAL-ONLY: validated via bash -n + temp-config E2E + make -n dry-runs; not applied to account, not synced to Mac.)**

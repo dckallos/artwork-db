@@ -21,6 +21,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DBT_PROJECT_DIR="$REPO_ROOT/artwork_pipeline"
 PROFILES_DIR="$DBT_PROJECT_DIR"
 
+# snow CLI connection used by the teardown phase's `snow sql` calls. Defaults to
+# $SNOW_CONNECTION else "admin" (same convention as scripts/orchestrate.sh +
+# apply_sql.sh), and is overridable via --connection NAME so teardown can target
+# a second account set up via `setup.sh --profile <label>`.
+ADMIN_CONN="${SNOW_CONNECTION:-admin}"
+
 # ---------- Helpers ----------
 
 usage() {
@@ -37,6 +43,8 @@ Phases:
 
 Options:
   --phase        Required. The lifecycle phase to execute.
+  --connection   snow CLI connection for the teardown phase's admin DDL
+                 (default: \$SNOW_CONNECTION else "admin"). Ignored by other phases.
   --help         Show this message.
 EOF
   exit "${1:-0}"
@@ -94,6 +102,7 @@ PHASE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --phase) PHASE="$2"; shift 2 ;;
+    --connection) ADMIN_CONN="$2"; shift 2 ;;
     --help|-h) usage 0 ;;
     *) err "Unknown arg: $1" ;;
   esac
@@ -144,11 +153,15 @@ case "$PHASE" in
       log "Aborted."
       exit 0
     fi
-    # Use snow CLI (admin connection) to drop and recreate schemas, preserving grants
-    snow sql -q "DROP SCHEMA IF EXISTS ARTWORK_DB.SILVER CASCADE;" -c admin
-    snow sql -q "DROP SCHEMA IF EXISTS ARTWORK_DB.GOLD CASCADE;" -c admin
-    snow sql -q "CREATE SCHEMA IF NOT EXISTS ARTWORK_DB.SILVER;" -c admin
-    snow sql -q "CREATE SCHEMA IF NOT EXISTS ARTWORK_DB.GOLD;" -c admin
+    # Use snow CLI (admin connection) to drop and recreate schemas, preserving grants.
+    # Connection + database are parameterized for multi-account consistency:
+    #   - $ADMIN_CONN  from --connection / $SNOW_CONNECTION (default "admin")
+    #   - $SNOWFLAKE_DATABASE  validated above as a required .env var
+    log "teardown target: ${SNOWFLAKE_DATABASE}.{SILVER,GOLD} via -c ${ADMIN_CONN}"
+    snow sql -q "DROP SCHEMA IF EXISTS ${SNOWFLAKE_DATABASE}.SILVER CASCADE;"   -c "$ADMIN_CONN"
+    snow sql -q "DROP SCHEMA IF EXISTS ${SNOWFLAKE_DATABASE}.GOLD CASCADE;"     -c "$ADMIN_CONN"
+    snow sql -q "CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.SILVER;"     -c "$ADMIN_CONN"
+    snow sql -q "CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.GOLD;"       -c "$ADMIN_CONN"
     log "Schemas recreated. Run 'make infra' to restore grants, then 'make dbt-build'."
     ;;
 
