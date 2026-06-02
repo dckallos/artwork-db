@@ -17,6 +17,14 @@
 
 DBT_PROJECT_DIR := artwork_pipeline
 
+# snow CLI connection that IaC targets. Defaults to "admin" (the historical
+# single-account behavior). Override to apply infra to a second account whose
+# admin connection was set up via `setup.sh --profile <label> --phase all`:
+#   make iac CONN=clientb
+# Threaded into every orchestrate.sh invocation; orchestrate.sh forwards it to
+# apply_sql.sh / bootstrap.py (which already accept --connection).
+CONN ?= admin
+
 # ---------- Executable bit policy (Phase 0.6 IaC strategy 3.4) ----------
 # Idempotent chmod 0755 for every .sh bootstrap.py shells out to. Prereq of
 # every IaC target so a missing +x bit can't break `make iac`. Allow-list lives
@@ -32,7 +40,7 @@ chmod:
 
 iac: chmod
 	@echo "==> Applying ALL IaC (B + V + R) via bash orchestrator -> snow sql --filename..."
-	bash scripts/orchestrate.sh --phase all
+	bash scripts/orchestrate.sh --phase all --connection $(CONN)
 
 # git-setup (B) is the optional trailing Git-mirror layer; per the 2026-05-29
 # design decision it runs LAST in `make iac` (after V/R). Standalone run needs
@@ -43,11 +51,11 @@ bootstrap: chmod
 	@echo "    NOTE: B is the OPTIONAL trailing Git-mirror layer (runs LAST in 'make iac')."
 	@echo "    Standalone 'make bootstrap' presumes ARTWORK_ADMIN already exists"
 	@echo "    (created by infrastructure/V001 via 'make infra' or 'make iac')."
-	bash scripts/orchestrate.sh --phase bootstrap
+	bash scripts/orchestrate.sh --phase bootstrap --connection $(CONN)
 
 infra: chmod
 	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."
-	bash scripts/orchestrate.sh --phase infra
+	bash scripts/orchestrate.sh --phase infra --connection $(CONN)
 
 rollback: chmod
 	@if [ -z "$(FILE)" ]; then \
@@ -56,15 +64,15 @@ rollback: chmod
 	fi
 	@PREFIX=$(FILE); \
 		echo "==> Rolling back $$PREFIX via paired drop script..."; \
-		bash scripts/orchestrate.sh --down --file $$PREFIX
+    bash scripts/orchestrate.sh --down --file $$PREFIX --connection $(CONN)
 
 down: chmod
 	@echo "==> Tearing down ALL IaC (paired drops in reverse order)..."
-	bash scripts/orchestrate.sh --phase down
+	bash scripts/orchestrate.sh --phase down --connection $(CONN)
 
 down-from: chmod
 	@if [ -z "$(FROM)" ]; then echo "usage: make down-from FROM=V005"; exit 64; fi
-	bash scripts/orchestrate.sh --phase down --from $(FROM)
+	bash scripts/orchestrate.sh --phase down --from $(FROM) --connection $(CONN)
 
 # ---------- Extraction ----------
 
@@ -103,7 +111,7 @@ dbt-docs:
 	bash scripts/dbt_orchestrate.sh --phase docs
 
 dbt-teardown:
-	bash scripts/dbt_orchestrate.sh --phase teardown
+	bash scripts/dbt_orchestrate.sh --phase teardown --connection $(CONN)
 
 # Direct dbt commands (bypass orchestrator; assumes env is already set)
 dbt-deps:

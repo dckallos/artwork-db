@@ -78,6 +78,34 @@ this doc alone. Escalate to source only via the triggers at the bottom.
    **incompatible with Snowflake-native dbt projects** (no env vars inside
    Snowflake). Matters when designing the CLI-driven production version.
 
+## Multi-account (added 2026-06-01)
+
+The suite manages a **connection pair** (admin + loader) per Snowflake account.
+By default that pair is named `admin` / `loader` (unchanged), but both names are
+parameterized so a SECOND account can be onboarded without collisions.
+
+- **Selectors on `setup.sh`:** `--profile LABEL` (sugar → admin conn `LABEL`,
+  loader conn `LABEL_loader`) or explicit `--admin-conn NAME` / `--loader-conn NAME`.
+  No flags = `admin` / `loader`.
+- **Key files derive from the connection name** (`_lib.sh` `admin_key_path` /
+  `loader_key_path`): default → historical `admin_rsa_key.p8` / `loader_rsa_key.p8`;
+  `--profile clientb` → `clientb_rsa_key.p8` / `clientb_loader_rsa_key.p8`. Two
+  accounts never share a key.
+- **`_lib.sh` is connection-name-aware:** `SNOW_LIB_ADMIN_CONN` / `SNOW_LIB_LOADER_CONN`
+  (exported by `setup.sh`) drive `resolve_admin_*`, `verify_admin_jwt_full`, and the
+  loader/promote scripts; `validate_conn_name` restricts names to `[A-Za-z0-9_-]+`
+  (safe as a TOML bare key and `snow -c` arg).
+- **Inspect / switch (local-only, no account writes):**
+  - `setup.sh --phase list` → `list_connections`: prints every `[connections.*]`
+    and marks `default_connection_name`.
+  - `setup.sh --profile LABEL --phase switch` → `set_default_connection`: repoints
+    `default_connection_name` (timestamped backup, chmod 600).
+- **Onboard a 2nd account end-to-end:**
+  `setup.sh --profile clientb --phase all`, then (targeting that account)
+  `make iac CONN=clientb` (Makefile threads `CONN` → `orchestrate.sh --connection`
+  through `iac`/`infra`/`bootstrap`/`down`/`down-from`/`rollback`; default `admin`),
+  then `--profile clientb --phase promote` / `--phase loader`.
+
 ## When to escalate to full source
 
 - Editing a script's logic → open that one file.

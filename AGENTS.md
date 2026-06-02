@@ -167,7 +167,7 @@ Rules of thumb:
 
 | Domain doc | State |
 |---|---|
-| `docs/context/cli-connection.md` | Complete (Workflow 1; `trusted-prior`) |
+| `docs/context/cli-connection.md` | Complete (Workflow 1; `trusted-prior`). **2026-06-01: CLI setup suite hardened + made multi-account.** New `init_profile.sh` (seeds `[connections.<admin>]`); `_lib.sh` is connection-name-aware (`SNOW_LIB_ADMIN_CONN`/`SNOW_LIB_LOADER_CONN`, key-path derivation, `list_connections`/`set_default_connection`); `setup.sh` gained `--profile`/`--admin-conn`/`--loader-conn` + `list`/`switch`/`init-profile` phases. Defaults `admin`/`loader` unchanged. LOCAL-ONLY (config.toml + scripts; no account writes). See `cli-connection.md` "Multi-account" + latest log entry. |
 | `docs/context/ddl-infrastructure.md` | Complete (infra `trusted-prior`; git-setup + orchestration internals read 2026-05-30) |
 | `docs/context/extraction.md` | Complete (read 2026-05-30) |
 | `docs/context/file-map.md` | Complete; per-file provenance in its `Verified` column. File/dir counts intentionally not hardcoded (anti-rot). Session-3 additions (`bronze_views`, `run_control`, ops suite) are row-mapped. |
