@@ -1,0 +1,213 @@
+# =============================================================================
+# Domain Configuration: Artwork Medallion Pipeline
+# =============================================================================
+# 
+# CONTEXT: Domain-specific configuration for domain-agnostic Snowflake CLI framework
+# PURPOSE: Configures artwork medallion pipeline deployment parameters
+# MAINTAINER: Facebook staff-level implementation
+#
+# This configuration enables the domain-agnostic CLI framework in scripts/lib/
+# to deploy the artwork medallion pipeline to any Snowflake account. The framework
+# components read this configuration to understand domain-specific requirements
+# while maintaining complete separation between domain logic and infrastructure logic.
+#
+# FRAMEWORK INTEGRATION:
+#   scripts/lib/ddl_orchestrator.sh --config config/artwork_domain.yml --phase all
+#   scripts/lib/dbt_orchestrator.sh --config config/artwork_domain.yml --phase build
+#   scripts/lib/connection_resolver.sh (uses connection_defaults for backward compatibility)
+#
+# TEMPLATE SUBSTITUTION:
+#   DDL scripts can use <% domain.database %>, <% roles.admin %>, etc.
+#   Framework automatically substitutes values during execution.
+#
+# =============================================================================
+
+# Domain identity and core database structure
+domain:
+  # Unique identifier for this domain configuration
+  name: artwork
+  
+  # Primary database containing all domain objects
+  database: ARTWORK_DB
+  
+  # Medallion architecture schema structure
+  schemas:
+    - BRONZE    # Raw data landing zone
+    - SILVER    # Cleaned and standardized data
+    - GOLD      # Business-ready analytics tables
+  
+  # Domain description for documentation and validation
+  description: "OpenAccess museum artwork medallion architecture pipeline"
+
+# Role-based access control mapping
+# Maps generic capability types to domain-specific role names
+roles:
+  # Full administrative privileges across all domain objects
+  admin: ARTWORK_ADMIN
+  
+  # Data loading and Bronze schema write privileges
+  loader: ARTWORK_LOADER
+  
+  # Silver/Gold schema transformation privileges (dbt operations)
+  transformer: ARTWORK_TRANSFORMER
+
+# Compute resource allocation
+warehouses:
+  # Primary warehouse for all domain operations
+  default: ARTWORK_WH
+  
+  # Optional: Specialized warehouses for different workloads
+  # extraction: ARTWORK_EXTRACT_WH
+  # transformation: ARTWORK_TRANSFORM_WH
+  # analytics: ARTWORK_ANALYTICS_WH
+
+# Git integration configuration for in-Snowflake repository mirroring
+git:
+  # Source repository (GitHub, GitLab, etc.)
+  repository: dckallos/artwork-db
+  
+  # Snowflake Git integration object name
+  mirror_name: ARTWORK_OPS
+  
+  # Target database for Git repository objects
+  mirror_database: ARTWORK_OPS
+
+# dbt project configuration
+dbt:
+  # Relative path from repository root to dbt project
+  project_dir: artwork_pipeline
+  
+  # Target database for dbt models (typically same as domain.database)
+  target_database: ARTWORK_DB
+  
+  # Default target environment
+  target: prod
+  
+  # Schema mapping for dbt environments
+  schema_mapping:
+    prod:
+      staging: SILVER
+      marts: GOLD
+    dev:
+      staging: SILVER_DEV
+      marts: GOLD_DEV
+
+# Connection name defaults for backward compatibility with existing scripts
+# These map to ~/.snowflake/config.toml connection names
+# 
+# CURRENT CONFIG.TOML STATE:
+# - admin: HXCNOII-RS05429 (PORCHANALYTICS/ACCOUNTADMIN) - original account
+# - loader: HXCNOII-RS05429 (ARTWORK_LOADER_SVC/ARTWORK_LOADER) - original account  
+# - mk07348: OBANOYY-MK07348 (PORCHFLAKE/ACCOUNTADMIN) - new target account
+connection_defaults:
+  # Connection name for administrative operations
+  # NOTE: mk07348 connection only has ACCOUNTADMIN role, no domain-specific roles yet
+  admin_name: mk07348
+  
+  # Connection name for data loading operations
+  # NOTE: mk07348 account doesn't have ARTWORK_LOADER role yet - will be created by framework
+  loader_name: mk07348
+  
+  # Connection name for transformation operations  
+  # NOTE: mk07348 account doesn't have ARTWORK_TRANSFORMER role yet - will be created by framework
+  transformer_name: mk07348
+
+# Data source configuration for extraction pipelines
+data_sources:
+  met:
+    # Metropolitan Museum of Art OpenAccess API
+    api_base_url: https://collectionapi.metmuseum.org/public/collection/v1
+    rate_limit_rps: 80
+    batch_size: 5000
+    
+  # Future data sources can be added here:
+  # cleveland_museum:
+  #   api_base_url: https://openaccess-api.clevelandart.org
+  #   api_key_env_var: CMA_API_KEY
+  # 
+  # art_institute_chicago:
+  #   api_base_url: https://api.artic.edu/api/v1
+  #   rate_limit_rps: 60
+
+# Infrastructure directory structure mapping
+# Maps generic CLI operations to domain-specific file paths
+infrastructure:
+  # Directory containing DDL create scripts
+  ddl_dir: infrastructure
+  
+  # Directory containing Git setup scripts  
+  git_setup_dir: git-setup
+  
+  # Apply order manifest file
+  manifest_file: scripts/manifest.txt
+  
+  # Secret-bearing scripts list for secure execution
+  secret_bearing_file: scripts/secret_bearing.txt
+
+# Validation rules for deployment safety
+validation:
+  # Required environment variables that must be present
+  required_env_vars:
+    - GITHUB_PAT  # Required for Git integration
+  
+  # Connection capability requirements for different operations
+  required_capabilities:
+    admin:
+      - CREATE DATABASE
+      - CREATE ROLE 
+      - CREATE WAREHOUSE
+      - MANAGE GRANTS
+    loader:
+      - USAGE ON DATABASE ARTWORK_DB
+      - CREATE TABLE ON SCHEMA BRONZE
+    transformer:
+      - USAGE ON DATABASE ARTWORK_DB
+      - CREATE TABLE ON SCHEMA SILVER
+      - CREATE TABLE ON SCHEMA GOLD
+      - SELECT ON SCHEMA BRONZE
+
+# Target account information (for reference and validation)
+# This documents the target deployment account: OBANOYY-MK07348
+target_account:
+  account_identifier: "OBANOYY-MK07348"
+  organization_name: "OBANOYY" 
+  account_name: "MK07348"
+  cloud_platform: "AWS"
+  edition: "Enterprise"
+  
+  # Current state: Only ACCOUNTADMIN role exists
+  # Framework will create domain-specific roles during infrastructure deployment
+  existing_setup:
+    user: "PORCHFLAKE"
+    role: "ACCOUNTADMIN"
+    warehouse: "COMPUTE_WH"
+    
+  # Expected state after framework deployment
+  post_deployment:
+    roles_created:
+      - ARTWORK_ADMIN
+      - ARTWORK_LOADER  
+      - ARTWORK_TRANSFORMER
+    warehouses_created:
+      - ARTWORK_WH
+    databases_created:
+      - ARTWORK_DB
+      - ARTWORK_OPS
+
+# Framework metadata (automatically managed)
+framework:
+  version: "1.0.0"
+  schema_version: "1.0"
+  created_date: "2026-06-02"
+  created_by: "Claude Code - Facebook staff-level domain-agnostic framework"
+  
+  # Compatibility information for framework evolution
+  min_cli_version: "1.0.0"
+  supported_snowflake_versions: ["8.0+"]
+  
+  # Deployment notes
+  deployment_notes:
+    - "Target account OBANOYY-MK07348 currently has only ACCOUNTADMIN setup"
+    - "Framework will create all domain-specific roles, warehouses, and databases"
+    - "Connection mk07348 maps to PORCHFLAKE@OBANOYY-MK07348 with ACCOUNTADMIN privileges"
+    - "Post-deployment, separate loader/transformer connections can be configured"
