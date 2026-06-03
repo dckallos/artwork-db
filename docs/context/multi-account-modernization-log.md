@@ -1,11 +1,34 @@
-# Multi-Account Modernization Progress Log — ARCHITECTURE RESET
+# Multi-Account Modernization Progress Log — Domain-Agnostic Framework Implementation
 
-> **CRITICAL ARCHITECTURE REVIEW (2026-06-03)**  
-> Principal Engineer review identified fundamental separation of concerns violations.  
+> **PURPOSE.** Principal Engineer-level transformation of artwork-db from domain-coupled
+> multi-account patches to a reusable, domain-agnostic Snowflake infrastructure CLI framework.
+> Code quality must match **Principal Software Engineer standards at Google/Facebook/Amazon**:
+> rigorous architectural review, comprehensive separation of concerns, production-ready 
+> implementations, and zero tolerance for technical debt or design violations.
+> This log provides durable memory across Claude sessions and context breaks.
+
+## 🏗️ **PRINCIPAL ENGINEER ROLE DEFINITION**
+
+**AI Assistant Role**: Act as **Principal Software Engineer** with Google/Facebook/Amazon-level standards
+- **Architecture authority**: Identify and block Category 1 design violations before implementation
+- **Code quality standards**: Enforce rigorous separation of concerns, clean abstractions, comprehensive testing
+- **Design review discipline**: Challenge assumptions, demand clear boundaries, require justification for complexity
+- **Production readiness**: Zero tolerance for shortcuts, technical debt, or "quick fixes" that compromise maintainability
+- **Mentorship approach**: Explain architectural principles, provide alternatives, guide toward best practices
+
+**Engineering Standards Applied**:
+- **Separation of concerns**: Clear, well-defined component responsibilities with minimal coupling
+- **Interface design**: Clean contracts between components with explicit boundaries
+- **Scalability**: Architecture must support growth without fundamental rewrites
+- **Maintainability**: Code must be readable, debuggable, and modifiable by other engineers
+- **Testing discipline**: Comprehensive test coverage with clear validation criteria
+- **Documentation rigor**: Architecture decisions documented with rationale and tradeoffs
+
+## 🚨 CRITICAL ARCHITECTURE REVIEW (2026-06-03)
+
+> **PRINCIPAL ENGINEER FINDINGS: CATEGORY 1 VIOLATION**  
 > Phase 3.2 DDL template conversion approach **CANCELLED** due to framework overreach.  
-> Complete architectural reset required to maintain Facebook staff-level engineering standards.
-
-## 🚨 PRINCIPAL ENGINEER FINDINGS: CATEGORY 1 VIOLATION
+> Fundamental separation of concerns violation identified. Architecture reset required.
 
 ### **Root Problem: Framework Overreach**
 The domain-agnostic framework crossed critical architectural boundaries by attempting to **own and modify domain-specific DDL**. This violates the fundamental principle that **orchestration tools should coordinate existing artifacts, not generate or modify business logic**.
@@ -15,51 +38,201 @@ The domain-agnostic framework crossed critical architectural boundaries by attem
 2. **Framework Domain Assumptions**: `config/artwork_domain.yml` contains business schema logic
 3. **DDL Content Modification**: `ddl_orchestrator.sh` performing template processing on SQL
 
-## CORRECTED ARCHITECTURAL VISION
+### **CORRECTED PRINCIPLE**
+> **The framework should orchestrate user artifacts, not generate them.**  
+> **DDL files belong to the user's domain, not the framework.**
+
+## RESUMPTION CONTRACT — read this FIRST in any new window
+1. Read AGENTS.md first, then this entire file before any action
+2. Skip every step marked `[x]` — it is DONE, do not redo it
+3. The **last dated entry** is your resume point. Continue from "next"
+4. State current phase plan and wait for explicit proceed + date before writes
+5. **Agent context**: Claude Code (Mac CLI) - no session conflicts. If using Cortex Code (Snowsight), check for solo session: `scripts/check.sh`
+
+## ARCHITECTURAL SCOPE (REVISED after 2026-06-03 Principal Review)
+
+### **Pure Orchestration Framework** (CORRECTED)
+Transform from: Artwork-specific multi-account patches
+Transform to: **Pure connection/orchestration utilities** that can execute ANY user's DDL against ANY Snowflake account
 
 ### **Framework Responsibilities** ✅ (Legitimate)
-1. **Connection Management**: Resolve which Snowflake connection to use
-2. **Authentication Setup**: SSH keys, JWT tokens, connection validation  
-3. **Execution Orchestration**: Apply user's DDL files in manifest order
-4. **Environment Bootstrap**: User/role/warehouse setup for new accounts
+1. **Connection Management** (scripts/lib/) - Universal connection resolution, profile management
+2. **Authentication Setup** - SSH keys, JWT tokens, connection validation  
+3. **Execution Orchestration** - Apply user's DDL files in manifest order (unchanged)
+4. **Environment Bootstrap** - User/role/warehouse setup for new accounts
 
 ### **User Project Responsibilities** ✅ (Must Remain)
-1. **DDL Definition**: All SQL files in `infrastructure/` (unchanged)
-2. **Domain Schema**: Database names, role names, business logic
-3. **Manifest Ordering**: Which scripts to run in what order
-4. **Application Code**: Extraction, transformation, domain-specific logic
+1. **DDL Definition** - All SQL files in `infrastructure/` (unchanged)
+2. **Domain Schema** - Database names, role names, business logic
+3. **Manifest Ordering** - Which scripts to run in what order
+4. **Application Code** - Extraction, transformation, domain-specific logic
 
-### **Framework MUST NOT**
-- ❌ Modify DDL file contents
-- ❌ Know about specific database/role names
-- ❌ Perform template substitution on SQL
-- ❌ Contain domain-specific configuration
+### **Framework MUST NOT** ❌
+- Modify DDL file contents
+- Know about specific database/role names  
+- Perform template substitution on SQL
+- Contain domain-specific configuration
 
-## REVISED IMPLEMENTATION STRATEGY
+## TASK CHECKLIST (update boxes in-place; never remove completed items)
+- [x] Phase 1: Domain-agnostic framework components - Connection resolver, config loader, DDL orchestrator, dbt orchestrator
+- [x] Phase 2: Framework integration testing - Cross-component validation and integration
+- [x] Phase 3.1: Framework validation - Component design issues resolved, modular library behavior fixed
+- [ ] ~~Phase 3.2: DDL template conversion~~ **CANCELLED - Architectural violation**
+- [ ] **Phase R1: Strip domain logic** - Remove template processing, domain config, preserve connection utilities
+- [ ] **Phase R2: Pure connection framework** - Framework provides ONLY connection/auth utilities  
+- [ ] **Phase R3: Multi-account via connection switching** - Same DDL, different connections
+- [ ] **Phase 4: Documentation & validation** - Comprehensive programmer/LLM docs for corrected framework boundaries
+- [ ] **Phase 5: End-to-end deployment testing** - Full artwork domain deployment to mk07348 account via pure orchestration
 
-### **Pure Orchestration Framework**
-```bash
-# ✅ CORRECT: Framework provides connection utilities
-./scripts/setup_connection.sh --account OBANOYY-MK07348 --user PORCHFLAKE
-./scripts/orchestrate.sh --connection mk07348 --ddl-dir infrastructure/
+### **ORIGINAL PHASE 4 & 5 SCOPE** (Preserved from commit 1340ee6, adapted for corrected architecture):
 
-# ❌ WRONG: Framework modifying DDL content
-./scripts/orchestrate_modern.sh --config config/artwork_domain.yml --phase infra
-```
+#### **Phase 4: Documentation & Validation**
+**Original objective**: Comprehensive programmer/LLM docs
+**Adapted for corrected architecture**: Document framework boundaries and proper usage patterns
+- **Framework documentation**: Connection utilities, orchestration capabilities, clear boundaries
+- **User integration guides**: How to use framework with existing DDL projects
+- **API documentation**: Framework component interfaces and contracts
+- **Best practices**: Multi-account deployment patterns using pure orchestration
+- **Migration guides**: Moving from domain-coupled to framework-based deployment
 
-## FRAMEWORK COMPONENT AUDIT
+#### **Phase 5: End-to-end Deployment Testing** 
+**Original objective**: Full artwork domain deployment to mk07348 account
+**Adapted for corrected architecture**: Artwork DDL deployment via pure orchestration
+- **Connection setup validation**: mk07348 connection properly configured
+- **DDL execution testing**: User's artwork infrastructure/ files deployed unchanged
+- **Multi-account validation**: Same DDL deployed to multiple test accounts
+- **Rollback testing**: Full teardown and redeployment cycles
+- **Performance validation**: Framework overhead minimal, deployment efficiency maintained
 
-### **Keep (Pure Utilities)**
-- ✅ `connection_resolver.sh` - Connection management utility
-- ✅ `dbt_orchestrator.sh` - dbt execution utility (simplified)
+## IMPLEMENTATION SPEC (REVISED after Principal Review)
 
-### **Remove (Violates Separation)**
-- ❌ `domain_config_loader.sh` - Framework shouldn't know domain details
-- ❌ `config/artwork_domain.yml` - Domain config doesn't belong in framework
-- ❌ Template substitution in `ddl_orchestrator.sh`
+### Connection Resolution Priority (PRESERVED):
+1. **Explicit CLI parameter** (`--connection`, `--profile`, `--account`) - NO confirmation
+2. **config.toml default** - WITH confirmation + session cache  
+3. **Environment variables** - WITH confirmation + session cache
+4. **Capability-based fallback** - WITH confirmation + session cache
 
-### **Simplify (Remove Domain Awareness)**
-- ⚠️ `ddl_orchestrator.sh` - Remove template processing, keep file execution
+### ~~Domain Configuration Schema~~ **REMOVED - Violated separation**
+**Original approach contained business logic in framework - architectural violation**
+
+### CLI Interface Standards (SIMPLIFIED):
+- **Generic commands**: `--connection` parameter for any DDL directory
+- **No domain shortcuts**: Framework doesn't know domains
+- **DDL directory parameter**: `--ddl-dir infrastructure/` user-specified
+- **Manifest parameter**: `--manifest scripts/manifest.txt` user-specified  
+- **Help support**: All scripts support `--help` for connection utilities only
+
+### Facebook Staff-Level Code Quality Standards (PRESERVED):
+- **Error handling**: Comprehensive with actionable error messages
+- **Testing**: Unit tests for connection utilities + file orchestration
+- **Documentation**: Clear framework boundaries and proper usage
+- **Performance**: Optimized for production multi-account use cases
+- **Maintainability**: Clean separation of concerns, zero technical debt
+- **Reusability**: Framework works with ANY Snowflake project DDL
+
+## TARGET ACCOUNT DETAILS (PRESERVED)
+
+### **Primary Target: OBANOYY-MK07348**
+- **Account**: OBANOYY-MK07348 (AWS Enterprise Edition)
+- **User**: PORCHFLAKE  
+- **Current Role**: ACCOUNTADMIN (only role configured)
+- **Connection Name**: mk07348 (in config.toml)
+- **Private Key**: `/Users/daniel/.snowflake/keys/mk07348_rsa_key.p8`
+
+### **Framework Deployment Strategy** (CORRECTED)
+1. Use mk07348 connection for all operations
+2. Execute user's artwork DDL unchanged via framework orchestration
+3. User's DDL creates domain-specific roles (ARTWORK_ADMIN, etc.)
+4. Framework only provides connection switching - no DDL modification
+
+## CURRENT STATE ANALYSIS (2026-06-03 POST-REVIEW)
+
+### ✅ **Completed Framework Components** (Audit Required):
+- **scripts/lib/connection_resolver.sh** ✅ Keep - Pure connection utility
+- ~~**scripts/lib/domain_config_loader.sh**~~ ❌ Remove - Violates separation
+- **scripts/lib/ddl_orchestrator.sh** ⚠️ Simplify - Remove template processing
+- **scripts/lib/dbt_orchestrator.sh** ✅ Keep - Pure dbt utility
+- ~~**config/artwork_domain.yml**~~ ❌ Remove - Domain logic doesn't belong in framework
+
+### ❌ **Required Architecture Fixes**:
+- **Remove domain-specific logic**: Strip template processing and domain config
+- **Simplify orchestrators**: Pure file execution, no content modification
+- **Preserve connection utilities**: The legitimate framework value
+- **Update CLI interface**: Remove domain parameters, add DDL directory parameters
+
+## FRAMEWORK ARCHITECTURE BENEFITS (CORRECTED)
+
+### **Immediate Benefits**:
+- **True multi-account**: Execute ANY DDL against ANY Snowflake account via connection switching
+- **Framework reusability**: Connection utilities work for ANY Snowflake project
+- **Clean separation**: Framework handles plumbing, users handle domain logic
+- **Connection flexibility**: Single connection setup, multiple account deployment
+
+### **Long-Term Benefits**:
+- **Framework distribution**: Other teams can use connection utilities for their DDL
+- **Maintenance efficiency**: Connection logic maintained once, benefits all projects
+- **Testing isolation**: Framework tests connections, users test their DDL
+
+## PHASE PROGRESS (append new entries with timestamp)
+
+### [2026-06-02 START] Domain-Agnostic Framework Implementation Initiated
+
+**Architectural insight**: Multi-account modernization requires domain decoupling to create reusable framework.
+
+**Agent context**: Claude Code (Mac CLI environment)  
+**Current branch**: `donkey-kong-sandbox`  
+**Target account**: OBANOYY-MK07348 (PORCHFLAKE@mk07348 connection)
+**Working directory**: `/Users/daniel/dev/artwork-db`
+
+**Created framework components**:
+- `scripts/lib/connection_resolver.sh` - Universal connection resolution (1,167 lines)
+- `scripts/lib/domain_config_loader.sh` - Configuration management (456 lines) **[MARKED FOR REMOVAL]**
+- `scripts/lib/ddl_orchestrator.sh` - DDL orchestration framework (742 lines) **[REQUIRES SIMPLIFICATION]**
+- `scripts/lib/dbt_orchestrator.sh` - dbt lifecycle management (687 lines)
+- `config/artwork_domain.yml` - Artwork domain configuration **[MARKED FOR REMOVAL]**
+
+### [2026-06-02 PHASE 2 COMPLETE] Framework Integration and Modernization
+
+**Achievement**: Successfully completed Phase 2 with comprehensive integration testing and dependency management.
+
+**Phase 2 deliverables**:
+- **scripts/lib/framework_integration_test.sh** - Comprehensive testing suite (418 lines)
+- **Updated dependency management** - Added yq installation to setup.sh prereq phase  
+- **scripts/orchestrate_modern.sh** - Modernized DDL orchestrator **[REQUIRES SIMPLIFICATION]**
+- **scripts/dbt_orchestrate_modern.sh** - Modernized dbt orchestrator (180 lines)
+
+**Key improvements achieved**:
+1. **Dependency resolution** - yq properly integrated into framework prereq installation
+2. **Legacy modernization** - Created modernized versions of core orchestration scripts
+3. **Unified connection handling** - All dbt phases now support --connection parameter consistently  
+4. **Framework integration** - Modern scripts use domain-agnostic framework components
+5. **Testing infrastructure** - Comprehensive test suite for validating framework integration
+
+### [2026-06-03 PHASE 3.1 COMPLETE] Framework Component Design Issues Resolved
+
+**Achievement**: Successfully identified and resolved critical framework design issues.
+
+**Critical Issue Discovered**: Framework components were incorrectly intercepting --help arguments when sourced as libraries.
+
+**Resolution Implemented**:
+- Fixed all framework components with proper sourcing vs. execution detection
+- Framework components now function as proper libraries when sourced
+- Parent scripts maintain full control over argument handling and help systems
+
+**Validation Results**: ✅ All modernized scripts working with proper help/error handling
+
+### [2026-06-03 ARCHITECTURE REVIEW] Principal Engineer Findings - Framework Overreach
+
+**CRITICAL FINDING**: Framework violated separation of concerns by attempting to modify domain-specific DDL.
+
+**Phase 3.2 CANCELLED**: DDL template conversion approach fundamentally flawed.
+
+**Evidence**: 
+- Framework contained business logic (`config/artwork_domain.yml`)
+- Template processing modified user's SQL files
+- Domain knowledge embedded in framework components
+
+**Corrected Vision**: Framework provides pure connection/orchestration utilities only.
 
 ## PHASE RESET PLAN
 
@@ -92,47 +265,50 @@ snow sql -f infrastructure/create_databases_and_schemas.sql -c mk07348
 2. User configures connection for new account: `scripts/setup_connection.sh --account NEW_ACCOUNT`
 3. User runs same DDL on new account: `./scripts/orchestrate.sh --connection new_account`
 
-## PRESERVED ARTIFACTS
-
-### **What We Keep from Current Work** ✅
-- Connection resolution logic (pure utility)
-- Multi-account connection setup
-- Framework modular design principles
-- CLI interface patterns
-- Error handling standards
-
-### **What We Remove** ❌
-- All domain configuration (`config/artwork_domain.yml`)
-- DDL template processing
-- Framework knowledge of artwork-specific details
-- Domain-agnostic configuration schemas
-
-## BENEFITS OF CORRECTED ARCHITECTURE
-
-### **Separation of Concerns** ✅
-- Framework: Connection/auth utilities
-- User project: Business logic and DDL
-
-### **True Reusability** ✅
-- Framework works with ANY Snowflake project
-- No domain-specific knowledge required
-- Users provide their own DDL unchanged
-
-### **Maintainability** ✅
-- Framework has single responsibility
-- No domain-specific testing required
-- Clear interface boundaries
-
 ## NEXT STEPS
 
-1. **STOP Phase 3.2** - Do not modify DDL files
-2. **Begin Phase R1** - Strip domain logic from framework
-3. **Preserve DDL unchanged** - `infrastructure/` files remain as-is
-4. **Focus on connection utilities** - Framework's legitimate purpose
+**Current Status**: Phase 3.1 complete, Phase 3.2 cancelled due to architectural violation
 
-## CRITICAL PRINCIPLE
+**Immediate Action Required**: Begin Phase R1 to strip domain logic from framework
 
-> **The framework should orchestrate user artifacts, not generate them.**  
-> **DDL files belong to the user's domain, not the framework.**
+**Hand-off prompt for next window**:
+```bash
+# AI ROLE: Principal Software Engineer (Google/Facebook/Amazon standards)
+# Standards: Rigorous architecture review, zero tolerance for design violations
+# Authority: Block Category 1 violations, enforce separation of concerns
+# Read: AGENTS.md -> docs/context/multi-account-modernization-log.md (latest ARCHITECTURE REVIEW)
 
-This reset maintains the valuable connection/orchestration work while fixing the fundamental architectural violation. The result will be a truly reusable framework that respects proper separation of concerns.
+# ENGINEERING CONTEXT: Architecture reset after Category 1 violation detected
+# Agent: Claude Code (Mac CLI) - no session conflicts needed
+# Branch: donkey-kong-sandbox (framework reset required)
+# Working dir: /Users/daniel/dev/artwork-db
+# Target: OBANOYY-MK07348 account via mk07348 connection
+
+# PRINCIPAL ENGINEER FINDINGS: Framework overreach violated separation of concerns
+# CRITICAL VIOLATION: Framework attempted to modify user's domain-specific DDL files
+# CURRENT STATE: Phase 3.1 complete, Phase 3.2 cancelled due to architectural boundary violation
+# Architecture: Must reset to pure connection/orchestration utilities only
+
+# PROJECT SCOPE PRESERVED: Complete 5-phase sequence maintained with corrected approach
+# Phase R1-R3: Architecture reset phases (strip domain logic, restore proper boundaries)
+# Phase 4-5: Original documentation and end-to-end testing scope preserved
+
+# IMMEDIATE ACTION: Phase R1 - Strip domain logic from framework components
+# Remove: domain_config_loader.sh, config/artwork_domain.yml, template processing
+# Preserve: connection_resolver.sh, pure file orchestration, auth utilities
+# Maintain: All valuable connection/orchestration work completed
+
+# CORRECTED ARCHITECTURAL PRINCIPLE: Framework orchestrates user artifacts, never generates them
+# User's infrastructure/ DDL files remain unchanged, framework provides plumbing only
+# Clean boundaries: Framework handles connections/auth, user handles domain/business logic
+
+# PRINCIPAL ENGINEER STANDARDS: Apply rigorous review to all proposed changes
+# Challenge any complexity, demand clear justification, maintain zero technical debt
+# Enforce clean abstractions, comprehensive testing, production-ready implementations
+
+# GATING RULE: State the plan, wait for "proceed + date" before making changes
+# Context: Architecture correction to restore proper separation of concerns
+# Quote "PRINCIPAL ENGINEER ROLE DEFINITION" section to confirm standards understanding
+```
+
+End of this window
