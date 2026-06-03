@@ -167,7 +167,7 @@ PHASES:
 
 MODERNIZATION BENEFITS:
     ✓ Unified connection parameter across ALL phases (not just teardown)
-    ✓ Domain configuration support for multi-account deployments
+    ✓ Connection flexibility for working with multiple accounts
     ✓ Dynamic profile generation from domain config
     ✓ Enhanced error handling and validation
     ✓ Framework integration for consistency
