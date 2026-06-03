@@ -265,50 +265,73 @@ snow sql -f infrastructure/create_databases_and_schemas.sql -c mk07348
 2. User configures connection for new account: `scripts/setup_connection.sh --account NEW_ACCOUNT`
 3. User runs same DDL on new account: `./scripts/orchestrate.sh --connection new_account`
 
+### [2026-06-03 PHASE R1 COMPLETE] Domain Logic Stripped from Framework
+
+**ACHIEVEMENT**: Successfully completed architectural reset Phase R1 - Framework restored to proper boundaries.
+
+**Actions Completed**:
+1. ✅ **Removed template processing** from `scripts/lib/ddl_orchestrator.sh` - Framework no longer modifies user DDL
+2. ✅ **Deleted domain_config_loader.sh** - Removed business logic from framework components  
+3. ✅ **Deleted config/artwork_domain.yml** - Removed domain configuration violating separation
+4. ✅ **Simplified orchestrate_modern.sh** - Now pure connection + file execution with no domain logic
+5. ✅ **Preserved connection_resolver.sh** - Legitimate framework utility providing pure connection management
+
+**Framework Now Provides**: 
+- Pure connection resolution and authentication utilities
+- File orchestration that executes user's DDL unchanged
+- Multi-account deployment via connection switching only
+
+**Framework Removed**:
+- Template substitution that modified user DDL files
+- Domain-specific configuration and business logic
+- Any modification of user's infrastructure/ files
+
+**Corrected Architecture**: Framework orchestrates user artifacts, never generates them. Clean separation restored.
+
 ## NEXT STEPS
 
-**Current Status**: Phase 3.1 complete, Phase 3.2 cancelled due to architectural violation
+**Current Status**: Phase R1 complete - Framework boundaries restored
 
-**Immediate Action Required**: Begin Phase R1 to strip domain logic from framework
+**Immediate Action Required**: Begin Phase R2 to complete pure connection framework
 
 **Hand-off prompt for next window**:
 ```bash
 # AI ROLE: Principal Software Engineer (Google/Facebook/Amazon standards)
 # Standards: Rigorous architecture review, zero tolerance for design violations
 # Authority: Block Category 1 violations, enforce separation of concerns
-# Read: AGENTS.md -> docs/context/multi-account-modernization-log.md (latest ARCHITECTURE REVIEW)
+# Read: AGENTS.md -> docs/context/multi-account-modernization-log.md (Phase R1 COMPLETE entry)
 
-# ENGINEERING CONTEXT: Architecture reset after Category 1 violation detected
+# ENGINEERING CONTEXT: Phase R1 complete - Framework boundaries restored
 # Agent: Claude Code (Mac CLI) - no session conflicts needed
-# Branch: donkey-kong-sandbox (framework reset required)
+# Branch: donkey-kong-sandbox (clean framework architecture)
 # Working dir: /Users/daniel/dev/artwork-db
 # Target: OBANOYY-MK07348 account via mk07348 connection
 
-# PRINCIPAL ENGINEER FINDINGS: Framework overreach violated separation of concerns
-# CRITICAL VIOLATION: Framework attempted to modify user's domain-specific DDL files
-# CURRENT STATE: Phase 3.1 complete, Phase 3.2 cancelled due to architectural boundary violation
-# Architecture: Must reset to pure connection/orchestration utilities only
+# PHASE R1 COMPLETE: Domain logic stripped, architectural violation corrected
+# ACHIEVED: Framework now provides pure connection/orchestration utilities only
+# REMOVED: Template processing, domain config, business logic from framework
+# PRESERVED: connection_resolver.sh (legitimate framework utility)
 
-# PROJECT SCOPE PRESERVED: Complete 5-phase sequence maintained with corrected approach
-# Phase R1-R3: Architecture reset phases (strip domain logic, restore proper boundaries)
-# Phase 4-5: Original documentation and end-to-end testing scope preserved
+# PROJECT STATUS: Phase R1 ✅ complete, Phase R2 ready
+# Next: Phase R2 - Complete pure connection framework implementation
+# Scope: Framework provides ONLY connection/auth utilities, user provides DDL
 
-# IMMEDIATE ACTION: Phase R1 - Strip domain logic from framework components
-# Remove: domain_config_loader.sh, config/artwork_domain.yml, template processing
-# Preserve: connection_resolver.sh, pure file orchestration, auth utilities
-# Maintain: All valuable connection/orchestration work completed
+# IMMEDIATE ACTION: Phase R2 - Pure connection framework
+# Framework interface: --connection + --ddl-dir + --manifest parameters
+# User workflow: Same DDL deployed to different accounts via connection switching
+# Architecture: Clean separation - framework = plumbing, user = domain logic
 
-# CORRECTED ARCHITECTURAL PRINCIPLE: Framework orchestrates user artifacts, never generates them
-# User's infrastructure/ DDL files remain unchanged, framework provides plumbing only
+# CORRECTED PRINCIPLE ACHIEVED: Framework orchestrates user artifacts, never generates them
+# User's infrastructure/ DDL files execute unchanged, framework provides plumbing only
 # Clean boundaries: Framework handles connections/auth, user handles domain/business logic
 
-# PRINCIPAL ENGINEER STANDARDS: Apply rigorous review to all proposed changes
-# Challenge any complexity, demand clear justification, maintain zero technical debt
+# PRINCIPAL ENGINEER STANDARDS: Continue rigorous review of all changes
+# Challenge complexity, demand clear justification, maintain zero technical debt
 # Enforce clean abstractions, comprehensive testing, production-ready implementations
 
 # GATING RULE: State the plan, wait for "proceed + date" before making changes
-# Context: Architecture correction to restore proper separation of concerns
-# Quote "PRINCIPAL ENGINEER ROLE DEFINITION" section to confirm standards understanding
+# Context: Complete Phase R2 pure connection framework implementation
+# Quote "Phase R1 COMPLETE" achievement section to confirm current state understanding
 ```
 
 End of this window
