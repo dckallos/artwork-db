@@ -2,49 +2,30 @@ import os
 import subprocess
 import re
 
-# Directory containing the SQL files
-DIRECTORY = "infrastructure"
+# Update to the new subdirectory
+DIRECTORY = "git-setup"
 
-# 1. Configuration Set for Git Renames (Old Filename -> New Filename)
+# 1. Configuration Set for Git Renames
 FILE_MAPPING = {
-    "V001__create_roles.sql": "create_roles.sql",
-    "V002__create_warehouses.sql": "create_warehouses.sql",
-    "V003__create_databases_and_schemas.sql": "create_databases_and_schemas.sql",
-    "V004__create_file_formats.sql": "create_file_formats.sql",
-    "V005__create_stages.sql": "create_stages.sql",
-    "V006__grant_privileges.sql": "grant_privileges.sql",
-    "V007__create_bronze_tables.sql": "create_bronze_tables.sql",
-    "V008__create_service_user.sql": "create_service_user.sql",
-    "V009__create_tasks.sql": "create_tasks.sql",
-    "R001__refresh_grants.sql": "refresh_grants.sql",
-    "V001__drop_roles.sql": "drop_roles.sql",
-    "V002__drop_warehouses.sql": "drop_warehouses.sql",
-    "V003__drop_databases_and_schemas.sql": "drop_databases_and_schemas.sql",
-    "V004__drop_file_formats.sql": "drop_file_formats.sql",
-    "V005__drop_stages.sql": "drop_stages.sql",
-    "V006__drop_grants.sql": "drop_grants.sql",
-    "V007__drop_bronze_tables.sql": "drop_bronze_tables.sql",
-    "V008__drop_service_user.sql": "drop_service_user.sql",
-    "V009__drop_tasks.sql": "drop_tasks.sql",
+    "B001__create_git_ops_db.sql": "create_git_ops_db.sql",
+    "B001__drop_git_ops_db.sql": "drop_git_ops_db.sql",
+    "B002__create_api_integration.sql": "create_api_integration.sql",
+    "B002__drop_api_integration.sql": "drop_api_integration.sql",
+    "B003__create_git_repository.sql": "create_git_repository.sql",
+    "B003__drop_git_repository.sql": "drop_git_repository.sql",
 }
 
-# 2. Configuration Set for Prefixes (Regex Word Boundary -> Primary Forward Script)
+# 2. Configuration Set for Prefixes
+# Maps isolated prefixes (e.g., "B001") to the primary forward script name
 PREFIX_MAPPING = {
-    r"\bV001\b": "create_roles.sql",
-    r"\bV002\b": "create_warehouses.sql",
-    r"\bV003\b": "create_databases_and_schemas.sql",
-    r"\bV004\b": "create_file_formats.sql",
-    r"\bV005\b": "create_stages.sql",
-    r"\bV006\b": "grant_privileges.sql",
-    r"\bV007\b": "create_bronze_tables.sql",
-    r"\bV008\b": "create_service_user.sql",
-    r"\bV009\b": "create_tasks.sql",
-    r"\bR001\b": "refresh_grants.sql"
+    r"\bB001\b": "create_git_ops_db.sql",
+    r"\bB002\b": "create_api_integration.sql",
+    r"\bB003\b": "create_git_repository.sql",
 }
 
 
 def main():
-    print("Starting Git renames and internal reference updates...")
+    print(f"Starting Git renames and internal reference updates for {DIRECTORY}...")
 
     # Phase 1: Perform Git Renames
     for old_name, new_name in FILE_MAPPING.items():
@@ -67,11 +48,11 @@ def main():
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # Step A: Replace full filenames first (e.g., infrastructure/V001__drop_roles.sql)
+        # Step A: Replace full filenames first
         for old_file, new_file in FILE_MAPPING.items():
             content = content.replace(old_file, new_file)
 
-        # Step B: Replace isolated prefixes (e.g., "V001") using regex word boundaries
+        # Step B: Replace isolated prefixes using regex word boundaries
         for prefix_pattern, replacement in PREFIX_MAPPING.items():
             content = re.sub(prefix_pattern, replacement, content)
 
@@ -80,7 +61,6 @@ def main():
             f.write(content)
 
         # Phase 3: Stage the text modifications in Git
-        # (git mv only stages the rename; modifying the file requires re-staging)
         subprocess.run(["git", "add", file_path], check=True)
         print(f"Updated internal references and staged: {new_name}")
 
