@@ -229,4 +229,61 @@ connection_defaults:
 # Quote "PHASE 3.1 COMPLETE" header back to confirm reading latest progress
 ```
 
-End of Phase 3.1 completion window
+### [2026-06-03 SESSION TRANSITION] Phase 3.2 Plan Documented - Awaiting Proceed
+
+**Session State**: Phase 3.1 complete with framework validation successful. Phase 3.2 plan presented and documented, awaiting owner proceed + date directive.
+
+**Phase 3.2 Plan Confirmed**: DDL Template Conversion for Multi-Domain Deployment
+
+**Objective**: Convert infrastructure DDL scripts from hardcoded artwork-specific values to domain-agnostic template syntax enabling deployment to unlimited Snowflake accounts.
+
+**Template Conversion Mapping**:
+- Database: `ARTWORK_DB` → `<% domain.database %>`
+- Roles: `ARTWORK_ADMIN` → `<% roles.admin %>`, `ARTWORK_LOADER` → `<% roles.loader %>`, `ARTWORK_TRANSFORMER` → `<% roles.transformer %>`
+- Warehouses: `ARTWORK_WH` → `<% warehouses.default %>`
+- Schemas: Maintain `BRONZE/SILVER/GOLD` constants (medallion architecture standard)
+
+**Implementation Phases**:
+- **3.2a**: Core infrastructure (databases, roles, warehouses, grants)
+- **3.2b**: Service users, drop scripts, bronze objects  
+- **3.2c**: Framework orchestrator template processing validation
+
+**Current Repository State**:
+- ✅ Framework components validated and functioning as proper libraries
+- ✅ Modernized scripts (orchestrate_modern.sh, dbt_orchestrate_modern.sh) operational
+- ✅ Domain configuration (config/artwork_domain.yml) ready for template resolution
+- ✅ Repository cleaned of temporary debugging artifacts
+- ✅ All commits staged on donkey-kong-sandbox branch
+
+**Technical Foundation Ready**:
+- Template substitution system operational in ddl_orchestrator.sh
+- Domain configuration loader validated and functional
+- Connection resolution framework with mk07348 target account confirmed
+- Facebook staff-level modular design with proper separation of concerns
+
+**Next Action**: Awaiting explicit "proceed + date" to begin Phase 3.2a DDL template conversion of core infrastructure files.
+
+**Hand-off prompt for next window**:
+```bash
+# STAFF ENGINEER CONTEXT: Facebook/Google-level multi-account Snowflake framework  
+# Read: AGENTS.md -> docs/context/multi-account-modernization-log.md (latest SESSION TRANSITION)
+# Agent: Claude Code (Mac CLI) - no session conflicts needed
+# Branch: donkey-kong-sandbox (domain-agnostic framework implementation)
+# Working dir: /Users/daniel/dev/artwork-db
+# Target deployment: OBANOYY-MK07348 account via mk07348 connection
+
+# CURRENT STATE: Phase 3.1 complete - framework validated, components fixed
+# Architecture: Domain-agnostic CLI framework with validated modular design
+# Quality standard: Facebook staff-level implementation with comprehensive error handling
+
+# NEXT PHASE: 3.2 - DDL Template Conversion (plan documented, awaiting proceed)
+# Convert infrastructure/*.sql from hardcoded ARTWORK_* to template syntax
+# Template mapping: ARTWORK_DB → <% domain.database %>, roles/warehouses similarly
+# Framework: Template resolution via config/artwork_domain.yml + ddl_orchestrator.sh
+
+# GATING RULE: State the plan, wait for "proceed + date" before making changes
+# Context: Multi-account modernization enabling artwork-db deployment to unlimited accounts
+# Quote "SESSION TRANSITION" header back to confirm reading latest progress
+```
+
+End of this window
