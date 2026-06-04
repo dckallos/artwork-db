@@ -25,6 +25,12 @@ DBT_PROJECT_DIR := artwork_pipeline
 # apply_sql.sh / bootstrap.py (which already accept --connection).
 CONN ?= admin
 
+# Template variables for DDL substitution (e.g., secrets, tokens)
+# Pass as space-separated name=value pairs:
+#   make bootstrap CONN=admin VARS="github_pat=${GITHUB_PAT} other_var=value"
+# Framework forwards these as -D parameters to snow sql for template substitution.
+VARS ?=
+
 # ---------- Executable bit policy (Phase 0.6 IaC strategy 3.4) ----------
 # Idempotent chmod 0755 for every .sh bootstrap.py shells out to. Prereq of
 # every IaC target so a missing +x bit can't break `make iac`. Allow-list lives
@@ -40,7 +46,8 @@ chmod:
 
 iac: chmod
 	@echo "==> Applying ALL IaC (B + V + R) via bash orchestrator -> snow sql --filename..."
-	bash scripts/orchestrate.sh --phase all --connection $(CONN)
+	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
+	$(call run_bootstrap,$(CONN),$(VARS))
 
 # git-setup (B) is the optional trailing Git-mirror layer; per the 2026-05-29
 # design decision it runs LAST in `make iac` (after V/R). Standalone run needs
@@ -51,11 +58,11 @@ bootstrap: chmod
 	@echo "    NOTE: B is the OPTIONAL trailing Git-mirror layer (runs LAST in 'make iac')."
 	@echo "    Standalone 'make bootstrap' presumes ARTWORK_ADMIN already exists"
 	@echo "    (created by infrastructure/V001 via 'make infra' or 'make iac')."
-	bash scripts/orchestrate.sh --phase bootstrap --connection $(CONN)
+	$(call run_bootstrap,$(CONN),$(VARS))
 
 infra: chmod
 	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."
-	bash scripts/orchestrate.sh --phase infra --connection $(CONN)
+	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
 
 rollback: chmod
 	@if [ -z "$(FILE)" ]; then \
@@ -64,15 +71,15 @@ rollback: chmod
 	fi
 	@PREFIX=$(FILE); \
 		echo "==> Rolling back $$PREFIX via paired drop script..."; \
-    bash scripts/orchestrate.sh --down --file $$PREFIX --connection $(CONN)
+		bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --file $$PREFIX --connection $(CONN)
 
 down: chmod
 	@echo "==> Tearing down ALL IaC (paired drops in reverse order)..."
-	bash scripts/orchestrate.sh --phase down --connection $(CONN)
+	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --connection $(CONN)
 
 down-from: chmod
-	@if [ -z "$(FROM)" ]; then echo "usage: make down-from FROM=V005"; exit 64; fi
-	bash scripts/orchestrate.sh --phase down --from $(FROM) --connection $(CONN)
+	@if [ -z "$(FROM)" ]; then echo "usage: make down-from FROM=create_stages.sql"; exit 64; fi
+	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --from $(FROM) --connection $(CONN)
 
 # ---------- Extraction ----------
 
@@ -130,3 +137,10 @@ setup: infra dbt-init
 
 clean:
 	rm -rf $(DBT_PROJECT_DIR)/target $(DBT_PROJECT_DIR)/dbt_packages $(DBT_PROJECT_DIR)/logs
+
+# Helper function to run bootstrap with optional variables
+define run_bootstrap
+	$(if $(2),\
+		bash -c 'vars="$(2)"; cmd="bash scripts/orchestrate_modern.sh --ddl-dir git-setup/ --manifest scripts/manifest.txt --phase bootstrap --connection $(1)"; for var in $$vars; do cmd="$$cmd --var $$var"; done; eval "$$cmd"',\
+		bash scripts/orchestrate_modern.sh --ddl-dir git-setup/ --manifest scripts/manifest.txt --phase bootstrap --connection $(1))
+endef
