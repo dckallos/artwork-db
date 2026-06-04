@@ -34,6 +34,6 @@ USE ROLE ACCOUNTADMIN;
 -- Drop the API integration. If a GIT REPOSITORY still references it,
 -- Snowflake raises:
 --   003531 (42000): SQL compilation error: API_INTEGRATION
---                   'github_artwork_db_integration' is in use.
+--                   'GITHUB_ARTWORK_DB_INTEGRATION' is in use.
 -- Roll back create_git_repository.sql first if you see that error.
-DROP API INTEGRATION IF EXISTS github_artwork_db_integration;
+DROP API INTEGRATION IF EXISTS GITHUB_ARTWORK_DB_INTEGRATION;

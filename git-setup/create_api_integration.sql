@@ -38,7 +38,7 @@
 
 USE ROLE ACCOUNTADMIN;
 
-CREATE API INTEGRATION IF NOT EXISTS github_artwork_db_integration
+CREATE API INTEGRATION IF NOT EXISTS GITHUB_ARTWORK_DB_INTEGRATION
     API_PROVIDER                   = GIT_HTTPS_API
     API_ALLOWED_PREFIXES           = ('https://github.com/dckallos/')
     ALLOWED_AUTHENTICATION_SECRETS = (ARTWORK_OPS.GIT.github_pat_artwork_db)
@@ -46,7 +46,7 @@ CREATE API INTEGRATION IF NOT EXISTS github_artwork_db_integration
     COMMENT                        = 'Git integration for the artwork-db repo.';
 
 -- Converge the mutable properties in place on every run (object identity preserved).
-ALTER API INTEGRATION IF EXISTS github_artwork_db_integration SET
+ALTER API INTEGRATION IF EXISTS GITHUB_ARTWORK_DB_INTEGRATION SET
     API_ALLOWED_PREFIXES           = ('https://github.com/dckallos/')
     ALLOWED_AUTHENTICATION_SECRETS = (ARTWORK_OPS.GIT.github_pat_artwork_db)
     ENABLED                        = TRUE

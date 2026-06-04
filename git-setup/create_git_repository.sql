@@ -3,7 +3,7 @@
 --
 -- Applied by snow sql via scripts/apply_sql.sh. Must run AFTER create_git_ops_db.sql
 -- (ARTWORK_OPS database + GIT schema + github_pat_artwork_db SECRET) and
--- create_api_integration.sql (github_artwork_db_integration with ALLOWED_AUTHENTICATION_SECRETS).
+-- create_api_integration.sql (GITHUB_ARTWORK_DB_INTEGRATION with ALLOWED_AUTHENTICATION_SECRETS).
 -- Paired rollback: git-setup/drop_git_repository.sql.
 --
 -- Object name (2026-05-27): the GIT REPOSITORY is named artwork_db to match
@@ -57,14 +57,14 @@ USE DATABASE ARTWORK_OPS;
 USE SCHEMA GIT;
 
 CREATE GIT REPOSITORY IF NOT EXISTS artwork_db
-    API_INTEGRATION = github_artwork_db_integration
+    API_INTEGRATION = GITHUB_ARTWORK_DB_INTEGRATION
     GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db
     ORIGIN          = 'https://github.com/dckallos/artwork-db.git'
     COMMENT         = 'Read-only mirror of the artwork-db repo for in-Snowflake IaC.';
 
 -- Converge the mutable wiring in place on every run (object identity preserved).
 ALTER GIT REPOSITORY IF EXISTS artwork_db SET
-    API_INTEGRATION = github_artwork_db_integration
+    API_INTEGRATION = GITHUB_ARTWORK_DB_INTEGRATION
     GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db;
 
 -- Pull the latest contents of all branches right away so subsequent
