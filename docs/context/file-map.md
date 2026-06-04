@@ -41,7 +41,7 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
 | `create_git_ops_db.sql` | 51 | `ARTWORK_OPS` DB + `GIT` schema + `github_pat_artwork_db` SECRET (templated PAT) | 2026-05-30 | changing the secret/DB host |
-| `create_api_integration.sql` | 38 | API INTEGRATION `github_artwork_db_integration`; whitelists the PAT secret | 2026-05-30 | debugging Git bind chain |
+| `create_api_integration.sql` | 38 | API INTEGRATION `GITHUB_ARTWORK_DB_INTEGRATION`; whitelists the PAT secret | 2026-05-30 | debugging Git bind chain |
 | `create_git_repository.sql` | 67 | GIT REPOSITORY `artwork_db` (binds integration+creds), FETCH, GRANT READ to ADMIN | 2026-05-30 | changing origin/creds/grant |
 | `drop_git_repository.sql` | 38 | rollback step 1: `DROP GIT REPOSITORY IF EXISTS` (FQ) | 2026-05-30 | rolling back |
 | `drop_api_integration.sql` | 39 | rollback step 2: `DROP API INTEGRATION IF EXISTS` | 2026-05-30 | rolling back |

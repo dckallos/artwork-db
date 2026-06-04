@@ -145,7 +145,7 @@ after infrastructure (create_roles → … → refresh_grants), because
    github_pat_artwork_db` (TYPE=PASSWORD, USERNAME='dckallos', PASSWORD=
    `<% github_pat %>` — snow-sql template placeholder, no committed PAT).
 2. `create_api_integration.sql` (38 ln) — `CREATE OR REPLACE API INTEGRATION
-   github_artwork_db_integration` (GIT_HTTPS_API, prefix `github.com/dckallos/`),
+   GITHUB_ARTWORK_DB_INTEGRATION` (GIT_HTTPS_API, prefix `github.com/dckallos/`),
    whitelists the secret via `ALLOWED_AUTHENTICATION_SECRETS`.
 3. `create_git_repository.sql` (67 ln) — `CREATE OR REPLACE GIT REPOSITORY
    artwork_db` binding `API_INTEGRATION` + `GIT_CREDENTIALS` + ORIGIN; then
