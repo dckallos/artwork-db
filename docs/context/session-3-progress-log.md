@@ -2580,3 +2580,94 @@ CORTEX_FORK_INCIDENTS=0, then propose your first action (a/b/c in the log) and w
 ```
 
 - **End of this window (2026-06-05; CANONICAL -- supersedes the 2026-06-04 cutover marker. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This window: Part 1 stale-CLI-ref fixes (Makefile extract-met -> real subcommands + generic AWS_NO_SSO prefix + commented aic/cma/smithsonian; CLAUDE.md + extraction/met/CLAUDE.md + extraction/met/README.md reframed to Option B, SQLite labeled legacy, V001-V007 dropped); AWS-SSO stall root-caused (dead profile -> botocore PUT-step refresh; fix = clear ~/.aws/config + AWS_NO_SSO in Makefile); LIVE progress logging in control_enricher.py (per-N during fetch, was post-batch; py_compile OK); DDL-doc pass (create_tasks.sql TTL-vs-throttling caveat + ddl-infrastructure.md Gaps + file-map.md control_seeder/control_enricher rows + README row). ALL edits workspace-only: applied-to-account NO, pushed-to-Mac NO. Live state verified read-only: both SERVICE users keyed+logged-in; MET_CSV_SNAPSHOT=484,956; MET_ENRICHMENT_CONTROL=2,327 pending; RAW_MET_OBJECTS=0 at query time but owner reported a successful 500-batch (done=498) afterward -- NOT re-verified. Part 3 dbt mentorship deferred to next window, now unblocked by populated Bronze.)**
+
+---
+
+### 2026-06-05 (Part 3 dbt mentorship -- curriculum landed)
+
+**Solo-session check:** PASS -- 0 running `cortex_code_snowsight` in last 10 min; `CORTEX_FORK_INCIDENTS = 0`.
+
+**What changed this turn (workspace stage):**
+- CREATED `docs/context/dbt-curriculum.md` (270 lines): 6-unit hands-on dbt syllabus with
+  new-window protocol, status tracking table, per-unit outlines (objectives, decision forks,
+  deliberate failures, verification SQL), and a journal-file template.
+- CREATED `docs/context/dbt-journal/` directory (empty; unit journals created as entered).
+- EDITED `docs/context/file-map.md`: added `artwork_pipeline/` section (7 files row-mapped)
+  + `dbt-curriculum.md` + `dbt-journal/` rows.
+- EDITED `AGENTS.md`: added `dbt-curriculum.md` to Status table; updated Workflow domains
+  to reference both `dbt-plan.md` (strategy) and `dbt-curriculum.md` (teaching).
+- APPENDED this entry to `session-3-progress-log.md`.
+- **Applied-to-account: NO.** Documentation only.
+- **Pushed-to-Mac: NO.** Workspace-only edits.
+
+**Cumulative workspace state vs the Mac (delta the NEXT sync carries):**
+Prior un-synced delta (from earlier this date): `Makefile`, `CLAUDE.md`,
+`extraction/met/CLAUDE.md`, `extraction/met/README.md`, `extraction/met/control_enricher.py`,
+`infrastructure/create_tasks.sql`.
+NEW this turn: `docs/context/dbt-curriculum.md`, `docs/context/dbt-journal/` (dir),
+`docs/context/file-map.md`, `docs/context/session-3-progress-log.md`, `AGENTS.md`.
+
+**Live account state (verified read-only):**
+- `RAW_MET_OBJECTS = 503` rows (confirmed; Bronze populated).
+- `SILVER` schema = EMPTY (no objects yet; dbt has not run).
+- `RAW_PAYLOAD` top keys = `_meta`, `api_images`, `csv`, `object_id`. CSV sub-keys match
+  the `stg_met__artworks.sql` extraction paths (verified one row).
+
+**Next action:** Begin Unit 1 (First Green Run). Owner runs on Mac:
+```bash
+cd artwork_pipeline
+dbt deps
+dbt run
+```
+Then verify via read-only SQL (SHOW VIEWS IN SCHEMA ARTWORK_DB.SILVER).
+
+**Decision tree:**
+- `dbt run` succeeds + view appears in SILVER -> proceed to deliberate-failure exercise
+  (wrong role), then Unit 2.
+- `dbt run` fails on connection -> check env vars (`SNOWFLAKE_ACCOUNT`, `DBT_SNOWFLAKE_USER`,
+  `DBT_SNOWFLAKE_PRIVATE_KEY_PATH`). Likely cause: un-exported `.env` or wrong key path.
+- `dbt run` fails on permission -> `ARTWORK_TRANSFORMER` role may lack USAGE on
+  `ARTWORK_DB.SILVER`. Check grants (this should not happen -- `create_grants.sql` covers it).
+
+**Deferred patches (priority order):**
+1. (Mac sync) push the cumulative workspace delta before depending on any new files.
+2. Unit 2-6 of the dbt curriculum (sequential, in future windows if needed).
+3. Prior deferred items unchanged (AWS config cleanup, TTL decision, V/R/B rewords).
+
+**MUST NOT happen next window (foot-guns):**
+- Do NOT run dbt from the workspace (Mac-only).
+- Do NOT create unit journal files before the unit is actually started (avoid placeholder rot).
+- Do NOT skip `dbt deps` before the first `dbt run` (packages.yml requires dbt_utils).
+- Do NOT modify `stg_met__artworks.sql` during Unit 1 (it is the known-good baseline).
+
+**Hand-off prompt:**
+
+```text
+Read AGENTS.md first, then ONLY the latest dated entry in docs/context/session-3-progress-log.md
+(the 2026-06-05 "Part 3 dbt mentorship -- curriculum landed" entry). Then read
+docs/context/dbt-curriculum.md for the syllabus + new-window protocol. Stop once you can act.
+
+SOLO CHECK before any write: count cortex_code_snowsight sessions in the last ~10 min
+(QUERY_TAG ILIKE '%cortex_code_snowsight%') and check ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS.
+Exactly 1 = solo; >1 = stop and ask. Do not abort husks.
+
+DUAL-FS: Workspace edits are NOT on my Mac until I sync. Report applied-to-account yes/no and
+pushed-to-Mac yes/no. No make/python/dbt from the workspace -- I run those on the Mac.
+
+GATING: state your plan and WAIT for my explicit go + the date before any write or execution.
+
+ROLE: You are my senior dbt MENTOR. Hands-on, build-as-we-go. YOU decide within-unit
+sequencing; I run the commands on my Mac. Explain the WHY, name decision forks, introduce
+deliberate failures for diagnosis practice.
+
+PROJECT (one line): branch donkey-kong-sandbox; account OBANOYY-MK07348 (admin PORCHFLAKE/
+ACCOUNTADMIN); Medallion over Met OpenAccess. dbt project = artwork_pipeline/ (Mac dbt Core,
+ARTWORK_TRANSFORMER_SVC). Bronze populated (503 rows). SILVER empty. Curriculum: 6 units in
+docs/context/dbt-curriculum.md; check its Status table for the ACTIVE unit.
+
+FIRST RESPONSE: quote the latest `End of this window` header back to me, confirm solo=1,
+then check dbt-curriculum.md Status table for the active unit and propose next steps.
+Wait for my go + date.
+```
+
+- **End of this window (2026-06-05 Part 3b; CANONICAL -- supersedes Part 3a above. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: dbt curriculum documentation landed (dbt-curriculum.md + dbt-journal/ dir + file-map.md artwork_pipeline section + AGENTS.md status row). ALL workspace-only: applied-to-account NO, pushed-to-Mac NO. Live state: RAW_MET_OBJECTS=503, SILVER empty, RAW_PAYLOAD paths verified. Next = Unit 1 First Green Run on Mac.)**

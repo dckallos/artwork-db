@@ -146,7 +146,8 @@ when a genuinely new area of the repo appears.)
 - **dbt adoption (Silver/Gold transforms)** — dbt Core local project, model DAG
   (staging → marts), IaC integration (`dbt_orchestrate.sh`, Makefile peer targets),
   unified variable control (`.env` → `profiles.yml` / `connections.toml` / `config.py`),
-  milestone sequence. → `docs/context/dbt-plan.md`
+  milestone sequence. Strategy → `docs/context/dbt-plan.md`; hands-on teaching →
+  `docs/context/dbt-curriculum.md` (+ per-unit journals in `dbt-journal/`).
 
 ## Reading protocol (how to stay token-efficient)
 
@@ -189,6 +190,7 @@ Rules of thumb:
 | `docs/context/track-d-resumable-agents.md` | Complete (planning doc written 2026-05-31; **next-window briefing** for migrating repeat workflows to Cortex Agents Run + threads; explicit naming clarification Cortex Code vs Cloud Agents vs Cortex Agents OBJECT; quickest-path UI walkthrough + phased plan A→D + cost guardrails + first-action checklist). Phase A smoke test awaits owner sign-off. |
 | `docs/context/track-d-checklist.md` | Complete (flexible growth checklist written 2026-05-31; companion to the planning doc; **guideline not declarative plan**; 5 stages from sanity-checks to programmatic runner; explicit "challenge prompts" + "hard stops" + "what will surprise you" journal section; primes the next window to ship data work, not over-build the agent). |
 | `docs/context/dbt-plan.md` | Active (written 2026-05-31; locked-in decisions D1-D7, model DAG shape + materializations, IaC integration design, unified variable control (.env split by consumer), 3-milestone sequence M1-M3, 7 open research questions gating M1; strategy-only, no code yet). Next = research window then M1 build. |
+| `docs/context/dbt-curriculum.md` | Active (written 2026-06-05; 6-unit hands-on mentorship syllabus with new-window protocol; per-unit journal files in `dbt-journal/` created as entered; status tracking in the file itself). Companion to `dbt-plan.md` (strategy) -- this file is the TEACHING arc. |
 | `docs/context/met-deepdive.md` | Active register (created 2026-05-30; ~30 stable-ID Met questions across LEG/IMG/PIPE/DATA/DDL/COST/AUTO/AUTH; Met facts web-verified). **Design→build arc COMPLETE:** S1 strawman → S2 Python review → S2b DDL review → **S3 APPLIED 2026-05-31** (owner ran `make infra`; `DDL-04`/`DDL-05` + the 4 cosmetic decisions → applied; `MET_ENRICHMENT_CONTROL`/`MET_CSV_SNAPSHOT`/`MET_WORKLIST`/`MET_LEASE_RECLAIM_TASK` live in `ARTWORK_DB.BRONZE`). Per-session detail lives in the doc's own sections. **Open = Section C** (data seed, PIPE-06 lease-claim MERGE, DATA-01/DATA-06, AUTO-03; AUTH-01 key-pair CLOSED + verified 2026-05-31). Dual-instance incident this arc → durable restart trail in `session-3-progress-log.md`. |
 
 ## Roadmap & deferred work

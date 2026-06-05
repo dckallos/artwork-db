@@ -135,6 +135,25 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 | `.env.example` | 25 | Met-specific env template; **hardcoded sample account (l.14)** | 2026-05-30 | — |
 | `README.md` | 251 | operator runbook; **2026-06-05: reframed to Option B (snapshot/seed-control/enrich-met) as current, SQLite path relabeled legacy; V001-V007 ref removed** | 2026-06-05 | need narrative/recovery context |
 
+## artwork_pipeline/ (dbt project -- see `dbt-plan.md` + `dbt-curriculum.md`)
+
+| File | Lines | Purpose | Verified | Open full source only if... |
+|---|---|---|---|---|
+| `dbt_project.yml` | 39 | project config: profile link, path defaults, global `copy_grants`, schema routing (staging->SILVER, marts->GOLD) | 2026-06-05 | changing materialization defaults / schema routing |
+| `profiles.yml` | 32 | connection profile: `env_var()` key-pair auth, target `dev`, schema SILVER, threads 4 | 2026-06-05 | changing auth / target |
+| `packages.yml` | 11 | `dbt_utils >=1.3,<2.0` + `codegen >=0.14,<0.15` | 2026-06-05 | adding/bumping packages |
+| `models/staging/met/stg_met__artworks.sql` | 107 | staging view: flattens `RAW_PAYLOAD` VARIANT into typed columns (csv + api_images paths) | 2026-06-05 | changing column extract paths |
+| `models/staging/met/_met__sources.yml` | 36 | source declaration: `met` -> `ARTWORK_DB.BRONZE.RAW_MET_OBJECTS` with PK tests | 2026-06-05 | adding source tables |
+| `models/staging/met/_met__models.yml` | 37 | model schema: column descriptions + `unique`/`not_null` tests for `stg_met__artworks` | 2026-06-05 | adding/changing tests |
+| `.gitignore` | — | ignores target/, dbt_packages/, logs/ | prior | — |
+
+## docs/context/dbt-curriculum.md + dbt-journal/ (dbt learning arc)
+
+| File | Lines | Purpose | Verified | Open full source only if... |
+|---|---|---|---|---|
+| `dbt-curriculum.md` | 270 | master syllabus: 6-unit curriculum, new-window protocol, status tracking, journal template | 2026-06-05 | resuming dbt work in a new window |
+| `dbt-journal/unit-N-*.md` | — | per-unit journal files (created as each unit starts): commands, decisions, errors, takeaways | — | reviewing a specific unit's learnings |
+
 ## analysis/ (Section C — read-only profiling, not IaC, not operational ETL)
 
 | File | Lines | Purpose | Verified | Open full source only if… |
