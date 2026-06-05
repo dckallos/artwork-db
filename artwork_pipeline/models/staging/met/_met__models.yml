@@ -30,6 +30,7 @@ models:
           - not_null:
               config:
                 severity: warn
+                store_failures: true
       - name: artist_display_name
         description: "Primary artist display name (pipe-delimited if multiple)"
       - name: classification
