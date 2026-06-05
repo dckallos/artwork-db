@@ -56,7 +56,7 @@
 
 {% macro generate_schema_name(custom_schema_name, node) -%}
 
-    {% set allowed_schemas = ['SILVER', 'GOLD'] %}
+    {% set allowed_schemas = ['SILVER', 'GOLD', 'DBT_TEST__AUDIT'] %}
 
     {%- if custom_schema_name is none -%}
         {# No +schema declared on the model; use the target default (SILVER). #}
