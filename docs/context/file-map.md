@@ -151,7 +151,8 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 
 | File | Lines | Purpose | Verified | Open full source only if... |
 |---|---|---|---|---|
-| `dbt-curriculum.md` | 270 | master syllabus: 6-unit curriculum, new-window protocol, status tracking, journal template | 2026-06-05 | resuming dbt work in a new window |
+| `dbt-curriculum.md` | 273 | master syllabus: 6-unit curriculum, new-window protocol, status tracking, journal template | 2026-06-05 | resuming dbt work in a new window |
+| `dbt-governance-plan.md` | 446 | PROPOSAL: 5-layer dbt governance framework (RBAC, cost, object proliferation, multi-dev, observability); problem statement, damage scenarios, considerations for reviewers, MVG subset | 2026-06-05 | planning governance controls or reviewing the proposal |
 | `dbt-journal/unit-N-*.md` | — | per-unit journal files (created as each unit starts): commands, decisions, errors, takeaways | — | reviewing a specific unit's learnings |
 
 ## analysis/ (Section C — read-only profiling, not IaC, not operational ETL)

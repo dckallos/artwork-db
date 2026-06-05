@@ -139,6 +139,9 @@ SELECT ENRICHMENT_STATUS, COUNT(*) FROM ARTWORK_DB.SILVER.STG_MET__ENRICHMENT_ST
 
 ### Unit 4: Your First Mart (Gold Layer)
 
+> **Prerequisite reading:** `docs/context/dbt-governance-plan.md` (the MVG-2
+> section on `generate_schema_name` is implemented in this unit).
+
 **Objective:** Build `marts/core/dim_artworks.sql` -- a TABLE in GOLD with a
 surrogate key, selected business columns, and light transformation logic.
 
