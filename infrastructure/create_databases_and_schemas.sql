@@ -18,3 +18,6 @@ CREATE SCHEMA IF NOT EXISTS SILVER
 
 CREATE SCHEMA IF NOT EXISTS GOLD
     COMMENT = 'Business-ready fact and reporting tables. Owned by dbt mart models.';
+
+CREATE SCHEMA IF NOT EXISTS DBT_TEST__AUDIT
+    COMMENT = 'dbt test failure storage (store_failures: true). Tables auto-managed by dbt test runs.';

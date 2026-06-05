@@ -1,6 +1,6 @@
 -- =============================================================================
 -- create_databases_and_schemas.sql ROLLBACK: drop the ARTWORK_DB database created by create_databases_and_schemas.sql. DROP DATABASE
--- cascades through BRONZE, SILVER, GOLD and every schema-level object
+-- cascades through BRONZE, SILVER, GOLD, DBT_TEST__AUDIT and every schema-level object
 -- beneath them (tables, views, stages, file formats, tasks, streams, grants).
 --
 -- Paired forward: infrastructure/create_databases_and_schemas.sql.
