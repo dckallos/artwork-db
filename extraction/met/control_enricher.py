@@ -139,12 +139,24 @@ def _claim_batch(
 
 
 # --------------------------------------------------------------------------- fetch
-async def _fetch_blocks(config: Config, object_ids: List[int]) -> Tuple[List[Dict[str, Any]], "_RateLimiter"]:
+async def _fetch_blocks(
+    config: Config,
+    object_ids: List[int],
+    progress_every: int = 100,
+    processed_offset: int = 0,
+    total_label: str = "?",
+) -> Tuple[List[Dict[str, Any]], "_RateLimiter"]:
     """Fetch image data for the claimed ids.
 
     Returns (blocks, rate_limiter). The limiter is returned (not just consumed)
     so the caller can read its throttle counters into the per-batch INFO log
     after `asyncio.run` returns -- P-T2.
+
+    Emits a live "Progress" INFO line every `progress_every` completed API calls
+    (counted as each fetch finishes, not after the whole batch), so the operator
+    sees the running enriched total advance during the fetch. `processed_offset`
+    is the count already done in prior batches and `total_label` the worklist
+    denominator, so the line reads e.g. `Progress: 300/1,827 done=.. no_image=..`.
     """
     rate_limiter = _RateLimiter(config.api_requests_per_second)
     throttle_gate = _ThrottleGate()  # global backoff shared by all workers
@@ -154,6 +166,7 @@ async def _fetch_blocks(config: Config, object_ids: List[int]) -> Tuple[List[Dic
     )
     headers = {"User-Agent": config.api_user_agent, "Accept": "application/json"}
     blocks: List[Dict[str, Any]] = []
+    counts: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
     lock = asyncio.Lock()
 
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
@@ -176,6 +189,15 @@ async def _fetch_blocks(config: Config, object_ids: List[int]) -> Tuple[List[Dic
             }
             async with lock:
                 blocks.append(block)
+                counts[status] = counts.get(status, 0) + 1
+                done_in_batch = len(blocks)
+                # Live heartbeat: log as each Nth API call completes.
+                if done_in_batch % progress_every == 0:
+                    logger.info(
+                        "Progress: %s/%s done=%s no_image=%s error=%s",
+                        f"{processed_offset + done_in_batch:,}", total_label,
+                        counts["done"], counts["no_image"], counts["error"],
+                    )
 
         await asyncio.gather(*(worker(oid) for oid in object_ids))
 
@@ -276,11 +298,13 @@ def _release_unfinished(
 # --------------------------------------------------------------------------- driver
 def _process_one_batch(
     sf_conn: snowflake.connector.SnowflakeConnection, config: Config, batch_size: int,
+    progress_every: int = 100, processed_offset: int = 0, total_label: str = "?",
 ) -> Tuple[int, Dict[str, int]]:
     """Claim, fetch, assemble, and callback one batch.
 
     Returns (claimed_count, status_counts). claimed_count == 0 means the worklist is
-    drained (caller stops).
+    drained (caller stops). `processed_offset`/`total_label` thread through to the
+    live per-fetch progress line emitted inside `_fetch_blocks`.
     """
     batch_id = (
         f"met_enrich_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -295,7 +319,9 @@ def _process_one_batch(
 
         _log_start(cur, batch_id)
         try:
-            blocks, rate_limiter = asyncio.run(_fetch_blocks(config, claimed))
+            blocks, rate_limiter = asyncio.run(
+                _fetch_blocks(config, claimed, progress_every, processed_offset, total_label)
+            )
             counts: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
             for b in blocks:
                 counts[b["enrichment_status"]] = counts.get(b["enrichment_status"], 0) + 1
@@ -369,8 +395,6 @@ def enrich_from_control(
         total_expected: if known, show "X/total" in progress lines; otherwise "X/?".
     """
     totals: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0, "claimed": 0}
-    # Track how many items processed since the last progress line.
-    _progress_emitted = 0
     total_label = f"{total_expected:,}" if total_expected else "?"
 
     sf_conn = _snowflake_connect(config)
@@ -389,22 +413,21 @@ def enrich_from_control(
 
         batch_no = 0
         while max_batches is None or batch_no < max_batches:
-            claimed, counts = _process_one_batch(sf_conn, config, batch_size)
+            # Progress now streams live from inside _fetch_blocks as each API call
+            # completes; pass the running offset + denominator so the line reads
+            # against the whole worklist (e.g. "300/1,827").
+            claimed, counts = _process_one_batch(
+                sf_conn, config, batch_size,
+                progress_every=progress_every,
+                processed_offset=totals["claimed"],
+                total_label=total_label,
+            )
             if claimed == 0:
                 break
             totals["claimed"] += claimed
             for k in ("done", "no_image", "error"):
                 totals[k] += counts.get(k, 0)
             batch_no += 1
-
-            # Emit progress at every progress_every boundary.
-            while totals["claimed"] >= _progress_emitted + progress_every:
-                _progress_emitted += progress_every
-                logger.info(
-                    "Progress: %s/%s done=%s no_image=%s error=%s",
-                    f"{_progress_emitted:,}", total_label,
-                    totals["done"], totals["no_image"], totals["error"],
-                )
     finally:
         sf_conn.close()
 

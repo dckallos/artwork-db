@@ -1,15 +1,25 @@
 # Met OpenAccess Bronze loader
 
-Three-phase, fully-resumable extractor for the Metropolitan Museum of Art
-Open Access collection.
+Fully-resumable extractor for the Metropolitan Museum of Art Open Access
+collection.
 
-1. **bootstrap** -- Stream `MetObjects.csv` from GitHub into local SQLite.
-2. **enrich**    -- Call the Met API once per object to capture image URLs.
-                  Records without a primary image are flagged `no_image` and
-                  excluded from the Bronze load. Resumable.
-3. **upload**    -- Bulk-load every `done` row into
-                  `ARTWORK_DB.BRONZE.raw_met_objects` via stage + `COPY INTO`.
-                  Idempotent: rows track their own upload state.
+**Current (Snowflake-authoritative) path -- Option B.** State lives in Snowflake
+Bronze control tables; SQLite is only disposable in-run scratch.
+
+1. **snapshot**     -- Load the full `MetObjects.csv` from GitHub into
+                    `ARTWORK_DB.BRONZE.MET_CSV_SNAPSHOT` (descriptive truth; no API
+                    calls) via stage + `COPY INTO` + `MERGE`.
+2. **seed-control** -- Insert `pending` control rows for a bounded slice of the
+                    snapshot into `BRONZE.MET_ENRICHMENT_CONTROL`. This is where the
+                    costly API enrichment is bounded.
+3. **enrich-met**   -- Drain `BRONZE.MET_WORKLIST`: lease-claim a batch, fetch image
+                    URLs from the Met API locally, assemble `RAW_MET_OBJECTS`
+                    server-side from the snapshot, and write outcomes back to the
+                    control table. Resumable via lease TTL reclaim.
+
+**Legacy SQLite path (superseded; kept in the CLI only).** The original
+`bootstrap` -> `enrich` -> `upload` flow stored state in local SQLite. It still
+runs but is no longer the architecture; see "Usage (legacy SQLite path)" below.
 
 See the parent action plan sub-page for the full design rationale and code.
 
@@ -34,8 +44,9 @@ Override these locations with `MET_SQLITE_PATH` and `MET_CSV_LOCAL_PATH` in
 ## Prerequisites
 
 - Python 3.10+ (3.11 recommended).
-- Snowflake account with infra from `infrastructure/V001-V007` applied:
-  database `ARTWORK_DB`, schema `BRONZE`, table `raw_met_objects`, internal
+- Snowflake account with infra applied (run `make infra` from the repo root):
+  database `ARTWORK_DB`, schema `BRONZE`, the Bronze tables (`RAW_MET_OBJECTS`,
+  `MET_CSV_SNAPSHOT`, `MET_ENRICHMENT_CONTROL`) + `MET_WORKLIST` view, internal
   stage `bronze_load_stage`, role `ARTWORK_LOADER`, warehouse `ARTWORK_WH`.
 - ~5 GB free local disk.
 - Outbound HTTPS to `raw.githubusercontent.com`,
@@ -47,13 +58,47 @@ Override these locations with `MET_SQLITE_PATH` and `MET_CSV_LOCAL_PATH` in
     python -m venv .venv && source .venv/bin/activate
     pip install -r requirements.txt
     cp .env.example .env   # then edit credentials
-    python -m extraction.met.run all -v
+    # Current path (run from the repo root):
+    python -m extraction.met.run snapshot -v
+    python -m extraction.met.run seed-control -v
+    python -m extraction.met.run enrich-met -v
 
-## Usage
+## Usage (current: Option B)
 
-Each phase is independently runnable and fully resumable. Run them in order
-on a fresh setup, or invoke a single phase if you only need to refresh one
-part of the pipeline.
+Three subcommands, run in order on a fresh load. State lives in Snowflake, so
+each is independently re-runnable and `enrich-met` is resumable via lease reclaim.
+
+### snapshot
+
+    python -m extraction.met.run snapshot -v
+
+- Streams `MetObjects.csv` from GitHub and loads it into
+  `BRONZE.MET_CSV_SNAPSHOT` via stage -> `COPY INTO` -> `MERGE` (no API calls).
+- Pass `--no-refresh` to reuse the local CSV; `--limit N` to cap rows (smoke test).
+
+### seed-control
+
+    python -m extraction.met.run seed-control -v
+
+- Inserts `pending` rows into `BRONZE.MET_ENRICHMENT_CONTROL` for a bounded slice
+  of the snapshot. `--department "European Paintings"` scopes the slice;
+  `--limit N` caps it; `--include-non-public-domain` drops the PD gate.
+- This is the cost-control point: enrichment only touches seeded rows.
+
+### enrich-met
+
+    python -m extraction.met.run enrich-met -v
+
+- Drains `BRONZE.MET_WORKLIST`: lease-claims a batch, fetches image URLs from the
+  Met API locally, assembles `RAW_MET_OBJECTS` server-side, writes outcomes back.
+- `--limit N` bounds a single batch (smoke test); omit it to drain the worklist.
+- Resumable: abandoned leases reclaim via TTL (see `MET_LEASE_RECLAIM_TASK`).
+
+## Usage (legacy SQLite path)
+
+Superseded by Option B above; kept in the CLI for reference. Each phase is
+independently runnable and fully resumable. Run them in order on a fresh setup,
+or invoke a single phase if you only need to refresh one part of the pipeline.
 
 ### Phase A: bootstrap
 

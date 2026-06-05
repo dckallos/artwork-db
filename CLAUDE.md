@@ -42,11 +42,13 @@ make rollback FILE=infrastructure/create_stages.sql  # Rollback one file
 make down         # Full teardown
 make down FROM=create_stages  # Partial teardown
 
-# Extraction
-python -m extraction.met.run --phase all  # Run Met extraction
-python -m extraction.met.run --phase bootstrap  # Download CSV only
-python -m extraction.met.run --phase enrich     # API enrichment
-python -m extraction.met.run --phase upload     # Upload to Bronze
+# Extraction (Met CLI takes SUBCOMMANDS, not --phase/--source)
+# Current Snowflake-authoritative path (Option B):
+python -m extraction.met.run snapshot       # Load full CSV into BRONZE.MET_CSV_SNAPSHOT
+python -m extraction.met.run seed-control    # Seed bounded slice into MET_ENRICHMENT_CONTROL
+python -m extraction.met.run enrich-met      # Drain worklist: fetch images, assemble Bronze
+# Legacy SQLite path (superseded; kept in CLI only):
+#   python -m extraction.met.run bootstrap|enrich|upload|all|status
 
 # Ad-hoc checks (safe)
 scripts/check.sh  # Show active sessions

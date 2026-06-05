@@ -69,11 +69,11 @@ rename makes grants an auto-paired `create_`).
 | `create_databases_and_schemas.sql` | 21 | `ARTWORK_DB` + BRONZE/SILVER/GOLD schemas (`IF NOT EXISTS`) | prior | adding schemas |
 | `create_file_formats.sql` | 22 | `JSON_RAW`, `PARQUET_RAW` in BRONZE (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding formats |
 | `create_stages.sql` | 14 | `BRONZE_LOAD_STAGE` internal stage (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding stages |
-| `create_bronze_tables.sql` | 124 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`) | 2026-05-31 | schema changes |
-| `create_bronze_views.sql` *(NEW, Session-3)* | 59 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`) | 2026-05-31 | changing worklist priority/filters |
+| `create_bronze_tables.sql` | 145 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`); 2026-06-05 added canonical-ref header comment | 2026-06-05 | schema changes |
+| `create_bronze_views.sql` *(NEW, Session-3)* | 60 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`); 2026-06-05 added canonical-ref header comment | 2026-06-05 | changing worklist priority/filters |
 | `create_run_control.sql` *(NEW, Session-3)* | 46 | `RUN_CONTROL` durable checkpoint table — PK (run_id, step), VARIANT checkpoint, session_id/query_tag provenance; resume work across connection drops (`IF NOT EXISTS`) | 2026-05-31 | changing checkpoint schema |
 | `create_service_user.sql` | ~110 | **TWO** SERVICE users: `ARTWORK_LOADER_SVC` (->ARTWORK_LOADER) + **2026-06-04: `ARTWORK_TRANSFORMER_SVC` (->ARTWORK_TRANSFORMER, dbt identity)**; each `CREATE … IF NOT EXISTS` + idempotent `ALTER` converge to `TYPE=SERVICE`/`UNSET PASSWORD` (key-pair only) | 2026-06-04 | auth/identity changes |
-| `create_tasks.sql` | 44 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`) | 2026-05-31 | defining/altering tasks |
+| `create_tasks.sql` | 53 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`); 2026-06-05 added canonical-ref header comment | 2026-06-05 | defining/altering tasks |
 | `drop_*.sql` (11) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases), `drop_run_control`, + real `drop_tasks` | 2026-05-31 | rolling back |
 | `create_grants.sql` *(renamed from grant_privileges.sql, Session-3)* | 51 | ALL+FUTURE grants to functional roles + **LOADER SELECT on ALL+FUTURE VIEWS in BRONZE** (runs as ARTWORK_ADMIN) | 2026-05-31 | changing grants |
 | `refresh_grants.sql` | 24 | repeatable: re-grant ALL (current) incl. **VIEWS**; no drop | 2026-05-31 | after new objects land |
@@ -98,7 +98,7 @@ rename makes grants an auto-paired `create_`).
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `Makefile` | — | task runner; `CONN=` passthrough; **2026-06-04: NEW `loader` + `transformer` targets wrap `setup.sh --profile $(CONN) --phase loader|transformer` (mint+register service-user key-pairs via make)** | 2026-06-04 | changing make targets |
+| `Makefile` | — | task runner; `CONN=` passthrough; 2026-06-04: `loader` + `transformer` targets wrap `setup.sh --profile $(CONN) --phase loader\|transformer`; **2026-06-05: `extract-met` rewritten to real subcommands (snapshot/seed-control/enrich-met) + generic `AWS_NO_SSO` prefix on PUT steps + `MET_DEPT`/`MET_SEED_LIMIT`/`MET_ENRICH_LIMIT` knobs; `extract` aliases it; aic/cma/smithsonian commented placeholders** | 2026-06-05 | changing make targets |
 | `.env.example` | 39 | runtime env template; **2026-06-04 re-pointed to new account: example acct `OBANOYY-MK07348`, namespaced loader key `<conn>_loader_rsa_key.p8`, dbt identity `DBT_SNOWFLAKE_USER=ARTWORK_TRANSFORMER_SVC` + `<conn>_transformer_rsa_key.p8`**; `SMITHSONIAN_API_KEY` still no consumer | 2026-06-04 | — |
 | `profiles.yml.example` | 39 | dbt-core profile (env_var + key-pair, dev→SILVER/prod→GOLD); **gap for Snowflake-native dbt** (extraction.md) | 2026-05-30 | — |
 | `requirements.txt` | — | root pin set (mirrors extraction deps) | 2026-05-30 | bumping pins |
@@ -114,11 +114,13 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 
 | File | Lines | Purpose | Verified | Open full source only if… |
 |---|---|---|---|---|
-| `run.py` | 137 | argparse CLI: bootstrap/**snapshot**/enrich/upload/status/all | 2026-05-31 | changing CLI/phase wiring |
+| `run.py` | 199 | argparse CLI (SUBCOMMANDS, not --phase): current **snapshot/seed-control/enrich-met** (Option B) + legacy bootstrap/enrich/upload/all/status; `-v` is a global flag (before the subcommand) | 2026-06-05 | changing CLI/subcommand wiring |
 | `config.py` | 71 | `Config` dataclass; `MET_*`+`SNOWFLAKE_*` env w/ defaults | 2026-05-30 | changing settings/defaults; **stale V001-V007 ref (l.53-54)** |
 | `db.py` | 43 | `load_sql()`, `initialize_database()`, `connect()` | 2026-05-30 | changing SQL-load or SQLite conn |
 | `csv_bootstrap.py` | 268 | download CSV + `_map_row` + batched UPSERT + **`assert_real_met_csv` DATA-06 guard** | 2026-05-31 | adding/removing a CSV column; CSV-integrity rules |
 | `snapshot_loader.py` | 302 | **Section C Phase 1:** full CSV → VARIANT NDJSON → PUT → COPY (session STG) → MERGE `MET_CSV_SNAPSHOT` (keyed `object_id`); AUTO-03 log; Option B | 2026-05-31 | changing snapshot load/MERGE/AUTO-03 |
+| `control_seeder.py` | 160 | **Option B Phase 2:** seed `pending` rows into `MET_ENRICHMENT_CONTROL` from a bounded `MET_CSV_SNAPSHOT` slice (`--department`/`--limit`/PD gate) | 2026-06-05 | changing seed slice/gate logic |
+| `control_enricher.py` | 438 | **Option B Phase 3:** lease-claim a `MET_WORKLIST` batch → async Met API fetch → stage+COPY → assemble `RAW_MET_OBJECTS` server-side → batch callback. **2026-06-05: progress now streams live per-N completed fetches (was post-batch)** | 2026-06-05 | changing claim/fetch/assemble/progress logic |
 | `image_enricher.py` | 280 | async API fetch; rate limiter + backoff (Snowflake-free today; Phase 3 will add lease-claim) | 2026-05-30 | changing retry/limiter/state logic |
 | `snowflake_uploader.py` | 289 | NDJSON + PUT + COPY INTO Bronze; marks upload state; `_snowflake_connect` (key-pair) | 2026-05-31 | changing Bronze JSON shape / COPY mapping / connect |
 | `sql/schema.sql` | 97 | SQLite DDL: `met_artworks` + `extraction_runs` + indexes | 2026-05-30 | schema changes |
@@ -131,7 +133,7 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 | `__init__.py` | 5 | package docstring | 2026-05-30 | — |
 | `requirements.txt` | 5 | connector/requests/aiohttp/dotenv | 2026-05-30 | bumping pins |
 | `.env.example` | 25 | Met-specific env template; **hardcoded sample account (l.14)** | 2026-05-30 | — |
-| `README.md` | 207 | operator runbook (phases, recovery, tuning, verify SQL); **stale V001-V007 ref (l.37)** | 2026-05-30 | need narrative/recovery context |
+| `README.md` | 251 | operator runbook; **2026-06-05: reframed to Option B (snapshot/seed-control/enrich-met) as current, SQLite path relabeled legacy; V001-V007 ref removed** | 2026-06-05 | need narrative/recovery context |
 
 ## analysis/ (Section C — read-only profiling, not IaC, not operational ETL)
 

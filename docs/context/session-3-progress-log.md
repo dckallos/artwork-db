@@ -2473,3 +2473,110 @@ confirm solo=1 + CORTEX_FORK_INCIDENTS=0; then ask which step the owner has comp
 ```
 
 - **End of this window (2026-06-04 cutover; CANONICAL -- supersedes the "eleventh" marker. NEW account OBANOYY-MK07348/EP21559, admin PORCHFLAKE; loader key gap identified (RSA_PUBLIC_KEY=null). Staged (workspace, un-synced, NOT applied): Makefile `loader`+`transformer` targets (Option B); create_service_user.sql adds ARTWORK_TRANSFORMER_SVC (TYPE=SERVICE) + role grant (compile-validated) -- the dbt identity, mirroring the loader; 09/10 transformer keypair scripts + register_transformer_public_key.sql + setup.sh/_lib.sh wiring; .env.example + CLAUDE.md + AGENTS.md + file-map + met-deepdive re-pointed to the new account. An earlier create_roles.sql grant-to-PORCHFLAKE strawman was REVERTED (no human login in IaC). dbt = Mac dbt Core only as ARTWORK_TRANSFORMER_SVC; European Paintings slice. Next = owner runs make loader CONN=mk07348 -> snapshot -> seed/enrich -> make infra + make transformer + dbt-build/test on the Mac.)**
+
+---
+
+## 2026-06-05 -- Part 1 doc/Makefile fixes + AWS-SSO root-cause + live progress logging + DDL-doc pass
+
+**What changed this turn** (workspace stage; `applied-to-account: NO`; `pushed-to-Mac: NO`):
+- **Part 1 (stale-CLI-ref fixes).** The Met CLI takes SUBCOMMANDS, not `--phase`/`--source`.
+  - `Makefile`: `extract-met` now chains `snapshot -> seed-control -> enrich-met` with a
+    generic `AWS_NO_SSO` env prefix on the two PUT steps; added `MET_DEPT`/`MET_SEED_LIMIT`/
+    `MET_ENRICH_LIMIT` knobs; `extract` aliases `extract-met`; `extract-aic/cma/smithsonian`
+    are commented placeholders. No account/conn names hard-coded. `make -n` verified expansion.
+  - `CLAUDE.md`, `extraction/met/CLAUDE.md`, `extraction/met/README.md`: re-pointed to Option B
+    (snapshot/seed-control/enrich-met) as current; SQLite path relabeled legacy; `V001-V007` dropped.
+- **AWS-SSO stall root cause.** botocore (spun up by the stage PUT) was refreshing a DEAD AWS
+  SSO profile -> ~10-min stall/Ctrl-C. NOT a pipeline bug; Snowflake key-pair auth is separate.
+  Permanent fix (owner, Mac): clear `~/.aws/config`. Workspace fix: `AWS_NO_SSO` baked into Makefile.
+- **Live progress logging (Python; owner-requested).** `extraction/met/control_enricher.py`:
+  progress now streams per-N completed fetches from inside `_fetch_blocks` (was a post-batch dump);
+  removed the redundant post-batch emitter. `python3 -m py_compile` OK.
+- **DDL-doc pass.** `create_tasks.sql`: added the **TTL-vs-throttling caveat** (30-min TTL assumed
+  ~20 rps; observed ~1 rps under throttling -> a 2000-row batch could outlive the TTL and get
+  reclaimed mid-fetch). Mirrored into `ddl-infrastructure.md` Gaps. `file-map.md`: added the two
+  missing rows (`control_seeder.py`, `control_enricher.py`) + refreshed the `README.md` row.
+  (Inline comments on the 3 create files were already comprehensive -- no cosmetic edits made.)
+
+**Cumulative workspace state vs the Mac (delta the NEXT sync carries):** the 2026-06-04 cutover
+delta is already ON the Mac (the account now has both SERVICE users with RSA keys registered +
+successful logins, and the full snapshot loaded -- so make infra/loader/transformer already ran).
+The remaining un-synced delta = THIS session only: `Makefile`, `CLAUDE.md`,
+`extraction/met/CLAUDE.md`, `extraction/met/README.md`, `extraction/met/control_enricher.py`,
+`infrastructure/create_tasks.sql` (comment only), `docs/context/{ddl-infrastructure,file-map,
+session-3-progress-log}.md`.
+
+**Solo-session check:** PASS -- 1 live `cortex_code_snowsight` session, `CORTEX_FORK_INCIDENTS = 0`.
+
+**Live account state (verified read-only this session):**
+- `ARTWORK_LOADER_SVC` + `ARTWORK_TRANSFORMER_SVC`: both `TYPE=SERVICE`, RSA key registered, logged in.
+- `MET_CSV_SNAPSHOT = 484,956` (FULL CSV loaded). `MET_ENRICHMENT_CONTROL = 2,327` pending.
+  `MET_WORKLIST` free pending = `1,827`. `RAW_MET_OBJECTS = 0` at the time of my last data query.
+- Owner pasted a SUCCESSFUL batch (`claimed=500 done=498 no_image=2 error=0`) AFTER that query, so
+  Bronze likely now has ~498 rows -- **NOT re-verified.** Two leased batches existed
+  (`met_enrich_20260605T160532Z` dead Ctrl-C; `met_enrich_20260605T162726Z`); both self-reclaim via TTL.
+
+**First-action options for the next window:**
+- **(a)** Sync this session's edits to the Mac, then `python -m extraction.met.run -v enrich-met --limit 20`
+  and CONFIRM the new live `Progress: N/1,827 ...` streaming + Bronze climbing.
+- **(b)** Verify current Bronze state (queries below) and reconcile against the owner's `done=498` paste.
+- **(c)** Start **Part 3 dbt mentorship** (deferred this session) against the now-populated Bronze.
+
+**Read-only verification queries:**
+```sql
+SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;                       -- expect ~498+
+SELECT ENRICHMENT_STATUS, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL GROUP BY 1;
+SELECT COUNT(*) AS FREE_PENDING FROM ARTWORK_DB.BRONZE.MET_WORKLIST;
+SELECT CLAIMED_BY_BATCH, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL
+ WHERE CLAIMED_BY_BATCH IS NOT NULL GROUP BY 1;                              -- leased batches
+```
+
+**Decision tree (next run output shapes):**
+- enrich-met logs stream `Progress:` lines live -> logging fix confirmed (Mac was synced).
+  Still a single post-batch dump -> Mac NOT synced; sync `control_enricher.py` first.
+- Bronze climbs toward `done` count -> healthy. High `error` count -> Met API throttling;
+  lower `MET_API_RPS` in `.env` (separate from the AWS fix).
+- A batch runs >30 min -> the TTL caveat is biting; use smaller `--limit` (or raise TTL, sign-off).
+
+**Deferred patches (priority order):**
+1. (owner, Mac) clear `~/.aws/config` so direct `python` runs need no `AWS_NO_SSO` prefix.
+2. TTL-vs-throttling: decide raise `MET_LEASE_RECLAIM_TASK` TTL vs. keep `--limit` discipline (sign-off).
+3. Part 3 dbt mentorship (full command-maximizing session) -- now unblocked by populated Bronze.
+4. AGENTS.md "new gated items": V/R/B reword in `git-setup/README.md`; `rename_and_update.py` fate;
+   native dbt `profiles.yml`; `SMITHSONIAN_API_KEY` consumer.
+5. Reconcile remaining `file-map.md` stale notes (`config.py` l.53-54 V-ref; `.env.example` l.14 account).
+
+**MUST NOT happen next window (foot-guns):**
+- Do NOT run `make`/`python`/`dbt` from the workspace (Mac-only); no push to `main`; no dbt install in workspace.
+- Do NOT assume the Mac has this session's `control_enricher.py` change until it is synced.
+- Do NOT re-run `snapshot` (the full CSV is already loaded) -- wasteful re-download + MERGE.
+- Do NOT write anything if the solo-session check returns >1; do NOT abort husk sessions.
+
+```text
+Read AGENTS.md first, then ONLY the latest dated entry in docs/context/session-3-progress-log.md
+(the 2026-06-05 entry). Stop once you can act.
+
+SOLO CHECK before any write: count cortex_code_snowsight sessions in the last ~10 min
+(QUERY_TAG ILIKE '%cortex_code_snowsight%') and check ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS.
+Exactly 1 = solo; >1 = stop and ask. Do not abort husks.
+
+DUAL-FS: Workspace edits are NOT on my Mac until I sync. Report applied-to-account yes/no and
+pushed-to-Mac yes/no. No make/python/dbt from the workspace -- I run those on the Mac.
+
+GATING: state your plan and WAIT for my explicit go + the date before any write or execution.
+
+PROJECT (one line): branch donkey-kong-sandbox; account OBANOYY-MK07348 (admin PORCHFLAKE/
+ACCOUNTADMIN, conn mk07348); Medallion over Met OpenAccess. Phase = Section C data load mostly
+done (full snapshot=484,956; ~498+ Bronze rows enriched); Part 3 dbt mentorship is NEXT.
+Key objects in ARTWORK_DB.BRONZE: MET_CSV_SNAPSHOT, MET_ENRICHMENT_CONTROL, MET_WORKLIST (view),
+MET_LEASE_RECLAIM_TASK (task), RAW_MET_OBJECTS. dbt = Mac dbt Core as ARTWORK_TRANSFORMER_SVC.
+
+UN-SYNCED workspace delta (this session): Makefile, CLAUDE.md, extraction/met/{CLAUDE.md,README.md,
+control_enricher.py}, infrastructure/create_tasks.sql, docs/context/{ddl-infrastructure,file-map,
+session-3-progress-log}.md. Sync before expecting live enrich progress logs.
+
+FIRST RESPONSE: quote the latest `End of this window` header back to me, confirm solo=1 +
+CORTEX_FORK_INCIDENTS=0, then propose your first action (a/b/c in the log) and wait for my go + date.
+```
+
+- **End of this window (2026-06-05; CANONICAL -- supersedes the 2026-06-04 cutover marker. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This window: Part 1 stale-CLI-ref fixes (Makefile extract-met -> real subcommands + generic AWS_NO_SSO prefix + commented aic/cma/smithsonian; CLAUDE.md + extraction/met/CLAUDE.md + extraction/met/README.md reframed to Option B, SQLite labeled legacy, V001-V007 dropped); AWS-SSO stall root-caused (dead profile -> botocore PUT-step refresh; fix = clear ~/.aws/config + AWS_NO_SSO in Makefile); LIVE progress logging in control_enricher.py (per-N during fetch, was post-batch; py_compile OK); DDL-doc pass (create_tasks.sql TTL-vs-throttling caveat + ddl-infrastructure.md Gaps + file-map.md control_seeder/control_enricher rows + README row). ALL edits workspace-only: applied-to-account NO, pushed-to-Mac NO. Live state verified read-only: both SERVICE users keyed+logged-in; MET_CSV_SNAPSHOT=484,956; MET_ENRICHMENT_CONTROL=2,327 pending; RAW_MET_OBJECTS=0 at query time but owner reported a successful 500-batch (done=498) afterward -- NOT re-verified. Part 3 dbt mentorship deferred to next window, now unblocked by populated Bronze.)**

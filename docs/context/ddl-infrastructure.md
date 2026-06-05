@@ -58,25 +58,32 @@ Forward order is exactly the manifest line order. `orchestrate.sh` reads the
 manifest as the single source of truth; filenames carry no order.
 
 Phase 1 — `infrastructure/` (entries whose dir is `infrastructure`):
-1. `create_roles.sql`
-2. `create_warehouses.sql`
-3. `create_databases_and_schemas.sql`
-4. `create_file_formats.sql`
-5. `create_stages.sql`
-6. `grant_privileges.sql`
-7. `create_bronze_tables.sql`
-8. `create_service_user.sql`
-9. `create_tasks.sql`
-10. `refresh_grants.sql`
+1. `create_account_parameters.sql`
+2. `create_roles.sql`
+3. `create_warehouses.sql`
+4. `create_databases_and_schemas.sql`
+5. `create_file_formats.sql`
+6. `create_stages.sql`
+7. `create_grants.sql` (formerly `grant_privileges.sql`)
+8. `create_bronze_tables.sql`
+9. `create_run_control.sql`
+10. `create_bronze_views.sql`
+11. `create_service_user.sql`
+12. `create_tasks.sql`
+13. `create_alerts.sql`
+14. `refresh_grants.sql`
 
 Phase 2 — `git-setup/` (the Git mirror, runs LAST):
-11. `git-setup/create_git_ops_db.sql`
-12. `git-setup/create_api_integration.sql`
-13. `git-setup/create_git_repository.sql`
+15. `git-setup/create_git_ops_db.sql`
+16. `git-setup/create_api_integration.sql`
+17. `git-setup/create_git_repository.sql`
 
 Dependency sanity: file_formats (`json_raw`) precede stages that reference it;
-`grant_privileges` precedes `create_bronze_tables` but uses `FUTURE TABLES`, so
-later-created Bronze tables are still covered; service_user follows its grants.
+`create_grants` precedes `create_bronze_tables` but uses `FUTURE TABLES`, so
+later-created Bronze tables are still covered; `create_bronze_views` follows
+`create_bronze_tables` + `create_run_control` (the `MET_WORKLIST` view reads
+`MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT`); `create_tasks` follows the control
+table it reclaims; service_user follows its grants.
 
 ## `orchestrate.sh` phase → file-set mapping
 
@@ -98,6 +105,72 @@ later-created Bronze tables are still covered; service_user follows its grants.
 - Secret handling: `scripts/secret_bearing.txt` lists scripts whose stdout must be
   suppressed; an undeclared file rendering the `<% github_pat %>` marker aborts
   the run (fail-closed).
+
+## Met control plane — object reference (live-verified 2026-06-05)
+
+Stable reference for the four Session-3 Met enrichment objects, all in
+`ARTWORK_DB.BRONZE`. Shapes verified live via `DESCRIBE` / `GET_DDL` / `SHOW TASKS`
+on account `OBANOYY-MK07348`. Source DDL + paired drops:
+`create_bronze_tables.sql` (the two tables), `create_bronze_views.sql` /
+`drop_bronze_views.sql` (the view), `create_tasks.sql` / `drop_tasks.sql` (the task).
+
+**Data flow (the two-table contract).** Mac and Snowflake split the labor:
+
+    snapshot (full CSV, no API)  ->  MET_CSV_SNAPSHOT   (descriptive truth)
+    seed-control (bounded slice) ->  MET_ENRICHMENT_CONTROL (state only)
+                                         |
+                              MET_WORKLIST (view: control x snapshot, lease-aware)
+                                         |  Mac claims a batch (lease), fetches
+                                         v  image URLs, assembles server-side
+                                     RAW_MET_OBJECTS (enriched Bronze rows)
+    MET_LEASE_RECLAIM_TASK (hourly): frees leases older than 30 min so a crashed
+                                     batch's rows re-enter the worklist.
+
+**`MET_CSV_SNAPSHOT`** (table, PK `OBJECT_ID`). Full Met OpenAccess CSV, one
+VARIANT row per object, landed by `snapshot` via stage -> COPY -> MERGE
+(MERGE-keyed on `object_id`, so re-runs upsert, never append). Columns:
+`OBJECT_ID NUMBER` (PK), `RAW_PAYLOAD VARIANT` (full CSV row, snake_case keys),
+`_EXTRACTED_AT`, `_SOURCE_SYSTEM` ('met_museum'), `_BATCH_ID`. Independent of
+enrichment, so PENDING rows can be prioritized before any API call, and DATA-01
+deaccession is a clean anti-join (object_ids in a prior snapshot, absent now).
+
+**`MET_ENRICHMENT_CONTROL`** (table, PK `OBJECT_ID`). Thin, Snowflake-authoritative
+state/lease table — never the wide descriptive row. 10 columns:
+`OBJECT_ID` (PK), `ENRICHMENT_STATUS` (`pending|done|no_image|error`, default
+`pending`), `LAST_ENRICHED_AT`, `METADATA_DATE` (Met `metadataDate`, the
+incremental-change signal), `HAS_PRIMARY_IMAGE` (monetization gate), `IMAGE_STATUS`
+(`unknown|live|dead`, CDN liveness IMG-04), `LAST_HEAD_CHECK_AT`,
+**`CLAIMED_BY_BATCH`** (lease owner batch_id; NULL = free), **`CLAIMED_AT`** (lease
+timestamp), `ENRICHMENT_ERROR` (last failure, cleared on success).
+
+**`MET_WORKLIST`** (view; `CREATE OR REPLACE`, stateless). The prioritized,
+lease-aware queue the Mac drains. Joins control x snapshot 1:1 on `object_id` and
+filters `CLAIMED_AT IS NULL` (not leased) AND (`status IN ('pending','error')` OR
+`metadata_date > last_enriched_at` OR `has_primary_image IS NULL`). Orders by
+`is_public_domain DESC, is_highlight DESC, department_priority ASC, object_id ASC`
+(department_priority: painting=1, drawing/print=2, photograph=3, sculpture=4,
+else 9). Priority inputs are read from the snapshot VARIANT, never duplicated into
+control — so the view can never drift from the single authority.
+
+**Lease / claim mechanics (what "leased" means).** `enrich-met` claims a batch by
+stamping `CLAIMED_BY_BATCH` + `CLAIMED_AT` on up to `--limit` worklist rows
+(mutual exclusion: the `CLAIMED_AT IS NULL` filter hides them from other runs).
+On success the rows are assembled into `RAW_MET_OBJECTS` and marked `done`. If the
+run dies mid-batch, the rows stay leased to a dead batch and are skipped until
+**`MET_LEASE_RECLAIM_TASK`** clears them.
+
+**`MET_LEASE_RECLAIM_TASK`** (task; `CREATE OR REPLACE`, stateless). Owner
+`ARTWORK_ADMIN`, warehouse `ARTWORK_WH`, `SCHEDULE = USING CRON 0 * * * * UTC`
+(hourly), `NO_OVERLAP`, state `started`. Body: `UPDATE MET_ENRICHMENT_CONTROL SET
+claimed_by_batch=NULL, claimed_at=NULL WHERE claimed_at < DATEADD(minute,-30,
+CURRENT_TIMESTAMP())`. Needs `EXECUTE TASK ON ACCOUNT` granted to `ARTWORK_ADMIN`
+(in `create_roles.sql`). TTL-vs-throttling caveat: see "Gaps / TODOs" below.
+
+**Delete-propagation / uniqueness hooks.** Both tables declare PRIMARY KEYs to
+signal one-row-per-object intent, but Snowflake does NOT enforce PK/UNIQUE — the
+MERGE load pattern carries the guarantee at runtime (Section C). The PKs keep the
+`MET_WORKLIST` join strictly 1:1 (no fan-out) and make DATA-01 deaccession a clean
+snapshot anti-join. Non-enforcement is the open Section-C mentor-flag (see below).
 
 ## Orchestration script internals (confirmed 2026-05-30)
 
@@ -201,6 +274,66 @@ are intentionally empty shells — dbt models (run as `ARTWORK_TRANSFORMER`) pop
 them later. Raw tables follow a uniform shape: `VARIANT raw_payload` + metadata
 (`_extracted_at`, `_source_system`, `_batch_id`).
 
+## Met control plane — object reference (verified live 2026-06-05)
+
+Four `ARTWORK_DB.BRONZE` objects implement the Met enrichment control plane (the
+`snapshot -> seed-control -> enrich-met` pipeline). All checked against live
+`GET_DDL`/`SHOW`/`DESCRIBE` this date; inline comments in the source `create_*.sql`
+are the per-line authority — this is the consolidated map.
+
+1. **`MET_CSV_SNAPSHOT`** (table; `create_bronze_tables.sql`). Full Met OpenAccess
+   CSV as VARIANT, one row per objectID. Cols: `object_id NUMBER` **PK**,
+   `raw_payload VARIANT` (whole CSV row, snake_case keys), `_extracted_at`,
+   `_source_system='met_museum'`, `_batch_id`. Loaded via stage -> `COPY` -> **`MERGE`
+   keyed on `object_id`** (insert new / update changed, never append) — Snowflake does
+   not enforce PK, so the MERGE pattern carries the 1:1 guarantee. Feeds `MET_WORKLIST`
+   priority inputs and the `DATA-01` deaccession diff (anti-join: object_ids in a prior
+   snapshot absent from the current CSV). Live rows 2026-06-05: **484,956**.
+
+2. **`MET_ENRICHMENT_CONTROL`** (table; `create_bronze_tables.sql`). Thin, Snowflake-
+   authoritative **state** table (never the wide descriptive row), one row per objectID
+   (**PK**). 10 cols: `object_id` PK; `enrichment_status` DEFAULT `'pending'`
+   (enum `pending|done|no_image|error`); `last_enriched_at`; `metadata_date` (incremental
+   change signal); `has_primary_image` (monetization gate, LEG-02/IMG-02); `image_status`
+   DEFAULT `'unknown'` (`unknown|live|dead`, IMG-04); `last_head_check_at`;
+   `claimed_by_batch` (lease owner batch_id, NULL = free); `claimed_at` (lease ts);
+   `enrichment_error VARCHAR(500)` (also added via idempotent `ALTER ADD COLUMN IF NOT
+   EXISTS` for pre-existing installs, P-D1).
+   - **Lease mechanics:** a run stamps `claimed_by_batch`+`claimed_at` to mutually
+     exclude other runs; cleared on clean finish (status flips). Abandoned leases
+     (crash/Ctrl-C) are reset by `MET_LEASE_RECLAIM_TASK`.
+   - **Delete-propagation hooks:** `enrichment_status`/`metadata_date` drive
+     re-enrichment; `DATA-01` deaccession rides the snapshot membership diff.
+
+3. **`MET_WORKLIST`** (view; `create_bronze_views.sql`). `CREATE OR REPLACE VIEW`
+   (stateless — cannot drift from control). `MET_ENRICHMENT_CONTROL c` JOIN
+   `MET_CSV_SNAPSHOT s` on `object_id`. Surfaces 9 cols incl. derived `is_public_domain`,
+   `is_highlight`, `department`, `department_priority` (CASE: painting=1, drawing/print=2,
+   photograph=3, sculpture=4, else 9). `WHERE claimed_at IS NULL` (free) `AND (status IN
+   ('pending','error') OR metadata_date > last_enriched_at OR has_primary_image IS NULL)`.
+   `ORDER BY is_public_domain DESC, is_highlight DESC, department_priority ASC,
+   object_id ASC`. The Snowflake->Mac half of the two-table contract; requires LOADER
+   `SELECT` on BRONZE views (grant landed Session 3). Live free-pending 2026-06-05: **1,827**.
+
+4. **`MET_LEASE_RECLAIM_TASK`** (task; `create_tasks.sql`). Owner `ARTWORK_ADMIN`,
+   `WAREHOUSE=ARTWORK_WH`, `SCHEDULE='USING CRON 0 * * * * UTC'` (hourly), state
+   `started`. Body: `UPDATE MET_ENRICHMENT_CONTROL SET claimed_by_batch=NULL,
+   claimed_at=NULL WHERE claimed_at IS NOT NULL AND claimed_at < DATEADD(minute,-30,
+   CURRENT_TIMESTAMP())` — **30-min TTL**. `CREATE OR REPLACE` then `RESUME`. Needs
+   `EXECUTE TASK ON ACCOUNT` (granted to `ARTWORK_ADMIN` in lockstep; enforced by the
+   `bootstrap.py` contract). TTL-vs-throttling caveat (2026-06-05): under Met API
+   throttling ~1 rps a 500-row batch took ~10 min; a batch outliving 30 min can be
+   reclaimed mid-flight (concurrent re-claim = wasted work; Bronze stays correct because
+   assemble is `object_id`-keyed). Mitigate with `--limit`; raising the TTL is deferred,
+   sign-off-gated.
+
+**Flow:** `snapshot` (land CSV) -> `seed-control` (insert `pending` rows for a bounded
+slice) -> `enrich-met` (claim from `MET_WORKLIST`, fetch images locally, assemble
+`RAW_MET_OBJECTS` server-side, write status back). Source:
+`extraction/met/{snapshot_loader,control_seeder,control_enricher}.py`. The enrich step
+streams a live `Progress: X/<worklist> done=.. no_image=.. error=..` INFO line every N
+completed API calls (2026-06-05 change in `control_enricher.py:_fetch_blocks`).
+
 ## DDL style conventions (observed — authoritative)
 
 - Banner header comment block on every file: filename + one-line purpose + explicit
@@ -231,6 +364,13 @@ cascade from dropped parents) but means its only use is manual.
 - `create_tasks.sql` + `drop_tasks.sql` — Session-3: real `MET_LEASE_RECLAIM_TASK`
   (hourly CRON, 30-min TTL lease reclaim; created + `RESUME`d). `EXECUTE TASK ON ACCOUNT`
   is now granted to `ARTWORK_ADMIN` (uncommented in `create_roles.sql`, lockstep). [updated 2026-05-31]
+  - **TTL-vs-throttling caveat [2026-06-05]:** the 30-min TTL assumed ~20 rps
+    (batch finishes in seconds). Observed under Met API throttling: ~1 rps, so a
+    500-row batch took ~10 min and a 2000-row batch could exceed the TTL. If a
+    batch outlives 30 min, the task can reclaim in-flight rows and a concurrent run
+    may re-claim them (wasted work; Bronze stays correct — assemble is `object_id`-
+    keyed). Mitigation today: bound `enrich-met` with `--limit`. Raising the TTL is
+    a deferred, sign-off-gated decision (comment landed in `create_tasks.sql`).
 - `create_service_user.sql` creates `ARTWORK_LOADER_SVC` then CONVERGES it to
   `TYPE = SERVICE` + removed password via idempotent `ALTER USER … SET TYPE = SERVICE;
   UNSET PASSWORD` (because `CREATE … IF NOT EXISTS` cannot alter a pre-existing user).

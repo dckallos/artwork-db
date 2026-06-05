@@ -3,6 +3,8 @@
 -- One table per source API + an extraction log for observability, plus the Met
 -- image-enrichment orchestration pair (MET_ENRICHMENT_CONTROL + MET_CSV_SNAPSHOT).
 -- All raw tables store raw JSON as VARIANT with extraction metadata.
+-- Met control plane (MET_*) object reference: docs/context/ddl-infrastructure.md
+--   section "Met control plane -- object reference".
 -- Paired rollback: infrastructure/drop_bronze_tables.sql
 -- =============================================================================
 

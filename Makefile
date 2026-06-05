@@ -111,21 +111,41 @@ down-from: chmod
 	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --from $(FROM) --connection $(CONN)
 
 # ---------- Extraction ----------
+# The Met CLI entry point is `python -m extraction.met.run <subcommand>`.
+# Current Snowflake-authoritative path: snapshot -> seed-control -> enrich-met.
+# (The legacy SQLite path -- bootstrap/enrich/upload/all/status -- still exists in
+# the CLI but is superseded and is not wired here.)
+#
+# AWS_NO_SSO blinds botocore to any ambient AWS SSO profile for one command. The
+# snapshot/enrich PUT to an internal stage spins up botocore; if the shell carries a
+# (possibly dead) AWS SSO profile, botocore tries to refresh its token and stalls.
+# Snowflake key-pair auth is unaffected, and the stage PUT uses scoped credentials
+# Snowflake passes the connector directly -- so hiding the personal profile is safe.
+AWS_NO_SSO := env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null
 
-extract:
-	python -m extraction.run
+# Optional knobs (empty = CLI default). Override on the command line, e.g.:
+#   make extract-met MET_DEPT="European Paintings" MET_ENRICH_LIMIT=500
+MET_DEPT ?=
+MET_SEED_LIMIT ?=
+MET_ENRICH_LIMIT ?=
+
+# `extract` is an alias for the only built extractor today (Met).
+extract: extract-met
 
 extract-met:
-	python -m extraction.run --source met
+	$(AWS_NO_SSO) python -m extraction.met.run snapshot
+	python -m extraction.met.run seed-control $(if $(MET_DEPT),--department "$(MET_DEPT)") $(if $(MET_SEED_LIMIT),--limit $(MET_SEED_LIMIT))
+	$(AWS_NO_SSO) python -m extraction.met.run enrich-met $(if $(MET_ENRICH_LIMIT),--limit $(MET_ENRICH_LIMIT))
 
-extract-aic:
-	python -m extraction.run --source aic
-
-extract-cma:
-	python -m extraction.run --source cma
-
-extract-smithsonian:
-	python -m extraction.run --source smithsonian
+# Not yet built -- placeholders for Track 4 (new data sources). Each will gain its
+# own extraction/<source>/run.py with the same subcommand shape as Met, then get
+# uncommented (with the AWS_NO_SSO prefix on any stage-PUT step).
+# extract-aic:
+# 	$(AWS_NO_SSO) python -m extraction.aic.run snapshot
+# extract-cma:
+# 	$(AWS_NO_SSO) python -m extraction.cma.run snapshot
+# extract-smithsonian:
+# 	$(AWS_NO_SSO) python -m extraction.smithsonian.run snapshot
 
 # ---------- dbt (via dbt_orchestrate.sh) ----------
 # The orchestrator sources .env, validates vars, and calls dbt with correct

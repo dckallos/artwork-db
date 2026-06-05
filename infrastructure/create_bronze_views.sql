@@ -11,6 +11,8 @@
 --
 -- Idempotency: CREATE OR REPLACE (stateless/derived object, per the class-based
 -- idempotency split in docs/context/ddl-infrastructure.md).
+-- Met control plane object reference: docs/context/ddl-infrastructure.md
+--   section "Met control plane -- object reference".
 -- Paired rollback: infrastructure/drop_bronze_views.sql
 -- =============================================================================
 

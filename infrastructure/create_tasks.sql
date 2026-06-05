@@ -8,8 +8,15 @@
 -- periodically resets leases older than the TTL so the next claim can pick them
 -- up again. It runs Snowflake-side -- the Mac can be closed.
 --
--- TTL = 30 min: far longer than a realistic batch fetch (a 500-2000 row batch at
--- ~20 rps finishes in ~25-100 s), so an in-flight batch is never reclaimed.
+-- TTL = 30 min: chosen to exceed a HEALTHY batch fetch (a 500-2000 row batch at
+-- ~20 rps would finish in ~25-100 s). CAVEAT (observed 2026-06-05): under Met API
+-- throttling, effective throughput can collapse to ~1 rps -- a 500-row batch took
+-- ~10 min, and a 2000-row batch could exceed 30 min. If a batch outlives the TTL,
+-- this task can reclaim its still-in-flight rows mid-fetch, so a concurrent run may
+-- re-claim them (wasted work + lease churn; Bronze stays correct because assemble
+-- is object_id-keyed/idempotent). Mitigation: keep enrich-met batches modest
+-- (--limit) OR raise the TTL. Revisiting the TTL value is a deferred, sign-off-gated
+-- decision -- see docs/context/session-3-progress-log.md (2026-06-05).
 -- Schedule = hourly: reclaim is not time-urgent (no new claims happen while the
 -- Mac is closed), and hourly keeps ARTWORK_WH spins minimal. Owner-decided
 -- 2026-05-31 (met-deepdive.md Session-3 build).
@@ -17,6 +24,9 @@
 -- Idempotency: CREATE OR REPLACE TASK -- a task carries no business data (only
 -- run history), so it follows the stateless/derived class of the idempotency
 -- split, like views/file formats/stages.
+--
+-- Met control plane object reference: docs/context/ddl-infrastructure.md
+--   section "Met control plane -- object reference".
 --
 -- Lockstep: requires GRANT EXECUTE TASK ON ACCOUNT TO ROLE ARTWORK_ADMIN
 -- (uncommented in create_roles.sql). A new task is created SUSPENDED; the

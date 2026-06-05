@@ -11,17 +11,19 @@ Met Museum OpenAccess data loader. Downloads CSV, enriches via API, uploads to B
 
 ## Running the loader
 
+The CLI takes SUBCOMMANDS (not --phase). Current Snowflake-authoritative path:
+
 ```bash
-# Full pipeline
-python -m extraction.met.run --phase all
+# Snowflake-authoritative path (Option B)
+python -m extraction.met.run snapshot      # Load full CSV into BRONZE.MET_CSV_SNAPSHOT
+python -m extraction.met.run seed-control   # Seed bounded slice into MET_ENRICHMENT_CONTROL
+python -m extraction.met.run enrich-met     # Drain worklist: fetch images, assemble Bronze
 
-# Individual phases
-python -m extraction.met.run --phase bootstrap  # Download CSV
-python -m extraction.met.run --phase enrich     # API enrichment
-python -m extraction.met.run --phase upload     # Upload to Bronze
-
-# Check status
-python -m extraction.met.run --phase status
+# Legacy SQLite path (superseded; kept in CLI only)
+python -m extraction.met.run bootstrap      # Download CSV into SQLite
+python -m extraction.met.run enrich         # SQLite API enrichment
+python -m extraction.met.run upload         # Upload SQLite rows to Bronze
+python -m extraction.met.run status         # SQLite status counts
 ```
 
 ## Key files
