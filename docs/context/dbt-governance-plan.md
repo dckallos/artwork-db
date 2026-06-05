@@ -398,6 +398,7 @@ risk-reduction per unit of effort:
 - **Risk eliminated:** Schema sprawl from dbt misconfig.
 - **Immediate need:** Fixes the `CREATE SCHEMA` privilege error without granting
   broader permissions.
+- **Status: IMPLEMENTED** (2026-06-05). File: `artwork_pipeline/macros/override_create_schema.sql`.
 
 ### MVG-2: Custom `generate_schema_name` macro (simple version)
 
@@ -405,12 +406,17 @@ risk-reduction per unit of effort:
 - **Risk eliminated:** dbt's default schema-prefixing behavior (which would write
   to `SILVER_GOLD` instead of `GOLD`).
 - **Immediate need:** Required for Unit 4 (first Gold mart).
+- **Status: IMPLEMENTED** (2026-06-05). File: `artwork_pipeline/macros/generate_schema_name.sql`.
+  Allowlist: `['SILVER', 'GOLD', 'DBT_TEST__AUDIT']`.
 
 ### MVG-3: Resource Monitor on the dbt warehouse
 
 - **Effort:** 2 SQL statements (IaC).
 - **Risk eliminated:** Unbounded credit consumption from bad queries.
 - **Immediate need:** Protects trial account credits.
+- **Status: AUTHORED** (2026-06-05). File: `infrastructure/create_resource_monitors.sql`.
+  Awaiting `make infra CONN=mk07348` on Mac to apply. 20 credits/month, suspend
+  at 95%, STATEMENT_TIMEOUT=900s, QUEUED_TIMEOUT=120s.
 
 **These 3 controls can be implemented independently and incrementally.** Each
 subsequent layer adds defense-in-depth when the team or risk profile grows.

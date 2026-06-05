@@ -2671,3 +2671,126 @@ Wait for my go + date.
 ```
 
 - **End of this window (2026-06-05 Part 3b; CANONICAL -- supersedes Part 3a above. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: dbt curriculum documentation landed (dbt-curriculum.md + dbt-journal/ dir + file-map.md artwork_pipeline section + AGENTS.md status row). ALL workspace-only: applied-to-account NO, pushed-to-Mac NO. Live state: RAW_MET_OBJECTS=503, SILVER empty, RAW_PAYLOAD paths verified. Next = Unit 1 First Green Run on Mac.)**
+
+---
+
+### 2026-06-05 (Part 3c -- Unit 1 COMPLETE + governance MVG + dual-mode profile)
+
+**Solo-session check:** PASS -- 0 running `cortex_code_snowsight` in last 10 min; `CORTEX_FORK_INCIDENTS = 0`.
+
+**What changed this turn (workspace stage):**
+- CREATED `artwork_pipeline/macros/override_create_schema.sql` (26 lines): MVG-1 no-op macro.
+- CREATED `artwork_pipeline/macros/generate_schema_name.sql` (77 lines): MVG-2 verbatim
+  schema routing with allowlist (`SILVER`, `GOLD`, `DBT_TEST__AUDIT`). Extensive
+  design-considerations header documenting 5 tradeoff decisions.
+- CREATED `infrastructure/create_resource_monitors.sql` (47 lines): MVG-3 resource
+  monitor (20 credits/month, suspend at 95%) + STATEMENT_TIMEOUT=900s + QUEUED_TIMEOUT=120s.
+- CREATED `infrastructure/drop_resource_monitors.sql` (19 lines): paired rollback.
+- REWROTE `artwork_pipeline/profiles.yml` (77 lines): dual-mode profile with `dev`
+  (Mac key-pair via env_var) + `snowflake` (native session auth, no credentials).
+- CREATED `docs/context/dbt-governance-plan.md` (452 lines): 5-layer governance PROPOSAL
+  (RBAC, cost, object proliferation, multi-dev, observability) with problem statement,
+  damage scenarios, reviewer considerations, MVG implementation status.
+- EDITED `scripts/manifest.txt`: added `create_resource_monitors.sql` after warehouses.
+- UPDATED `docs/context/dbt-curriculum.md`: Unit 1 -> complete, Unit 2 -> active.
+- UPDATED `docs/context/dbt-journal/unit-1-first-green-run.md`: errors, decisions,
+  8 key takeaways filled in. Marked complete.
+- UPDATED `docs/context/file-map.md`: macros/ rows + resource_monitors row + profiles.yml updated.
+- UPDATED `docs/context/dbt-governance-plan.md`: MVG-1/2 = IMPLEMENTED, MVG-3 = AUTHORED.
+- **Applied-to-account: PARTIALLY.** dbt macros took effect via owner's `dbt run` (Mac).
+  View `ARTWORK_DB.SILVER.STG_MET__ARTWORKS` now exists (503 rows, owner ARTWORK_TRANSFORMER).
+  Resource monitor NOT yet applied (awaiting `make infra CONN=mk07348` on Mac).
+- **Pushed-to-Mac: PARTIALLY.** Owner synced macros + profiles.yml manually for `dbt run`.
+  Full workspace delta (docs, governance plan, resource monitor IaC) NOT yet synced.
+
+**Cumulative workspace state vs the Mac (delta the NEXT sync carries):**
+Prior un-synced: `Makefile`, `CLAUDE.md`, `extraction/met/{CLAUDE.md,README.md,control_enricher.py}`,
+`infrastructure/create_tasks.sql`.
+NEW this turn: `artwork_pipeline/macros/{override_create_schema,generate_schema_name}.sql`,
+`artwork_pipeline/profiles.yml` (rewritten), `infrastructure/{create,drop}_resource_monitors.sql`,
+`scripts/manifest.txt`, `docs/context/{dbt-governance-plan,dbt-curriculum,file-map,
+session-3-progress-log}.md`, `docs/context/dbt-journal/unit-1-first-green-run.md`.
+**Owner confirmed they already synced the macros + profiles.yml to run dbt.** Other files pending.
+
+**Live account state (verified read-only):**
+- `ARTWORK_DB.SILVER.STG_MET__ARTWORKS`: EXISTS, 503 rows, owner=ARTWORK_TRANSFORMER.
+- `RAW_MET_OBJECTS`: 503 rows.
+- `ARTWORK_WH`: STATEMENT_TIMEOUT still at default (172800s) -- resource monitor not yet applied.
+- `CORTEX_FORK_INCIDENTS = 0`.
+
+**First-action options for the next window:**
+- **(a)** Apply resource monitor: `make infra CONN=mk07348` on Mac (applies all 12
+  manifest scripts idempotently; resource monitor is the only net-new change).
+- **(b)** Start Unit 2 (`dbt test`): run `dbt test` against existing source+model tests;
+  observe 5 passing tests; then deliberately break one (add `not_null` on
+  `primary_image_url`); learn `warn` severity + `store_failures`.
+- **(c)** Sync the full workspace delta to Mac first, then (a) or (b).
+
+**Read-only verification queries:**
+```sql
+SHOW VIEWS IN SCHEMA ARTWORK_DB.SILVER;
+SELECT COUNT(*) FROM ARTWORK_DB.SILVER.STG_MET__ARTWORKS;
+SHOW RESOURCE MONITORS;  -- expect ARTWORK_WH_MONITOR after apply
+SHOW PARAMETERS LIKE 'STATEMENT_TIMEOUT%' IN WAREHOUSE ARTWORK_WH;  -- expect 900 after apply
+```
+
+**Decision tree (next run output shapes):**
+- `dbt test` returns PASS=5 -> existing tests healthy; proceed to deliberate failure.
+- `dbt test` returns failures on unique/not_null OBJECT_ID -> data integrity issue in
+  Bronze; investigate before proceeding.
+- `make infra` fails on resource monitor -> likely role issue (ACCOUNTADMIN required
+  for resource monitors; verify CONN is admin, not loader/transformer).
+
+**Deferred patches (priority order):**
+1. (Mac) Full workspace sync (docs + resource monitor IaC).
+2. (Mac) `make infra CONN=mk07348` to apply resource monitor.
+3. Unit 2-6 of dbt curriculum.
+4. stg_met__artworks.sql syntax cleanup (discussed but not applied; owner's call).
+5. Prior deferred: AWS config cleanup, TTL decision, V/R/B rewords.
+
+**MUST NOT happen next window (foot-guns):**
+- Do NOT run dbt from the workspace (Mac-only).
+- Do NOT create unit-2 journal file until Unit 2 actually starts.
+- Do NOT apply resource monitor from the workspace (Mac `make infra` only).
+- Do NOT modify stg_met__artworks.sql without owner sign-off (it's deployed and working).
+- Do NOT add new schemas to `generate_schema_name.sql` allowlist without first
+  creating them in IaC.
+
+**Hand-off prompt:**
+
+```text
+Read AGENTS.md first, then ONLY the latest dated entry in docs/context/session-3-progress-log.md
+(the 2026-06-05 "Part 3c" entry). Then read docs/context/dbt-curriculum.md for the syllabus +
+new-window protocol (check the Status table for the ACTIVE unit). Stop once you can act.
+
+SOLO CHECK before any write: count cortex_code_snowsight sessions in the last ~10 min
+(QUERY_TAG ILIKE '%cortex_code_snowsight%') and check ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS.
+Exactly 1 = solo; >1 = stop and ask. Do not abort husks.
+
+DUAL-FS: Workspace edits are NOT on my Mac until I sync. Report applied-to-account yes/no and
+pushed-to-Mac yes/no. No make/python/dbt from the workspace -- I run those on the Mac.
+
+GATING: state your plan and WAIT for my explicit go + the date before any write or execution.
+
+ROLE: You are my senior dbt MENTOR. Hands-on, build-as-we-go. YOU decide within-unit
+sequencing; I run the commands on my Mac. Explain the WHY, name decision forks, introduce
+deliberate failures for diagnosis practice. Reference docs/context/dbt-governance-plan.md
+for governance context (PROPOSAL status, MVG-1/2 implemented, MVG-3 authored).
+
+PROJECT (one line): branch donkey-kong-sandbox; account OBANOYY-MK07348 (admin PORCHFLAKE/
+ACCOUNTADMIN); Medallion over Met OpenAccess. dbt project = artwork_pipeline/ (Mac dbt Core,
+ARTWORK_TRANSFORMER_SVC). SILVER.STG_MET__ARTWORKS exists (503 rows). Unit 1 COMPLETE.
+Unit 2 (dbt test) is ACTIVE in the curriculum. Resource monitor authored but not yet applied.
+
+UN-SYNCED workspace delta (pending Mac sync): profiles.yml already synced; remaining =
+infrastructure/{create,drop}_resource_monitors.sql, scripts/manifest.txt,
+docs/context/{dbt-governance-plan,dbt-curriculum,file-map,session-3-progress-log}.md,
+docs/context/dbt-journal/unit-1-first-green-run.md, plus prior-session delta (Makefile,
+CLAUDE.md, extraction/met/*, infrastructure/create_tasks.sql).
+
+FIRST RESPONSE: quote the latest `End of this window` header back to me, confirm solo=1,
+then check dbt-curriculum.md Status table for the active unit and propose next steps.
+Wait for my go + date.
+```
+
+- **End of this window (2026-06-05 Part 3c; CANONICAL -- supersedes Part 3b above. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: Unit 1 First Green Run COMPLETE (STG_MET__ARTWORKS view live in SILVER, 503 rows). MVG governance macros implemented (override_create_schema + generate_schema_name with allowlist). Resource monitor IaC authored (not yet applied). Dual-mode profiles.yml written (dev + snowflake targets). Governance proposal doc (dbt-governance-plan.md) landed. Unit 1 journal complete with 8 key takeaways. APPLIED-TO-ACCOUNT: view created via owner's dbt run on Mac. NOT APPLIED: resource monitor. Next = Unit 2 dbt test.)**

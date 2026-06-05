@@ -66,6 +66,7 @@ rename makes grants an auto-paired `create_`).
 |---|---|---|---|---|
 | `create_roles.sql` | 46 | 3 roles (LOADER/TRANSFORMER/ADMIN) + hierarchy + account grants (CREATE WH/DB; EXECUTE TASK; EXECUTE ALERT; MONITOR EXECUTION) | 2026-06-04 | changing role model / account grants |
 | `create_warehouses.sql` | 15 | `ARTWORK_WH` X-Small, auto-suspend 60 (`IF NOT EXISTS`) | prior | resizing/adding WH |
+| `create_resource_monitors.sql` *(NEW)* | 47 | MVG-3: `ARTWORK_WH_MONITOR` (20 credits/month, suspend 95%, kill 100%) + `STATEMENT_TIMEOUT=900s` + `QUEUED_TIMEOUT=120s` on ARTWORK_WH | 2026-06-05 | adjusting cost controls / quotas |
 | `create_databases_and_schemas.sql` | 21 | `ARTWORK_DB` + BRONZE/SILVER/GOLD schemas (`IF NOT EXISTS`) | prior | adding schemas |
 | `create_file_formats.sql` | 22 | `JSON_RAW`, `PARQUET_RAW` in BRONZE (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding formats |
 | `create_stages.sql` | 14 | `BRONZE_LOAD_STAGE` internal stage (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding stages |
@@ -140,11 +141,13 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 | File | Lines | Purpose | Verified | Open full source only if... |
 |---|---|---|---|---|
 | `dbt_project.yml` | 39 | project config: profile link, path defaults, global `copy_grants`, schema routing (staging->SILVER, marts->GOLD) | 2026-06-05 | changing materialization defaults / schema routing |
-| `profiles.yml` | 32 | connection profile: `env_var()` key-pair auth, target `dev`, schema SILVER, threads 4 | 2026-06-05 | changing auth / target |
+| `profiles.yml` | 77 | dual-mode connection profile: `dev` target (Mac key-pair via env_var) + `snowflake` target (native session auth, no credentials) | 2026-06-05 | changing auth / adding targets |
 | `packages.yml` | 11 | `dbt_utils >=1.3,<2.0` + `codegen >=0.14,<0.15` | 2026-06-05 | adding/bumping packages |
 | `models/staging/met/stg_met__artworks.sql` | 107 | staging view: flattens `RAW_PAYLOAD` VARIANT into typed columns (csv + api_images paths) | 2026-06-05 | changing column extract paths |
 | `models/staging/met/_met__sources.yml` | 36 | source declaration: `met` -> `ARTWORK_DB.BRONZE.RAW_MET_OBJECTS` with PK tests | 2026-06-05 | adding source tables |
 | `models/staging/met/_met__models.yml` | 37 | model schema: column descriptions + `unique`/`not_null` tests for `stg_met__artworks` | 2026-06-05 | adding/changing tests |
+| `macros/override_create_schema.sql` | 26 | MVG-1: no-op `create_schema` + `drop_schema` (suppresses dbt's default schema DDL; developer UX, not enforcement) | 2026-06-05 | understanding why dbt doesn't create schemas |
+| `macros/generate_schema_name.sql` | 77 | MVG-2: verbatim schema routing with compile-time allowlist guard (`SILVER`, `GOLD`, `DBT_TEST__AUDIT`); extensive design considerations in header | 2026-06-05 | adding approved schemas or multi-dev branching |
 | `.gitignore` | — | ignores target/, dbt_packages/, logs/ | prior | — |
 
 ## docs/context/dbt-curriculum.md + dbt-journal/ (dbt learning arc)

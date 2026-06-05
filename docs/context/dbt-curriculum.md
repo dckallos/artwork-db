@@ -37,8 +37,8 @@ workspace). Introduce deliberate failures so the learner practices diagnosis.
 
 | Unit | Title | Status | Journal |
 |------|-------|--------|---------|
-| 1 | First Green Run | active | `dbt-journal/unit-1-first-green-run.md` |
-| 2 | dbt test -- Trust Your Source | pending | `dbt-journal/unit-2-trust-your-source.md` |
+| 1 | First Green Run | complete | `dbt-journal/unit-1-first-green-run.md` |
+| 2 | dbt test -- Trust Your Source | active | `dbt-journal/unit-2-trust-your-source.md` |
 | 3 | Second Staging Model | pending | `dbt-journal/unit-3-second-staging-model.md` |
 | 4 | First Mart (Gold Layer) | pending | `dbt-journal/unit-4-first-mart.md` |
 | 5 | Documentation and Lineage | pending | `dbt-journal/unit-5-docs-and-lineage.md` |

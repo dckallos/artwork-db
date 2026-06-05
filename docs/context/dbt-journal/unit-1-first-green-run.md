@@ -1,6 +1,6 @@
 # Unit 1: First Green Run
 
-> Started: 2026-06-05  |  Completed: _in progress_
+> Started: 2026-06-05  |  Completed: 2026-06-05
 
 ## Objectives
 
@@ -223,18 +223,38 @@ idempotent -- it just replaces it with the same definition).
 
 ## Decisions Made
 
-_(None yet -- Unit 1 is pure execution, no forks.)_
+- **Profile strategy:** Dual-mode `profiles.yml` (dev target for Mac key-pair,
+  snowflake target for native execution). Keeps one file for both contexts.
+- **Governance macros (MVG-1 + MVG-2):** Implemented as dbt-layer code (developer
+  UX), not DBA enforcement. DBA enforcement = Snowflake RBAC grants (no CREATE
+  SCHEMA on the transformer role). Macro is the sign on the door; RBAC is the lock.
 
 ## Errors Encountered
 
-### Deliberate: Wrong Role
-- Command: `dbt run` with `DBT_SNOWFLAKE_ROLE=SYSADMIN`
-- Error output: _(fill in after running)_
-- Diagnosis: _(fill in)_
-- Fix: restore `DBT_SNOWFLAKE_ROLE=ARTWORK_TRANSFORMER`
+### Real: CREATE SCHEMA privilege denied
+- Command: `dbt run` (first attempt, before macros existed)
+- Error: `003001 (42501): Insufficient privileges to operate on database
+  'ARTWORK_DB'. Your primary role ARTWORK_TRANSFORMER must have CREATE SCHEMA
+  granted on DATABASE ARTWORK_DB.`
+- Diagnosis: dbt's default behavior runs `CREATE SCHEMA IF NOT EXISTS` before
+  every model. ARTWORK_TRANSFORMER intentionally lacks this privilege.
+- Fix: Created `macros/override_create_schema.sql` (no-op macro). Suppresses the
+  DDL attempt entirely. Schema lifecycle stays with IaC.
 
-### Unexpected
-_(record any surprises here)_
+### Real: generate_schema_name allowlist rejected dbt_test__audit
+- Command: `dbt run` (second attempt, after adding generate_schema_name macro)
+- Error: `Compilation Error: Schema 'dbt_test__audit' is not in the approved list`
+- Diagnosis: dbt pre-resolves schema names for ALL possible outputs during
+  compilation, including the test-failure audit schema, even when no tests use
+  `store_failures`. Our allowlist correctly rejected it.
+- Fix: Added `DBT_TEST__AUDIT` to the allowlist. Schema doesn't need to exist in
+  Snowflake until `store_failures: true` is actually enabled (Unit 2 territory).
+- Lesson: The allowlist guard works as designed -- it catches things early. The
+  fix is to expand the approved list for legitimate use cases, not remove the guard.
+
+### Skipped: Deliberate wrong-role exercise
+- Not performed this session (time spent on governance framework instead).
+- The real errors above provided equivalent diagnostic practice.
 
 ---
 
@@ -266,4 +286,34 @@ You set it once, forget it exists, and never lose grants.
 
 ## Key Takeaways (written by AI after unit completes)
 
-_(to be filled in after completing all steps above)_
+1. **`.env` is not enough -- you must export.** dbt's `env_var()` reads shell
+   environment variables, not dotfiles. Use `set -a; source .env; set +a` or
+   let `dbt_orchestrate.sh` handle it.
+
+2. **dbt is a DDL engine.** Every `dbt run` executes `CREATE OR REPLACE` against
+   Snowflake. Understanding this means understanding that dbt's power IS the risk.
+
+3. **Governance lives at two layers: Snowflake RBAC (enforcement) and dbt macros
+   (developer UX).** The DBA's grants are the lock; the macros are the sign on
+   the door. Neither depends on the other, but together they provide defense in
+   depth.
+
+4. **`copy_grants: true` is non-negotiable.** Without it, every `dbt run` strips
+   grants from replaced objects. FUTURE GRANTS do NOT re-fire on `OR REPLACE`.
+   Set it globally in `dbt_project.yml` and never think about it again.
+
+5. **`target/compiled/` is your debugging superpower.** It shows the final SQL
+   with all Jinja resolved. When something breaks, look there first.
+
+6. **dbt's `generate_schema_name` default concatenates prefixes** (producing
+   `SILVER_GOLD`). Override it to use schema names verbatim for a medallion
+   architecture with peer schemas.
+
+7. **Dual-mode `profiles.yml` works.** One file with two targets (dev = key-pair
+   on Mac, snowflake = session auth in native execution) keeps the project
+   deployable in both contexts without branching.
+
+8. **The allowlist pattern catches mistakes at compile time.** Better to get a
+   clear "not in approved list" error during `dbt compile` than a cryptic
+   Snowflake permission error at runtime. Expand the list deliberately, not
+   reactively.
