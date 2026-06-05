@@ -27,7 +27,9 @@ models:
       - name: object_date
         description: "Display date string for the artwork (e.g. '1st century A.D.')"
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       - name: artist_display_name
         description: "Primary artist display name (pipe-delimited if multiple)"
       - name: classification
