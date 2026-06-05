@@ -38,3 +38,4 @@ output/code-snapshot.md
 output/extension-map.md
 
 *.folder
+.envrc
