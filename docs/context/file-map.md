@@ -144,8 +144,9 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 | `profiles.yml` | 77 | dual-mode connection profile: `dev` target (Mac key-pair via env_var) + `snowflake` target (native session auth, no credentials) | 2026-06-05 | changing auth / adding targets |
 | `packages.yml` | 11 | `dbt_utils >=1.3,<2.0` + `codegen >=0.14,<0.15` | 2026-06-05 | adding/bumping packages |
 | `models/staging/met/stg_met__artworks.sql` | 107 | staging view: flattens `RAW_PAYLOAD` VARIANT into typed columns (csv + api_images paths) | 2026-06-05 | changing column extract paths |
-| `models/staging/met/_met__sources.yml` | 36 | source declaration: `met` -> `ARTWORK_DB.BRONZE.RAW_MET_OBJECTS` with PK tests | 2026-06-05 | adding source tables |
-| `models/staging/met/_met__models.yml` | 37 | model schema: column descriptions + `unique`/`not_null` tests for `stg_met__artworks` | 2026-06-05 | adding/changing tests |
+| `models/staging/met/stg_met__enrichment_status.sql` | 61 | staging view (Unit 3): typed passthrough of `BRONZE.MET_ENRICHMENT_CONTROL` (enrichment lifecycle, image gate, lease, errors) | 2026-06-05 | changing column set / materialization |
+| `models/staging/met/_met__sources.yml` | 59 | source declaration: `met` -> `RAW_MET_OBJECTS` + `MET_ENRICHMENT_CONTROL` (Unit 3), both with PK tests + `identifier:` | 2026-06-05 | adding source tables |
+| `models/staging/met/_met__models.yml` | 44 | model schema: column descriptions + `unique`/`not_null` tests for `stg_met__artworks`; incl. `object_date` not_null at `severity: warn` + `store_failures: true` (Unit 2) | 2026-06-05 | adding/changing tests |
 | `macros/override_create_schema.sql` | 26 | MVG-1: no-op `create_schema` + `drop_schema` (suppresses dbt's default schema DDL; developer UX, not enforcement) | 2026-06-05 | understanding why dbt doesn't create schemas |
 | `macros/generate_schema_name.sql` | 77 | MVG-2: verbatim schema routing with compile-time allowlist guard (`SILVER`, `GOLD`, `DBT_TEST__AUDIT`); extensive design considerations in header | 2026-06-05 | adding approved schemas or multi-dev branching |
 | `.gitignore` | — | ignores target/, dbt_packages/, logs/ | prior | — |
@@ -154,7 +155,7 @@ package (was a PEP 420 namespace package); all 3 packages resolve + resources lo
 
 | File | Lines | Purpose | Verified | Open full source only if... |
 |---|---|---|---|---|
-| `dbt-curriculum.md` | 273 | master syllabus: 6-unit curriculum, new-window protocol, status tracking, journal template | 2026-06-05 | resuming dbt work in a new window |
+| `dbt-curriculum.md` | 275 | master syllabus: 6-unit curriculum, new-window protocol, status tracking, journal template (U1-U2 complete, U3 active) | 2026-06-05 | resuming dbt work in a new window |
 | `dbt-governance-plan.md` | 446 | PROPOSAL: 5-layer dbt governance framework (RBAC, cost, object proliferation, multi-dev, observability); problem statement, damage scenarios, considerations for reviewers, MVG subset | 2026-06-05 | planning governance controls or reviewing the proposal |
 | `dbt-journal/unit-N-*.md` | — | per-unit journal files (created as each unit starts): commands, decisions, errors, takeaways | — | reviewing a specific unit's learnings |
 

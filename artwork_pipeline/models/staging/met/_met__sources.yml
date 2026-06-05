@@ -33,3 +33,26 @@ sources:
             description: "Source system identifier (always 'met_museum')"
           - name: _BATCH_ID
             description: "UUID of the extraction batch"
+
+      - name: met_enrichment_control
+        description: >
+          Enrichment lifecycle control table. One row per Met objectID tracking
+          discovery status, image-gate result, CDN liveness, the fetch lease, and
+          last error. Source for stg_met__enrichment_status (Unit 3).
+        identifier: MET_ENRICHMENT_CONTROL
+        columns:
+          - name: OBJECT_ID
+            description: "Met objectID; join key to RAW_MET_OBJECTS / MET_CSV_SNAPSHOT"
+            tests:
+              - unique
+              - not_null
+          - name: ENRICHMENT_STATUS
+            description: "Outcome enum: pending | done | no_image | error"
+            tests:
+              - not_null
+          - name: HAS_PRIMARY_IMAGE
+            description: "Monetization gate result (LEG-02 / IMG-02)"
+          - name: IMAGE_STATUS
+            description: "Liveness enum: unknown | live | dead (IMG-04)"
+          - name: CLAIMED_BY_BATCH
+            description: "Lease owner: batch_id currently fetching this row (NULL = free)"

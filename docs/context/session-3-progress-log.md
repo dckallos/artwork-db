@@ -2794,3 +2794,146 @@ Wait for my go + date.
 ```
 
 - **End of this window (2026-06-05 Part 3c; CANONICAL -- supersedes Part 3b above. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: Unit 1 First Green Run COMPLETE (STG_MET__ARTWORKS view live in SILVER, 503 rows). MVG governance macros implemented (override_create_schema + generate_schema_name with allowlist). Resource monitor IaC authored (not yet applied). Dual-mode profiles.yml written (dev + snowflake targets). Governance proposal doc (dbt-governance-plan.md) landed. Unit 1 journal complete with 8 key takeaways. APPLIED-TO-ACCOUNT: view created via owner's dbt run on Mac. NOT APPLIED: resource monitor. Next = Unit 2 dbt test.)**
+
+---
+
+### 2026-06-05 (Part 3d -- Unit 2 COMPLETE + Unit 3 kicked off, model authored as view)
+
+**Solo-session check:** PASS -- 1 distinct `cortex_code_snowsight` session in last 10 min
+(23 queries, all this window); `CORTEX_FORK_INCIDENTS = 0`.
+
+**What changed this turn (workspace stage; applied-to-account: NO; pushed-to-Mac: NO):**
+All edits are WORKSPACE-ONLY. No `make`/`dbt`/`python` was run from here. Nothing
+applied to the account this turn. Nothing synced to the Mac this turn.
+- COMPLETED `docs/context/dbt-journal/unit-2-trust-your-source.md` (144 lines): real
+  session -- baseline PASS=5; deliberate `not_null` on `object_date` (FAIL 109); read
+  compiled SQL; `severity: warn` (WARN 109, exit 0); `store_failures: true` -> hit
+  "DBT_TEST__AUDIT does not exist" -> IaC-created schema+grants -> PASS=5 WARN=1.
+  3 decision forks recorded (warn+store; IaC-owned audit schema; keep-both
+  source/model redundancy). 6 key takeaways. Step 7 (warn_if/error_if) SKIPPED (count-
+  based; percentage would need a custom generic test -- deferred).
+- EDITED `docs/context/dbt-curriculum.md`: Status U2 -> complete, U3 -> active; fixed
+  Unit 2 outline (was `primary_image_url`; corrected to `object_date`); fixed stale
+  verification snippet (`SILVER_DBT_TEST__AUDIT` -> `DBT_TEST__AUDIT`, verbatim routing).
+- CREATED `docs/context/dbt-journal/unit-3-second-staging-model.md` (76 lines): Unit 3
+  journal from template; materialization decision = `view` documented with the
+  view-vs-ephemeral tradeoff.
+- CREATED `artwork_pipeline/models/staging/met/stg_met__enrichment_status.sql` (61
+  lines): staging VIEW, typed passthrough of `BRONZE.MET_ENRICHMENT_CONTROL`
+  (10 cols, 2327 rows). `{{ config(materialized='view') }}`.
+- EDITED `artwork_pipeline/models/staging/met/_met__sources.yml` (36 -> 59 lines):
+  added `met_enrichment_control` source table (`identifier: MET_ENRICHMENT_CONTROL`)
+  with `unique`+`not_null` on OBJECT_ID and `not_null` on ENRICHMENT_STATUS.
+- UPDATED `docs/context/file-map.md`: new model row; `_met__sources.yml` (59) +
+  `_met__models.yml` (44) + `dbt-curriculum.md` (275) line counts refreshed.
+
+**Cumulative workspace state vs the Mac (delta the NEXT sync carries):**
+Prior un-synced (from Part 3c and earlier): `Makefile`, `CLAUDE.md`,
+`extraction/met/{CLAUDE.md,README.md,control_enricher.py}`,
+`infrastructure/create_tasks.sql`, `infrastructure/{create,drop}_resource_monitors.sql`,
+`scripts/manifest.txt`, `docs/context/{dbt-governance-plan,file-map}.md`,
+`docs/context/dbt-journal/unit-1-first-green-run.md`.
+NEW this turn (Part 3d): `artwork_pipeline/models/staging/met/stg_met__enrichment_status.sql`,
+`artwork_pipeline/models/staging/met/_met__sources.yml`,
+`docs/context/dbt-curriculum.md`, `docs/context/dbt-journal/unit-2-trust-your-source.md`,
+`docs/context/dbt-journal/unit-3-second-staging-model.md`,
+`docs/context/file-map.md`, `docs/context/session-3-progress-log.md`.
+NOTE: the Unit-2 dbt test YAML (`_met__models.yml`) + the IaC audit-schema changes
+(`create_databases_and_schemas.sql`, `create_grants.sql`) were authored + synced +
+applied in an EARLIER part of this session (per the hand-off prompt); they are NOT in
+this turn's new delta but ARE already on the Mac / account.
+
+**Live account state (verified read-only this turn):**
+- `ARTWORK_DB.DBT_TEST__AUDIT.NOT_NULL_STG_MET__ARTWORKS_OBJECT_DATE`: 109 rows (full
+  56-col rows). Audit schema live.
+- `ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL`: 2327 rows, 10 cols, PK OBJECT_ID.
+- `STG_MET__ENRICHMENT_STATUS`: NOT yet materialized (model authored but no Mac run).
+- `CORTEX_FORK_INCIDENTS = 0`.
+
+**First-action options for the NEXT window:**
+- **(a)** Sync the Part 3d delta to the Mac, then run Unit 3 step 1 on the Mac:
+  `dbt run --select stg_met__enrichment_status` then
+  `dbt test --select source:met.met_enrichment_control stg_met__enrichment_status`.
+  Expect a new VIEW in SILVER + tests green.
+- **(b)** Do the Unit 3 deliberate-failure exercise first (on the Mac): temporarily
+  remove `identifier: MET_ENRICHMENT_CONTROL` from `_met__sources.yml`, `dbt run`,
+  observe dbt hunt for lowercase `met_enrichment_control` and fail, restore, re-run.
+- **(c)** Sync only (no dbt), defer Unit 3 execution to a later window.
+
+**Read-only verification queries (after the Mac `dbt run`):**
+```sql
+SHOW VIEWS IN SCHEMA ARTWORK_DB.SILVER;  -- expect STG_MET__ENRICHMENT_STATUS + STG_MET__ARTWORKS
+SELECT ENRICHMENT_STATUS, COUNT(*) FROM ARTWORK_DB.SILVER.STG_MET__ENRICHMENT_STATUS
+GROUP BY 1 ORDER BY 2 DESC;  -- rows sum to 2327
+SELECT COUNT(*) FROM ARTWORK_DB.DBT_TEST__AUDIT.NOT_NULL_STG_MET__ARTWORKS_OBJECT_DATE;  -- 109
+```
+
+**Decision tree (next run output shapes):**
+- `dbt run` creates `STG_MET__ENRICHMENT_STATUS` view -> proceed to `dbt test`; then
+  close Unit 3 (journal takeaways + flip U3 complete / U4 active).
+- `dbt run` errors "object does not exist: MET_ENRICHMENT_CONTROL" -> likely the
+  deliberate-failure state (identifier removed) OR allowlist/source mismatch; check
+  `_met__sources.yml` `identifier:` line.
+- `dbt test` FAILS unique/not_null on OBJECT_ID in the control table -> real data
+  integrity issue in `MET_ENRICHMENT_CONTROL`; investigate Bronze before proceeding.
+- `dbt run` errors on schema/permission -> ARTWORK_TRANSFORMER lacks SILVER privilege
+  OR generate_schema_name allowlist rejected the target (SILVER is allowlisted, so
+  unlikely).
+
+**Deferred patches (priority order):**
+1. (Mac) Sync the Part 3d delta + the broader prior un-synced delta.
+2. (Mac) `make infra CONN=mk07348` -- the resource monitor (Part 3c) is STILL not applied.
+3. Unit 3 execution (a)/(b) above, then Units 4-6.
+4. `stg_met__artworks.sql` syntax cleanup (discussed, not applied; owner's call).
+5. Prior deferred: AWS config cleanup, TTL decision, V/R/B rewords.
+
+**What MUST NOT happen in the next window (foot-guns):**
+- Do NOT run dbt/make/python from the workspace -- Mac only.
+- Do NOT mark Unit 3 complete until the owner has actually run `dbt run` + `dbt test`
+  on the Mac and reported output (journal Commands/Errors/Takeaways are still pending).
+- Do NOT add `met_enrichment_control` model tests to a brand-new `_met__models.yml`
+  block without first confirming the view materialized (test the source now; model
+  tests after the run).
+- Do NOT change `stg_met__artworks.sql` without owner sign-off (deployed + working).
+- Do NOT add schemas to the `generate_schema_name` allowlist without creating them in IaC.
+- Do NOT assume the Part 3d delta is on the Mac -- it is NOT until the owner syncs.
+
+**Hand-off prompt:**
+
+```text
+Read AGENTS.md first, then ONLY the latest dated entry in docs/context/session-3-progress-log.md
+(the 2026-06-05 "Part 3d" entry). Then read docs/context/dbt-curriculum.md (check the Status
+table -- Unit 3 is ACTIVE) and its journal docs/context/dbt-journal/unit-3-second-staging-model.md.
+Stop once you can act.
+
+SOLO CHECK before any write: count cortex_code_snowsight sessions in the last ~10 min
+(QUERY_TAG ILIKE '%cortex_code_snowsight%') and check ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS.
+Exactly 1 = solo; >1 = stop and ask. Do not abort husks.
+
+DUAL-FS: Workspace edits are NOT on my Mac until I sync. Report applied-to-account yes/no and
+pushed-to-Mac yes/no. No make/python/dbt from the workspace -- I run those on the Mac.
+
+GATING: state your plan and WAIT for my explicit go + the date before any write or execution.
+
+ROLE: You are my senior dbt MENTOR. Hands-on, build-as-we-go. YOU decide within-unit
+sequencing; I run the commands on my Mac. Explain the WHY, name decision forks, introduce
+deliberate failures for diagnosis practice.
+
+PROJECT (one line): branch donkey-kong-sandbox; account OBANOYY-MK07348 (admin PORCHFLAKE/
+ACCOUNTADMIN); Medallion over Met OpenAccess. dbt project = artwork_pipeline/ (Mac dbt Core,
+ARTWORK_TRANSFORMER_SVC). SILVER.STG_MET__ARTWORKS exists (503 rows). Units 1-2 COMPLETE.
+Unit 3 (second staging model) ACTIVE: stg_met__enrichment_status.sql authored as a VIEW over
+BRONZE.MET_ENRICHMENT_CONTROL (2327 rows); source declared in _met__sources.yml. NOT yet run
+on the Mac -- view not materialized in SILVER. Resource monitor (Part 3c) still not applied.
+
+UN-SYNCED workspace delta (pending Mac sync): stg_met__enrichment_status.sql, _met__sources.yml,
+dbt-curriculum.md, dbt-journal/{unit-2,unit-3}*.md, file-map.md, session-3-progress-log.md, plus
+prior un-synced (resource_monitors IaC, manifest.txt, dbt-governance-plan.md, unit-1 journal,
+Makefile, CLAUDE.md, extraction/met/*, create_tasks.sql).
+
+FIRST RESPONSE: quote the latest `End of this window` header back to me, confirm solo=1, then
+pick up Unit 3 (sync delta -> dbt run + dbt test on my Mac, or the identifier deliberate-failure
+exercise first). Wait for my go + date.
+```
+
+- **End of this window (2026-06-05 Part 3d; CANONICAL -- supersedes Part 3c above. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: Unit 2 (dbt test) COMPLETE -- journal finalized with the real object_date FAIL 109 -> warn -> store_failures -> IaC audit schema arc + 3 decision forks (warn+store; IaC-owned DBT_TEST__AUDIT; keep-both source/model redundancy). Step 7 skipped. Unit 3 kicked off: stg_met__enrichment_status.sql authored as a VIEW over BRONZE.MET_ENRICHMENT_CONTROL (2327 rows), source declared in _met__sources.yml, Unit 3 journal created. APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO -- all workspace-only this turn. NEXT: owner syncs delta, then dbt run + dbt test on Mac to materialize STG_MET__ENRICHMENT_STATUS in SILVER.)**

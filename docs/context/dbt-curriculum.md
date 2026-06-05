@@ -38,8 +38,8 @@ workspace). Introduce deliberate failures so the learner practices diagnosis.
 | Unit | Title | Status | Journal |
 |------|-------|--------|---------|
 | 1 | First Green Run | complete | `dbt-journal/unit-1-first-green-run.md` |
-| 2 | dbt test -- Trust Your Source | active | `dbt-journal/unit-2-trust-your-source.md` |
-| 3 | Second Staging Model | pending | `dbt-journal/unit-3-second-staging-model.md` |
+| 2 | dbt test -- Trust Your Source | complete | `dbt-journal/unit-2-trust-your-source.md` |
+| 3 | Second Staging Model | active | `dbt-journal/unit-3-second-staging-model.md` |
 | 4 | First Mart (Gold Layer) | pending | `dbt-journal/unit-4-first-mart.md` |
 | 5 | Documentation and Lineage | pending | `dbt-journal/unit-5-docs-and-lineage.md` |
 | 6 | The Incremental Conversation | pending | `dbt-journal/unit-6-incremental-preview.md` |
@@ -88,19 +88,21 @@ Then add a test that WILL fail to learn severity configuration.
 - `warn_if` / `error_if` severity thresholds.
 - `store_failures: true` and its schema implications.
 
-**Decision fork:** After seeing the failure on `primary_image_url`, decide:
-accept `warn` severity (known data gap) or filter those rows upstream in the
-staging model?
+**Decision fork:** After seeing the failure on `object_date` (109 NULL rows),
+decide: accept `warn` severity (known data gap) or filter those rows upstream in the
+staging model? (Chosen 2026-06-05: `warn` + `store_failures`.)
 
 **Deliberate failure exercise:**
-- Add `not_null` test on `primary_image_url` in `_met__models.yml`. Run `dbt test`.
-  Observe the failure. Then learn to convert it to a `warn`-severity test with
-  `config: {severity: warn}`.
+- Add `not_null` test on `object_date` in `_met__models.yml`. Run `dbt test`.
+  Observe the failure (FAIL, 109 rows). Then convert it to a `warn`-severity test
+  with `config: {severity: warn}`, and add `store_failures: true` to materialize the
+  failing rows to the IaC-owned `DBT_TEST__AUDIT` schema.
 
 **Verification:**
 ```sql
--- After store_failures (if chosen):
-SHOW TABLES IN SCHEMA ARTWORK_DB.SILVER_DBT_TEST__AUDIT;
+-- After store_failures (note: generate_schema_name routes VERBATIM, so the audit
+-- schema is DBT_TEST__AUDIT, NOT the dbt default SILVER_DBT_TEST__AUDIT):
+SELECT COUNT(*) FROM ARTWORK_DB.DBT_TEST__AUDIT.NOT_NULL_STG_MET__ARTWORKS_OBJECT_DATE;
 -- Or simply: check dbt CLI output for PASS/WARN/FAIL counts.
 ```
 
