@@ -12,6 +12,18 @@ persistence and no local hooks**: this file plus `docs/context/session-3-progres
 only enforcement. The trial has **no Cortex inference** (Cortex Agents / Cortex-Code-
 over-API are blocked — see the Track-D notes), so ship data, not agent tooling.
 
+**Current account (authoritative): `OBANOYY-MK07348`** (legacy locator `EP21559`,
+region `AWS_US_EAST_2`), admin **`PORCHFLAKE` / `ACCOUNTADMIN`**, snow CLI admin
+connection `[connections.mk07348]`. Earlier trials `pa37992` and `HXCNOII-RS05429`
+(admin `PORCHANALYTICS`) are **RETIRED** — ignore them in older dated entries below.
+The loader credential is namespaced per account: `make loader CONN=mk07348` mints
+`~/.snowflake/keys/mk07348_loader_rsa_key.p8` + `[connections.mk07348_loader]`.
+dbt runs as the `ARTWORK_TRANSFORMER_SVC` service user (key-pair only):
+`make transformer CONN=mk07348` mints `mk07348_transformer_rsa_key.p8` +
+`[connections.mk07348_transformer]`. Both service users are defined in
+`infrastructure/create_service_user.sql`; their keys are registered out-of-band
+(not in the manifest) by `setup.sh --phase loader|transformer`.
+
 ## Session-open ritual (do this first, every window)
 
 1. **Confirm you are the only live Cortex session before any write.** Count

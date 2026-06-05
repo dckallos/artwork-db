@@ -632,6 +632,32 @@ restart-resumption contract in `session-3-progress-log.md`). **Still open / Sect
 
 ---
 
+## Account migration (appended 2026-06-04)
+
+> **Append-only note.** The project moved to a NEW Snowflake account. Historical
+> dated entries above reference the retired trials (`pa37992`, `HXCNOII-RS05429`,
+> admin `PORCHANALYTICS`) and the old non-namespaced `loader_rsa_key.p8` -- read
+> them as history, not current truth.
+
+- **Current account (authoritative):** `OBANOYY-MK07348` (legacy locator `EP21559`,
+  region `AWS_US_EAST_2`), admin `PORCHFLAKE` / `ACCOUNTADMIN`. Full DDL + git-setup
+  were re-applied to this account 2026-06-03 (identical role/object model; verified
+  live 2026-06-04). All Met tables start EMPTY here -- Section C (snapshot land,
+  control seed, enrich) re-runs against this account.
+- **Loader credential:** namespaced per account. `ARTWORK_LOADER_SVC` is
+  `TYPE=SERVICE`/`PASSWORD=null` but `RSA_PUBLIC_KEY=null` on this account until
+  `make loader CONN=mk07348` mints + registers `mk07348_loader_rsa_key.p8`
+  (additive `[connections.mk07348_loader]`; does not reuse the old key). `AUTH-01`
+  decision (key-pair) is unchanged; only the key/account binding is new.
+- **dbt identity:** dbt Core (Mac) authenticates as a dedicated service user
+  `ARTWORK_TRANSFORMER_SVC` (TYPE=SERVICE, key-pair only), scoped to
+  `ARTWORK_TRANSFORMER`. Defined in `create_service_user.sql` (alongside
+  `ARTWORK_LOADER_SVC`); key minted/registered by `make transformer CONN=mk07348`
+  (mirrors the loader; not in the manifest). An earlier strawman that granted the
+  role to the human login `PORCHFLAKE` in `create_roles.sql` was rejected
+  (2026-06-04) -- IaC must not pin a personal login. Snowflake-native
+  `CREATE DBT PROJECT` deferred (additive; future Airflow `EXECUTE DBT PROJECT` hook).
+
 ## Cross-references
 
 - Patterns behind these decisions: `engineering-playbook.md` (Track 2 ingestion,

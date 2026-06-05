@@ -1,5 +1,10 @@
 -- =============================================================================
--- create_service_user.sql: Create the service user for the Python extraction layer.
+-- create_service_user.sql: Create the service users for the pipeline runtime.
+--
+-- Two key-pair-only (TYPE = SERVICE) identities, each scoped to one functional
+-- role so credentials rotate independently and activity is cleanly auditable:
+--   ARTWORK_LOADER_SVC       -> ARTWORK_LOADER       (extraction/* -> BRONZE)
+--   ARTWORK_TRANSFORMER_SVC  -> ARTWORK_TRANSFORMER  (dbt -> SILVER/GOLD)
 --
 -- ARTWORK_LOADER_SVC is the runtime identity used by
 -- extraction/*/snowflake_uploader.py. It is intentionally distinct from any
@@ -12,14 +17,16 @@
 -- migration. This removes the placeholder-password smell entirely: there is no
 -- credential at rest in this DDL.
 --
--- The RSA public key is NOT set here. DDL stays free of key material so this
--- file is idempotent and secret-free. The key is registered out-of-band by the
--- loader bootstrap, which runs AFTER `make iac` over the already-working admin
--- JWT connection:
+-- The RSA public keys are NOT set here. DDL stays free of key material so this
+-- file is idempotent and secret-free. Each key is registered out-of-band by its
+-- bootstrap, which runs AFTER `make iac` over the already-working admin JWT
+-- connection:
 --   ./scripts/snowflake_cli/setup.sh --phase loader
 --       -> 06_setup_loader_keypair.sh
---          (generates the loader key pair, then applies
---           git-setup/operator/register_loader_public_key.sql via `-c admin`)
+--          (git-setup/operator/register_loader_public_key.sql via `-c admin`)
+--   ./scripts/snowflake_cli/setup.sh --phase transformer
+--       -> 09_setup_transformer_keypair.sh
+--          (git-setup/operator/register_transformer_public_key.sql via `-c admin`)
 --
 -- Until that key is registered the user exists but cannot authenticate, which
 -- is the desired safe default.
@@ -63,6 +70,28 @@ ALTER USER IF EXISTS ARTWORK_LOADER_SVC UNSET PASSWORD;
 ALTER USER IF EXISTS ARTWORK_LOADER_SVC SET COMMENT =
     'Service account (key-pair only) used by extraction/*/snowflake_uploader.py';
 
--- Next step (NOT part of `make iac`): register the loader RSA public key so the
--- service user can authenticate. This is automated by:
---   ./scripts/snowflake_cli/setup.sh --phase loader
+-- -----------------------------------------------------------------------------
+-- ARTWORK_TRANSFORMER_SVC -- the dbt (artwork_pipeline) runtime identity. Scoped
+-- to ARTWORK_TRANSFORMER (SELECT on BRONZE, CREATE on SILVER/GOLD). Same
+-- key-pair-only, secret-free contract as the loader above.
+CREATE USER IF NOT EXISTS ARTWORK_TRANSFORMER_SVC
+    TYPE              = SERVICE
+    DISPLAY_NAME      = 'Artwork medallion pipeline transformer (dbt)'
+    DEFAULT_ROLE      = ARTWORK_TRANSFORMER
+    DEFAULT_WAREHOUSE = ARTWORK_WH
+    DEFAULT_NAMESPACE = ARTWORK_DB.SILVER
+    COMMENT           = 'Service account (key-pair only) used by dbt (artwork_pipeline).';
+
+GRANT ROLE ARTWORK_TRANSFORMER TO USER ARTWORK_TRANSFORMER_SVC;
+
+-- CONVERGENCE (idempotent) -- identical rationale to the loader block above:
+-- force TYPE = SERVICE and remove any password if the user pre-existed as PERSON.
+ALTER USER IF EXISTS ARTWORK_TRANSFORMER_SVC SET TYPE = SERVICE;
+ALTER USER IF EXISTS ARTWORK_TRANSFORMER_SVC UNSET PASSWORD;
+ALTER USER IF EXISTS ARTWORK_TRANSFORMER_SVC SET COMMENT =
+    'Service account (key-pair only) used by dbt (artwork_pipeline).';
+
+-- Next step (NOT part of `make iac`): register each service user's RSA public key
+-- so it can authenticate. Automated by:
+--   ./scripts/snowflake_cli/setup.sh --phase loader        (ARTWORK_LOADER_SVC)
+--   ./scripts/snowflake_cli/setup.sh --phase transformer   (ARTWORK_TRANSFORMER_SVC)

@@ -10,7 +10,7 @@
 #   all / pipeline / setup      full apply / extract+build / infra+init
 # =============================================================================
 
-.PHONY: chmod iac bootstrap infra rollback down down-from \
+.PHONY: chmod iac bootstrap infra loader transformer rollback down down-from \
         extract extract-met extract-aic extract-cma extract-smithsonian \
         dbt-init dbt-build dbt-test dbt-full-refresh dbt-docs dbt-teardown dbt-deps \
         all pipeline setup clean
@@ -63,6 +63,35 @@ bootstrap: chmod
 infra: chmod
 	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."
 	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
+
+# ---------- Loader credential (key-pair) ----------
+# Mint + register the ARTWORK_LOADER_SVC key pair and wire a key-pair snow CLI
+# connection for the account whose ADMIN connection is named CONN. Wraps the
+# version-controlled scripts/snowflake_cli suite so the loader credential
+# lifecycle runs through the same `make` front door as the rest of IaC:
+#   make loader CONN=mk07348
+# With --profile <CONN>, setup.sh namespaces BOTH the connection and key file:
+#   admin (used to register) : [connections.<CONN>]
+#   NEW loader connection    : [connections.<CONN>_loader]
+#   NEW loader private key   : ~/.snowflake/keys/<CONN>_loader_rsa_key.p8
+# It registers the public key on ARTWORK_LOADER_SVC via the version-controlled
+# git-setup/operator/register_loader_public_key.sql. Additive by design: the
+# TOML upsert appends a fresh [connections.<CONN>_loader] block and never
+# overwrites another account's [connections.loader].
+loader: chmod
+	@echo "==> Establishing loader key-pair for profile '$(CONN)' (additive; new key + connection)..."
+	bash scripts/snowflake_cli/setup.sh --profile $(CONN) --phase loader
+
+# ---------- Transformer (dbt) credential (key-pair) ----------
+# Same as `loader`, for the ARTWORK_TRANSFORMER_SVC dbt identity. Requires
+# `make infra CONN=<conn>` to have created the (TYPE = SERVICE) user first.
+#   make transformer CONN=mk07348
+# Produces (namespaced): [connections.<CONN>_transformer] +
+# ~/.snowflake/keys/<CONN>_transformer_rsa_key.p8, registering the public key on
+# ARTWORK_TRANSFORMER_SVC via git-setup/operator/register_transformer_public_key.sql.
+transformer: chmod
+	@echo "==> Establishing transformer (dbt) key-pair for profile '$(CONN)' (additive; new key + connection)..."
+	bash scripts/snowflake_cli/setup.sh --profile $(CONN) --phase transformer
 
 rollback: chmod
 	@if [ -z "$(FILE)" ]; then \

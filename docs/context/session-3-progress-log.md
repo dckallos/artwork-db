@@ -2309,3 +2309,167 @@ solo-session=1 + CORTEX_FORK_INCIDENTS clean; then ask which of (a)/(b)/(c) and 
 ```
 
 - **End of this window (eleventh; CANONICAL — supersedes the two duplicate follow-on 11 blocks from the forked window AND the "tenth" marker. Snowflake CLI setup suite hardened AND made multi-account: NEW init_profile.sh; conn-aware _lib.sh (SNOW_LIB_ADMIN_CONN/LOADER_CONN, key-path derivation, list_connections/set_default_connection, prune_backups, dup-guard); setup.sh --profile/--admin-conn/--loader-conn + list/switch phases; 02-08 parameterized; docs updated (file-map, cli-connection, AGENTS). Defaults admin/loader unchanged. Dual-instance incident this turn — reconciled, not re-applied. **Item 4 Makefile CONN= passthrough LANDED** (make iac CONN=clientb; verified via make -n). All LOCAL-ONLY: validated via bash -n + temp-config E2E + make -n dry-runs; not applied to account, not synced to Mac.)**
+
+---
+
+### 2026-06-04 (new window) | NEW-ACCOUNT CUTOVER PREP + dbt-readiness authored (workspace; NOT applied, NOT pushed)
+
+> Owner sign-off: "Proceed on June 4, 2026." This window is the cutover from the
+> retired trials to the NEW account and prep for Mac dbt Core. dbt execution model:
+> **Mac dbt Core ONLY for now** (Snowflake-native CREATE DBT PROJECT deferred as a
+> purely additive later step; if/when added it is the future Airflow hook). Enrich
+> slice: **European Paintings (PD)**. dbt identity: **dedicated service user
+> `ARTWORK_TRANSFORMER_SVC`** (TYPE=SERVICE, key-pair only), scoped to
+> `ARTWORK_TRANSFORMER` -- mirrors `ARTWORK_LOADER_SVC`. (An earlier strawman that
+> granted the role to the human login PORCHFLAKE in create_roles.sql was REJECTED
+> by the owner mid-window: IaC must not pin a personal login.)
+
+- **NEW ACCOUNT (authoritative, verified live read-only this window):**
+  `OBANOYY-MK07348` (legacy locator `EP21559`, region `AWS_US_EAST_2`), admin
+  `PORCHFLAKE` / `ACCOUNTADMIN`, snow CLI admin connection `[connections.mk07348]`
+  (key `~/.snowflake/keys/mk07348_rsa_key.p8`). Trials `pa37992` / `HXCNOII-RS05429`
+  (admin `PORCHANALYTICS`) are RETIRED.
+- **Live state verified (read-only):** `ARTWORK_DB` BRONZE/SILVER/GOLD live (DDL +
+  git-setup already applied 2026-06-03). All Met tables = **0 rows**
+  (`MET_CSV_SNAPSHOT`, `MET_ENRICHMENT_CONTROL`, `MET_WORKLIST`, `RAW_MET_OBJECTS`,
+  `EXTRACTION_LOG`). `ARTWORK_LOADER_SVC` = `TYPE=SERVICE`, `PASSWORD=null`, but
+  **`RSA_PUBLIC_KEY=null`** -> loader cannot auth on this account yet (the core gap).
+  `PORCHFLAKE` holds `ACCOUNTADMIN`+`ORGADMIN` but **not** `ARTWORK_TRANSFORMER`.
+
+- **What changed this turn (workspace stage: EDITED + validated; applied-to-account: NO; pushed-to-Mac: NO):**
+  1. `Makefile` -- NEW `loader` AND `transformer` targets (Option B): `bash
+     scripts/snowflake_cli/setup.sh --profile $(CONN) --phase loader|transformer`;
+     both added to `.PHONY`. Additive/namespaced: `make loader CONN=mk07348` ->
+     `mk07348_loader_rsa_key.p8` + `[connections.mk07348_loader]`;
+     `make transformer CONN=mk07348` -> `mk07348_transformer_rsa_key.p8` +
+     `[connections.mk07348_transformer]`. Never touch the old `[connections.loader]`.
+  2. `infrastructure/create_service_user.sql` -- added a SECOND service user
+     `ARTWORK_TRANSFORMER_SVC` (TYPE=SERVICE, DEFAULT_ROLE ARTWORK_TRANSFORMER,
+     NS ARTWORK_DB.SILVER) + `GRANT ROLE ARTWORK_TRANSFORMER TO USER
+     ARTWORK_TRANSFORMER_SVC` + idempotent TYPE/PASSWORD converge ALTERs. Both
+     statements compile-validated (`only_compile`). `drop_service_user.sql` drops
+     it before the loader. Mirrors the loader pattern exactly. (The transient
+     create_roles.sql human-login grant was added then REVERTED in this window.)
+     Companion bootstrap (mirrors 06/07): NEW `git-setup/operator/
+     register_transformer_public_key.sql`, `scripts/snowflake_cli/
+     09_setup_transformer_keypair.sh` + `10_test_transformer_connection.sh`,
+     `_lib.sh` (`SNOW_LIB_TRANSFORMER_CONN` + `transformer_key_path`), `setup.sh`
+     (`transformer` phase + `--transformer-conn`), `executable_files.txt` (09/10).
+  3. `.env.example` -- account example -> `OBANOYY-MK07348`; loader key namespaced
+     `~/.snowflake/keys/<conn>_loader_rsa_key.p8` (minted by `make loader CONN=<conn>`);
+     `DBT_SNOWFLAKE_USER` set to `ARTWORK_TRANSFORMER_SVC`; key namespaced
+     `<conn>_transformer_rsa_key.p8` (via `make transformer CONN=<conn>`).
+  4. `CLAUDE.md` -- account block -> `OBANOYY-MK07348 (locator EP21559)`, retired trials
+     noted; fixed stale "dbt project (not yet created)" -> scaffolded.
+  5. `AGENTS.md` -- new authoritative "Current account" anchor in Operating environment
+     (account id, locator, admin, admin conn, loader-key namespacing, retired trials).
+
+- **Cumulative workspace state vs Mac:** Mac is BEHIND by this turn's edits:
+  `Makefile`, `infrastructure/create_service_user.sql`, `infrastructure/drop_service_user.sql`,
+  `git-setup/operator/register_transformer_public_key.sql`,
+  `scripts/snowflake_cli/{09_setup_transformer_keypair.sh,10_test_transformer_connection.sh,_lib.sh,setup.sh}`,
+  `scripts/executable_files.txt`, `.env.example`, `CLAUDE.md`, `AGENTS.md`,
+  `docs/context/{file-map,met-deepdive,session-3-progress-log}.md`
+  (create_roles.sql was edited then reverted -- net no change). On top of any
+  un-synced prior-window deltas. The REAL `.env` is Mac-local (gitignored, not in the
+  workspace) -- owner sets it by hand from the block in the hand-off. Nothing committed.
+
+- **Solo-session check result:** exactly **1** `cortex_code_snowsight` session (this
+  window); `ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS` = **0 rows**. SOLO.
+
+- **First-action options for the next window:**
+  (a) Owner has run `make loader CONN=mk07348` -> verify the loader key registered
+      (read-only `DESCRIBE USER ARTWORK_LOADER_SVC` shows `RSA_PUBLIC_KEY_FP`); owner
+      ran `snow connection test -c mk07348_loader`. Then proceed to snapshot load.
+  (b) Owner has run `make infra CONN=mk07348` (creates ARTWORK_TRANSFORMER_SVC) +
+      `make transformer CONN=mk07348` -> verify the transformer key registered
+      (`DESCRIBE USER ARTWORK_TRANSFORMER_SVC` shows `RSA_PUBLIC_KEY_FP`;
+      `snow connection test -c mk07348_transformer`).
+  (c) Owner has run `python -m extraction.met.run snapshot` -> verify
+      `MET_CSV_SNAPSHOT` ~485k rows, then seed-control + enrich-met (European Paintings).
+
+- **Read-only verification queries (paste-ready):**
+  ```sql
+  -- loader key registered (Phase 1)
+  DESCRIBE USER ARTWORK_LOADER_SVC;            -- expect RSA_PUBLIC_KEY_FP set, PASSWORD null
+  -- transformer service user ready (Phase 4 prep)
+  DESCRIBE USER ARTWORK_TRANSFORMER_SVC;       -- expect RSA_PUBLIC_KEY_FP set, TYPE SERVICE
+  SHOW GRANTS TO USER ARTWORK_TRANSFORMER_SVC; -- expect a row: ROLE ARTWORK_TRANSFORMER
+  -- full CSV landed (Phase 2)
+  SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.MET_CSV_SNAPSHOT;          -- expect ~485k
+  -- enrichment slice (Phase 3)
+  SELECT enrichment_status, COUNT(*) FROM ARTWORK_DB.BRONZE.MET_ENRICHMENT_CONTROL GROUP BY 1;
+  SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;           -- > 0 once enriched
+  ```
+
+- **Decision tree for next window:**
+  ```
+  loader key registered? (DESCRIBE USER -> RSA_PUBLIC_KEY_FP set)
+    no  -> owner runs `make loader CONN=mk07348`, then `snow connection test -c mk07348_loader`
+    yes -> MET_CSV_SNAPSHOT loaded?
+             no  -> owner runs `python -m extraction.met.run snapshot` (Mac)
+             yes -> control seeded (European Paintings ~2,327)?
+                      no  -> owner runs seed-control --department "European Paintings"
+                      yes -> owner runs enrich-met (watch WAF/403 risk) -> then dbt:
+                             make infra CONN=mk07348 (grant; creates ARTWORK_TRANSFORMER_SVC) -> make transformer CONN=mk07348 -> make dbt-deps -> dbt-build -> dbt-test
+  ```
+
+- **Deferred patches (priority order):**
+  1. Met enrich WAF/403 mitigation if it recurs on this account (UA/headers in
+     `config.py` / `image_enricher.py`; the prior account hit an Akamai interstitial).
+  2. Snowflake-native dbt deployment (CREATE DBT PROJECT) -- additive; the future
+     Airflow `EXECUTE DBT PROJECT` hook. Only when owner wants it.
+  3. Stale V/R/B refs outside infrastructure; `rename_and_update.py` removal decision.
+  4. `SMITHSONIAN_API_KEY` in root `.env.example` has no consumer.
+
+- **What MUST NOT happen in the next window:**
+  - Do NOT `make iac`/`make infra`/`make loader` from the workspace -- the Mac is the
+    apply surface (key-pair auth lives there). Do NOT push to `main`.
+  - Do NOT reuse the OLD `loader_rsa_key.p8` for this account; the namespaced
+    `mk07348_loader_rsa_key.p8` is correct (distinct, additive).
+  - Do NOT install dbt in the workspace sandbox (dbt Core runs on the Mac only).
+  - Do NOT rewrite historical dated entries above (append-only).
+
+- **Hand-off prompt (paste into a new Cortex window):**
+```
+SESSION HANDOFF -- artwork-db / NEW-ACCOUNT cutover + Mac dbt Core readiness
+
+ROLE: Senior Data/Platform Engineer mentor for a Snowflake + dbt learning project.
+Account: OBANOYY-MK07348 (legacy locator EP21559), admin PORCHFLAKE/ACCOUNTADMIN,
+snow CLI admin connection [connections.mk07348]. Branch: donkey-kong-sandbox.
+Explain the WHY and trade-offs; the OWNER decides, you honor it.
+
+READING ORDER (stop once you can act):
+1. AGENTS.md (Tier 0; see the "Current account" anchor).
+2. ONLY the latest entry of docs/context/session-3-progress-log.md
+   (header: "2026-06-04 ... NEW-ACCOUNT CUTOVER PREP").
+
+SOLO-SESSION CHECK before any write:
+  SELECT COUNT(DISTINCT SESSION_ID) FROM TABLE(ARTWORK_DB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER(
+    USER_NAME=>'PORCHFLAKE', RESULT_LIMIT=>1000))
+   WHERE QUERY_TAG ILIKE '%cortex_code_snowsight%' AND START_TIME > DATEADD(minute,-10,CURRENT_TIMESTAMP());
+  SELECT COUNT(*) FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS;
+  Exactly 1 + 0 incidents = solo; else STOP and ask.
+
+DUAL-FS: workspace edits are NOT on the Mac until the owner commits+pulls. State the
+plan and wait for "proceed (+date)" before any write or execution. Mac is the apply
+surface for make loader / make infra / python / make dbt-*.
+
+STATE (do not re-derive): DDL+git-setup live on the new account; all Met tables EMPTY.
+LOADER key NOT yet registered (RSA_PUBLIC_KEY=null). This window staged (un-synced):
+Makefile `loader`+`transformer` targets, create_service_user.sql ARTWORK_TRANSFORMER_SVC,
+09/10 transformer keypair scripts + register_transformer SQL + setup.sh/_lib.sh wiring,
+.env.example, CLAUDE.md, AGENTS.md, file-map, met-deepdive. dbt = Mac dbt Core only as
+ARTWORK_TRANSFORMER_SVC; native deployment deferred.
+
+YOUR TASK: confirm where the owner is (loader key minted? infra grant applied? snapshot
+loaded?), verify read-only, and continue the cutover->load->enrich->dbt sequence.
+
+HARD RULES: No make from workspace. No push to main. No dbt install in workspace.
+Reuse the namespaced mk07348_loader key, not the old loader_rsa_key.p8.
+
+FIRST RESPONSE: quote back the "End of this window (2026-06-04 cutover)" header;
+confirm solo=1 + CORTEX_FORK_INCIDENTS=0; then ask which step the owner has completed.
+```
+
+- **End of this window (2026-06-04 cutover; CANONICAL -- supersedes the "eleventh" marker. NEW account OBANOYY-MK07348/EP21559, admin PORCHFLAKE; loader key gap identified (RSA_PUBLIC_KEY=null). Staged (workspace, un-synced, NOT applied): Makefile `loader`+`transformer` targets (Option B); create_service_user.sql adds ARTWORK_TRANSFORMER_SVC (TYPE=SERVICE) + role grant (compile-validated) -- the dbt identity, mirroring the loader; 09/10 transformer keypair scripts + register_transformer_public_key.sql + setup.sh/_lib.sh wiring; .env.example + CLAUDE.md + AGENTS.md + file-map + met-deepdive re-pointed to the new account. An earlier create_roles.sql grant-to-PORCHFLAKE strawman was REVERTED (no human login in IaC). dbt = Mac dbt Core only as ARTWORK_TRANSFORMER_SVC; European Paintings slice. Next = owner runs make loader CONN=mk07348 -> snapshot -> seed/enrich -> make infra + make transformer + dbt-build/test on the Mac.)**

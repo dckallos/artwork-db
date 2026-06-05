@@ -9,7 +9,7 @@
 --
 --   PUBKEY=$(awk 'NR>1 && !/-----END/ {printf "%s", $0}' \
 --       ~/.snowflake/keys/loader_rsa_key.pub)
---   snow sql -c admin \
+--   snow sql -c <admin-conn> \
 --       --filename git-setup/operator/register_loader_public_key.sql \
 --       --variable loader_user=ARTWORK_LOADER_SVC \
 --       --variable rsa_public_key="$PUBKEY" \

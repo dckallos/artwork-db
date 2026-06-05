@@ -67,14 +67,14 @@ make dbt-test
 - infrastructure/ -- Snowflake DDL (11 create/drop pairs)
 - scripts/ -- Orchestration layer (manifest.txt defines apply order)
 - extraction/met/ -- Met Museum OpenAccess loader (SQLite intermediate, Bronze target)
-- artwork_pipeline/ -- dbt project (not yet created)
+- artwork_pipeline/ -- dbt project (scaffolded; staging model stg_met__artworks exists)
 - git-setup/ -- Optional in-Snowflake Git mirror (runs LAST)
 
 **Snowflake objects**:
-- Account: pa37992 (trial)
+- Account: OBANOYY-MK07348 (locator EP21559, AWS_US_EAST_2); admin PORCHFLAKE/ACCOUNTADMIN. Earlier trials pa37992 / HXCNOII-RS05429 (user PORCHANALYTICS) are RETIRED.
 - Database: ARTWORK_DB with BRONZE/SILVER/GOLD schemas
-- Roles: ARTWORK_ADMIN (owner), ARTWORK_LOADER, ARTWORK_TRANSFORMER
-- Service user: ARTWORK_LOADER_SVC (key-pair auth)
+- Roles: ARTWORK_ADMIN (owner), ARTWORK_LOADER, ARTWORK_TRANSFORMER (dbt runs as ARTWORK_TRANSFORMER_SVC assuming ARTWORK_TRANSFORMER)
+- Service users (key-pair auth, TYPE=SERVICE): ARTWORK_LOADER_SVC (extraction -> Bronze), ARTWORK_TRANSFORMER_SVC (dbt -> Silver/Gold). Keys minted by `make loader|transformer CONN=<conn>`.
 - Git repo: ARTWORK_OPS.GIT.ARTWORK_DB
 
 **Connection flow**: scripts/orchestrate.sh -> apply_sql.sh -> snow sql --filename

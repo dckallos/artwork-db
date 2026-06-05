@@ -23,7 +23,7 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `setup.sh` | ~ | Entry point; `--phase` dispatcher (prereq/init-profile/admin/loader/promote/all/**list/switch**), `--profile`/`--admin-conn`/`--loader-conn` selectors, chmods + runs 00–08 | 2026-06-01 | changing phase routing |
+| `setup.sh` | ~ | Entry point; `--phase` dispatcher (prereq/init-profile/admin/loader/**transformer**/promote/all/list/switch), `--profile`/`--admin-conn`/`--loader-conn`/**`--transformer-conn`** selectors, chmods + runs 00–10 | 2026-06-04 | changing phase routing |
 | `_lib.sh` | ~ | Shared helpers (TOML parse/rewrite incl. top-level keys, JWT verify, conn-aware resolvers, key-path derivation, `list_connections`/`set_default_connection`, `prune_backups`) | 2026-06-01 | need exact awk/TOML logic |
 | `init_profile.sh` | ~120 | Local-only: seed `[connections.<admin>]` non-destructively (prompts/env) + set `default_connection_name`; runs inside `prereq` between 02 and 03 | 2026-06-01 | changing config.toml seeding |
 | `00_install_snowflake_cli.sh` | 29 | brew/pipx install, idempotent | prior | changing install path |
@@ -35,6 +35,8 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 | `06_setup_loader_keypair.sh` | 107 | loader key-pair: lazy keygen → register pubkey via admin JWT → upsert `[connections.loader]` | 2026-05-31 | changing loader auth |
 | `07_test_loader_connection.sh` | 24 | `snow connection test -c loader` (key-pair; no `.env`) | 2026-05-31 | — |
 | `08_promote_admin_warehouse.sh` | 152 | promote admin warehouse → ARTWORK_WH, rewrite config | prior | changing promotion logic |
+| `09_setup_transformer_keypair.sh` *(NEW, 2026-06-04)* | ~120 | transformer key-pair (mirrors 06): lazy keygen → register pubkey via admin JWT → upsert `[connections.<conn>_transformer]` | 2026-06-04 | changing transformer auth |
+| `10_test_transformer_connection.sh` *(NEW, 2026-06-04)* | 26 | `snow connection test -c <conn>_transformer` (key-pair; no `.env`) | 2026-06-04 | — |
 
 ## git-setup/ (reviewed 2026-05-30 — see `ddl-infrastructure.md` "Git bind chain")
 
@@ -48,6 +50,7 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 | `drop_git_ops_db.sql` | 60 | rollback step 3: FQ `DROP SECRET`+`SCHEMA`+`DATABASE` | 2026-05-30 | rolling back |
 | `operator/register_admin_public_key.sql` | 33 | `ALTER USER … SET RSA_PUBLIC_KEY` (+ DESCRIBE) | prior | — |
 | `operator/register_loader_public_key.sql` | 33 | `ALTER USER … SET RSA_PUBLIC_KEY` for the loader (+ DESCRIBE); applied by `06_setup_loader_keypair.sh` | 2026-05-31 | — |
+| `operator/register_transformer_public_key.sql` *(NEW, 2026-06-04)* | 34 | `ALTER USER … SET RSA_PUBLIC_KEY` for `ARTWORK_TRANSFORMER_SVC`; applied by `09_setup_transformer_keypair.sh` | 2026-06-04 | — |
 | `.env.example` | 6 | gitignored `git-setup/.env` template; ships blank `GITHUB_PAT=` | 2026-05-30 | — |
 | `README.md` | 112 | git-setup runbook; **written in retired B###/V###/R### scheme (stale)** | 2026-05-30 | need narrative context |
 
@@ -61,7 +64,7 @@ rename makes grants an auto-paired `create_`).
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `create_roles.sql` | 46 | 3 roles (LOADER/TRANSFORMER/ADMIN) + hierarchy + account grants (CREATE WH/DB; **EXECUTE TASK now uncommented, Session-3 lockstep with create_tasks**) | 2026-05-31 | changing role model / account grants |
+| `create_roles.sql` | 46 | 3 roles (LOADER/TRANSFORMER/ADMIN) + hierarchy + account grants (CREATE WH/DB; EXECUTE TASK; EXECUTE ALERT; MONITOR EXECUTION) | 2026-06-04 | changing role model / account grants |
 | `create_warehouses.sql` | 15 | `ARTWORK_WH` X-Small, auto-suspend 60 (`IF NOT EXISTS`) | prior | resizing/adding WH |
 | `create_databases_and_schemas.sql` | 21 | `ARTWORK_DB` + BRONZE/SILVER/GOLD schemas (`IF NOT EXISTS`) | prior | adding schemas |
 | `create_file_formats.sql` | 22 | `JSON_RAW`, `PARQUET_RAW` in BRONZE (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding formats |
@@ -69,7 +72,7 @@ rename makes grants an auto-paired `create_`).
 | `create_bronze_tables.sql` | 124 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`) | 2026-05-31 | schema changes |
 | `create_bronze_views.sql` *(NEW, Session-3)* | 59 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`) | 2026-05-31 | changing worklist priority/filters |
 | `create_run_control.sql` *(NEW, Session-3)* | 46 | `RUN_CONTROL` durable checkpoint table — PK (run_id, step), VARIANT checkpoint, session_id/query_tag provenance; resume work across connection drops (`IF NOT EXISTS`) | 2026-05-31 | changing checkpoint schema |
-| `create_service_user.sql` | 69 | `ARTWORK_LOADER_SVC` SERVICE user; `CREATE … IF NOT EXISTS` then idempotent `ALTER USER` converge to `TYPE=SERVICE` + `UNSET PASSWORD` (AUTH-01 applied + verified 2026-05-31; key-pair only) | 2026-05-31 | auth/identity changes |
+| `create_service_user.sql` | ~110 | **TWO** SERVICE users: `ARTWORK_LOADER_SVC` (->ARTWORK_LOADER) + **2026-06-04: `ARTWORK_TRANSFORMER_SVC` (->ARTWORK_TRANSFORMER, dbt identity)**; each `CREATE … IF NOT EXISTS` + idempotent `ALTER` converge to `TYPE=SERVICE`/`UNSET PASSWORD` (key-pair only) | 2026-06-04 | auth/identity changes |
 | `create_tasks.sql` | 44 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`) | 2026-05-31 | defining/altering tasks |
 | `drop_*.sql` (11) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases), `drop_run_control`, + real `drop_tasks` | 2026-05-31 | rolling back |
 | `create_grants.sql` *(renamed from grant_privileges.sql, Session-3)* | 51 | ALL+FUTURE grants to functional roles + **LOADER SELECT on ALL+FUTURE VIEWS in BRONZE** (runs as ARTWORK_ADMIN) | 2026-05-31 | changing grants |
@@ -95,8 +98,8 @@ rename makes grants an auto-paired `create_`).
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `Makefile` | — | task runner (see ddl-infrastructure.md carryover) | prior | changing make targets |
-| `.env.example` | 33 | runtime (loader) env template; `SNOWFLAKE_*` for `ARTWORK_LOADER_SVC` + `SMITHSONIAN_API_KEY` (no consumer yet); stale `V008` refs | 2026-05-30 | — |
+| `Makefile` | — | task runner; `CONN=` passthrough; **2026-06-04: NEW `loader` + `transformer` targets wrap `setup.sh --profile $(CONN) --phase loader|transformer` (mint+register service-user key-pairs via make)** | 2026-06-04 | changing make targets |
+| `.env.example` | 39 | runtime env template; **2026-06-04 re-pointed to new account: example acct `OBANOYY-MK07348`, namespaced loader key `<conn>_loader_rsa_key.p8`, dbt identity `DBT_SNOWFLAKE_USER=ARTWORK_TRANSFORMER_SVC` + `<conn>_transformer_rsa_key.p8`**; `SMITHSONIAN_API_KEY` still no consumer | 2026-06-04 | — |
 | `profiles.yml.example` | 39 | dbt-core profile (env_var + key-pair, dev→SILVER/prod→GOLD); **gap for Snowflake-native dbt** (extraction.md) | 2026-05-30 | — |
 | `requirements.txt` | — | root pin set (mirrors extraction deps) | 2026-05-30 | bumping pins |
 | `rename_and_update.py` | 91 | **spent one-shot** V###/R### → prefix-free `git mv` + ref-rewrite migration; historical/dead, candidate for removal | 2026-05-30 | auditing the prefix-retirement history |
