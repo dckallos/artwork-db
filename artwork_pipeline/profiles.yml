@@ -1,23 +1,47 @@
 # =============================================================================
-# profiles.yml -- dbt-snowflake connection profile
+# profiles.yml -- Dual-mode dbt-snowflake connection profile
 # =============================================================================
-# All values resolve from the environment via env_var().
-# Auth: key-pair (private_key_path). No passwords.
+# This file works in TWO execution contexts:
 #
-# This file lives INSIDE the project dir so dbt_orchestrate.sh can pass
-# --profiles-dir to keep everything self-contained. Alternatively, symlink or
-# copy to ~/.dbt/profiles.yml for default discovery.
+#   1. LOCAL (Mac, dbt Core CLI):
+#      - Target: `dev`
+#      - Auth: key-pair (private_key_path via env_var)
+#      - Connects as ARTWORK_TRANSFORMER_SVC service user
+#      - Requires exported env vars from .env
 #
-# Required env vars (set in .env, exported by dbt_orchestrate.sh):
+#   2. SNOWFLAKE-NATIVE (workspace / CREATE DBT PROJECT / EXECUTE DBT PROJECT):
+#      - Target: `snowflake`
+#      - Auth: session-based (inherits the caller's Snowflake session)
+#      - No credentials needed (account/user are placeholders)
+#      - Role/warehouse/database set explicitly to avoid inheriting session defaults
+#
+# HOW TO USE:
+#   Local:     dbt run --target dev        (or just `dbt run` since dev is default)
+#   Snowflake: dbt run --target snowflake  (or set target: snowflake in workspace)
+#
+# DESIGN NOTES:
+#   - `env_var()` is NOT available in Snowflake-native execution. Any target
+#     used in that context must have all values hardcoded or use Snowflake session
+#     defaults. The `snowflake` target hardcodes everything.
+#   - The `dev` target uses env_var() for ALL secrets (key path, account, user)
+#     because those vary per machine and must not be committed to version control.
+#   - Both targets write to the same schemas (SILVER/GOLD) using the same role.
+#     The generate_schema_name macro handles routing identically regardless of target.
+#
+# REQUIRED ENV VARS (dev target only, set in .env, exported by dbt_orchestrate.sh):
 #   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH,
 #   SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE
-# Optional (have defaults):
+# OPTIONAL (dev target only, have defaults):
 #   DBT_SNOWFLAKE_ROLE, DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
+# =============================================================================
 
 artwork_pipeline:
   target: dev
   outputs:
 
+    # -------------------------------------------------------------------------
+    # LOCAL: dbt Core on Mac (key-pair auth as ARTWORK_TRANSFORMER_SVC)
+    # -------------------------------------------------------------------------
     dev:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
@@ -30,3 +54,23 @@ artwork_pipeline:
       schema: SILVER
       threads: 4
       client_session_keep_alive: false
+
+    # -------------------------------------------------------------------------
+    # SNOWFLAKE-NATIVE: runs inside Snowflake (workspace, EXECUTE DBT PROJECT)
+    # -------------------------------------------------------------------------
+    # Auth is inherited from the Snowflake session. `account` and `user` are
+    # required by dbt's YAML parser but ignored at runtime -- any non-empty
+    # string satisfies the requirement.
+    #
+    # DO NOT add password, private_key_path, authenticator, or any auth field
+    # here. Their presence causes errors in Snowflake-native execution.
+    # -------------------------------------------------------------------------
+    snowflake:
+      type: snowflake
+      account: "session"
+      user: "session"
+      role: ARTWORK_TRANSFORMER
+      warehouse: ARTWORK_WH
+      database: ARTWORK_DB
+      schema: SILVER
+      threads: 4
