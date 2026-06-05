@@ -18,6 +18,7 @@
 infrastructure/create_account_parameters.sql
 infrastructure/create_roles.sql
 infrastructure/create_warehouses.sql
+infrastructure/create_resource_monitors.sql
 infrastructure/create_databases_and_schemas.sql
 infrastructure/create_file_formats.sql
 infrastructure/create_stages.sql
