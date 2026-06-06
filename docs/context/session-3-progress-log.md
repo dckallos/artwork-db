@@ -2990,4 +2990,103 @@ AND mtime-quiescence on scripts/snowflake_cli/*, then -- after the owner runs th
 for D3. Wait for go + date.
 ```
 
-- **End of this window (2026-06-06; CANONICAL -- supersedes the 2026-06-05 Part 3d marker. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: config.toml -> connections.toml migration Phases 1-10 APPLIED (workspace-only): _lib.sh (CONNECTIONS_TOML const, conn-aware resolvers read connections.toml, list_connections/set_default_connection split, NEW remove_toml_section), init_profile.sh (shadow guard inverted to primary seed path, private_key_path), 03/04/05 (connections.toml perms+preflight+echo), 06/09/08 (loader/transformer/promote -> connections.toml; authored by a CONCURRENT FORK, reviewed+kept), setup.sh wording, docs (cli-connection/file-map/AGENTS) + Task 2 READMEs condensed (scripts/snowflake_cli/README.md 191->78, git-setup/README.md 113->73) + cosmetic comment cleanup (02/07/10/cli-connection). All bash -n clean. config.toml retained for default_connection_name + [cli.*]. Phase 6 GATED cutover (remove config.toml [connections.*]) NOT run -- awaits owner `snow connection test` on Mac #2. DUAL-INSTANCE INCIDENT logged: 2nd instance raced the same plan ~16:30-16:43 (it authored 06/09/08 + Phases 8-10 docs/READMEs, reviewed+kept); owner killed it (took two attempts); SQL solo-check was blind (file edits, not queries) -- mtimes were the real signal. CORTEX_FORK_INCIDENTS write declined. APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO. NEXT: owner runs the Mac #2 `snow connection test` gate, then the GATED Phase 6 config.toml cutover; owner confirms snow --version for D3 (else swap private_key_path->private_key_file at the seed sites).)**
+- **End of this window (2026-06-06 Part 1; superseded by Part 2 below. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: config.toml -> connections.toml migration Phases 1-10 APPLIED (workspace-only): _lib.sh (CONNECTIONS_TOML const, conn-aware resolvers read connections.toml, list_connections/set_default_connection split, NEW remove_toml_section), init_profile.sh (shadow guard inverted to primary seed path, private_key_path), 03/04/05 (connections.toml perms+preflight+echo), 06/09/08 (loader/transformer/promote -> connections.toml; authored by a CONCURRENT FORK, reviewed+kept), setup.sh wording, docs (cli-connection/file-map/AGENTS) + Task 2 READMEs condensed (scripts/snowflake_cli/README.md 191->78, git-setup/README.md 113->73) + cosmetic comment cleanup (02/07/10/cli-connection). All bash -n clean. config.toml retained for default_connection_name + [cli.*]. Phase 6 GATED cutover (remove config.toml [connections.*]) NOT run -- awaits owner `snow connection test` on Mac #2. DUAL-INSTANCE INCIDENT logged: 2nd instance raced the same plan ~16:30-16:43 (it authored 06/09/08 + Phases 8-10 docs/READMEs, reviewed+kept); owner killed it (took two attempts); SQL solo-check was blind (file edits, not queries) -- mtimes were the real signal. CORTEX_FORK_INCIDENTS write declined. APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO. NEXT: owner runs the Mac #2 `snow connection test` gate, then the GATED Phase 6 config.toml cutover; owner confirms snow --version for D3 (else swap private_key_path->private_key_file at the seed sites).)**
+
+---
+
+### 2026-06-06 Part 2 -- Batch A1: Silver staging (artists + images)
+
+**What changed this turn (workspace stage):**
+- `artwork_pipeline/models/staging/met/stg_met__artists.sql` -- NEW. Deduplicated artist
+  entities (262 rows). Split pipe-delimited fields via SPLIT_TO_TABLE + GET(SPLIT(...)).
+  Surrogate key via `dbt_utils.generate_surrogate_key`.
+- `artwork_pipeline/models/staging/met/stg_met__images.sql` -- NEW. Primary image URLs
+  in wide format (503 rows). Boolean `has_primary_image` + `additional_image_count`.
+- `artwork_pipeline/models/staging/met/_met__models.yml` -- UPDATED. Added schema tests
+  for both new models (unique, not_null, relationships to stg_met__artworks) AND added
+  stg_met__enrichment_status model entry (was missing; includes accepted_values + relationships warn).
+- `docs/context/dbt-curriculum.md` -- UPDATED. Batch A1 -> complete.
+- `docs/context/dbt-journal/batch-a1-silver-staging.md` -- NEW. Journal with key
+  learnings (SPLIT_TO_TABLE NULL trap, surrogate key collision risk, wide vs long).
+- applied-to-account: NO
+- pushed-to-Mac: NO
+
+**Cumulative workspace state vs Mac:**
+- All connections.toml migration files (from earlier 2026-06-06 window) still pending sync.
+- Batch A1 dbt models (stg_met__artists, stg_met__images) + updated YAML + journal NEW.
+- Unit 3 status flip (active -> complete) in curriculum.
+
+**Solo-session check:** 1 active session confirmed. No fork incidents.
+
+**First-action options for next window:**
+- **(a)** Owner syncs workspace -> Mac, runs `dbt run --select stg_met__artists stg_met__images`
+  then `dbt test --select stg_met__artists stg_met__images`. Expected: 2 views created in
+  SILVER, all 8 tests pass.
+- **(b)** After (a) succeeds, start **Batch A2: Gold marts** -- `dim_artists`, `dim_artworks`,
+  `fct_artwork_images`, `openaccess_catalog` OBT. The big payoff.
+- **(c)** Wire `make dbt-build` IaC integration (Track B1) before Gold if owner wants the
+  full automation story first.
+
+**Read-only verification queries (after owner runs dbt):**
+```sql
+-- Expect 262 rows, all artist_id unique
+SELECT COUNT(*) AS cnt, COUNT(DISTINCT artist_id) AS distinct_ids
+FROM ARTWORK_DB.SILVER.STG_MET__ARTISTS;
+
+-- Expect 503 rows, all has_primary_image = TRUE for this seed
+SELECT COUNT(*) AS cnt,
+       COUNT(CASE WHEN has_primary_image THEN 1 END) AS with_image
+FROM ARTWORK_DB.SILVER.STG_MET__IMAGES;
+
+-- Expect 4 views total in SILVER
+SHOW VIEWS IN SCHEMA ARTWORK_DB.SILVER;
+```
+
+**Decision tree (keyed off next run output):**
+- If `dbt run` succeeds (4 views in SILVER) AND `dbt test` passes -> proceed to A2 Gold.
+- If artist dedup test fails (non-unique artist_id) -> investigate collision, add
+  `artist_display_bio` to surrogate key grain.
+- If relationships test fails (orphan object_id in images) -> data issue in Bronze; debug.
+
+**Deferred patches (priority order):**
+1. Unit 3 `stg_met__enrichment_status` -- already live in SILVER (confirmed). Journal
+   needs a "completed" date written. Low priority.
+2. Batch A2 Gold marts -- primary next step after A1 passes tests.
+3. Track B1 IaC wiring (`make dbt-build`) -- can run in parallel with A2.
+4. connections.toml Phase 6 gated cutover (from prior window).
+
+**MUST NOT happen next window:**
+- Do NOT run `dbt` from the workspace (Mac only).
+- Do NOT modify Bronze tables.
+- Do NOT apply connections.toml Phase 6 without `snow connection test` passing on Mac.
+
+**Hand-off prompt:**
+
+```
+Read AGENTS.md first (orientation), then ONLY the latest dated entry in
+docs/context/session-3-progress-log.md (2026-06-06 Part 2). Skip all
+prior entries.
+
+Solo-session check (run before any write):
+  SELECT COUNT(DISTINCT SESSION_ID) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+  WHERE START_TIME >= DATEADD('minutes', -10, CURRENT_TIMESTAMP())
+    AND QUERY_TAG ILIKE '%cortex_code_snowsight%';
+  SELECT * FROM ARTWORK_DB.BRONZE.CORTEX_FORK_INCIDENTS ORDER BY DETECTED_AT DESC LIMIT 3;
+Exactly 1 = solo; >1 = stop and ask.
+
+Dual-FS reminder: workspace edits are NOT on the Mac until the owner syncs.
+The owner runs all dbt/make/snow commands on their Mac.
+
+Gating rule: state the plan, WAIT for explicit go + date before any write.
+
+Context: branch donkey-kong-sandbox, account OBANOYY-MK07348 (locator EP21559).
+dbt project artwork_pipeline/, profile artwork_pipeline, target dev (key-pair).
+Phase: Batch A1 AUTHORED (stg_met__artists + stg_met__images). Awaiting owner
+dbt run + test on Mac. If tests pass, next = Batch A2 Gold marts (dim_artists,
+dim_artworks, fct_artwork_images, openaccess_catalog).
+
+FIRST RESPONSE: quote the latest "End of this window" header back to me,
+confirm solo=1, then propose first action based on the decision tree.
+```
+
+- **End of this window (2026-06-06 Part 2; CANONICAL -- supersedes the earlier 2026-06-06 marker. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: Batch A1 Silver staging AUTHORED (stg_met__artists 262 rows + stg_met__images 503 rows, both validated against live data). Unit 3 marked complete. YAML tests declared (8 tests across 2 models). APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO. NEXT: owner syncs, runs dbt run + dbt test on Mac; if green, proceed to A2 Gold marts.)**
