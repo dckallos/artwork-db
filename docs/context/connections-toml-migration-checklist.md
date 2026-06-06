@@ -119,13 +119,24 @@ snow connection test -c mk07348_transformer
 ## Phase 5 — `03_lock_config_permissions.sh`
 - [x] Added `lock "${SNOW_LIB_CONNECTIONS_TOML}"`; header + final `ls` updated.
       `bash -n` clean.
-- [ ] GATE: owner runs the 3 `snow connection test` commands on Mac #2.
+- [x] GATE GREEN (POST-PULL, 2026-06-06 17:19-17:20 UTC on Mac #2): re-seeded
+      connections.toml in a clean env (admin via init-profile, then loader,
+      transformer); all 3 `snow connection test` = OK with correct roles
+      (mk07348→ACCOUNTADMIN, _loader→ARTWORK_LOADER, _transformer→ARTWORK_TRANSFORMER).
+      Transformer role-leak fix confirmed working.
 
-## Phase 6 — Transactional cutover (config.toml block removal) — GATED
-- [ ] ONLY after Phase 5 gate is green: call `remove_toml_section` for each
-      `[connections.*]` in config.toml (`.bak` first). Leaves
-      `default_connection_name` + `[cli]`.
-- [ ] GATE: re-run the 3 `snow connection test` commands.
+## Phase 6 — Transactional cutover (config.toml block removal) — COMPLETE
+Gate is green, so this is unblocked. config.toml still holds 4 stale (now-inert)
+blocks: [connections.admin], [connections.mk07348], [connections.mk07348_loader],
+[connections.mk07348_transformer]. They are ignored by snow (connections.toml
+wins) but should be removed to prevent drift. NO [cli] section present, so the
+end state is just `default_connection_name = "mk07348"`.
+- [x] Ran `remove_toml_section "connections.<name>" config.toml` for all 4 blocks
+      (admin, mk07348, mk07348_loader, mk07348_transformer); `.bak`s taken.
+      config.toml now = just `default_connection_name = "mk07348"`.
+- [x] GATE GREEN (POST-CUTOVER, 2026-06-06 17:24 UTC): all 3 `snow connection test`
+      still OK reading solely from connections.toml (config.toml has no connections).
+      **MIGRATION COMPLETE.**
 
 ## Phase 7 — test / auxiliary scripts
 - [x] `04_register_admin_public_key.sh`: preflight now checks connections.toml;
