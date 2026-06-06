@@ -8,7 +8,7 @@ requests>=2.31.0
 aiohttp>=3.9.0
 python-dotenv>=1.0.0
 
-# --- dbt Diagnostics Tool (lineage-aware error tracer) ---
-sqlglot>=26.0
-dbt-artifacts-parser>=0.13.0
-pyyaml>=6.0
+# --- dbt Diagnostics Tool ---
+# Managed via dbt_diagnostics/pyproject.toml. Install with:
+#   pip install -e dbt_diagnostics[dev]
+
