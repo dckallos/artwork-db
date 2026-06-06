@@ -160,6 +160,29 @@ snow connection test -c mk07348_transformer
 - [x] `07`/`10`/`02` header comments + `cli-connection.md`: stale `[connections.X]`
       / `private_key_file` / `config.toml` references corrected. No logic change.
 
+## Post-gate fix — explicit role/warehouse in service connections (2026-06-06)
+**IMPORTANT — the gate run was PRE-PULL.** The owner ran the three
+`snow connection test` commands against the OLD `config.toml` (before syncing this
+session's code). So those results (admin OK, loader OK, transformer FAIL) validate
+the *old* state, NOT the new connections.toml. They neither confirm nor refute the
+migration — they only surfaced a real *class* of bug:
+the transformer test inherited `SNOWFLAKE_ROLE=ARTWORK_LOADER` (exported from the
+loader `.env`) because the transformer block had no `role`. Account is correct
+(`DEFAULT_ROLE=ARTWORK_TRANSFORMER`, granted, key set). Snow CLI precedence
+(empirically: admin block role beat the env var) = block value > env var.
+
+**No runtime gate has yet validated the new connections.toml code. All GATE
+checkboxes below remain `[ ]` until the owner re-tests AFTER pulling + re-seeding.**
+- [x] `06`: upsert explicit `role=${LOADER_ROLE}` (ARTWORK_LOADER) + `warehouse`
+      to `[loader]`. (fork-applied; CODE reviewed + `bash -n` clean — NOT gate-tested)
+- [x] `09`: upsert explicit `role=${TRANSFORMER_ROLE}` (ARTWORK_TRANSFORMER) +
+      `warehouse` to `[transformer]`. (fork-applied; CODE reviewed + `bash -n` clean — NOT gate-tested)
+- [ ] OWNER re-test (POST-PULL): pull code → re-run `--phase loader` +
+      `--phase transformer` (or `activate_mac.sh`) so connections.toml is
+      regenerated WITH the role lines → then `snow connection test -c mk07348`,
+      `_loader`, `_transformer` should ALL pass even with the loader `.env` sourced.
+      Only THEN is the Phase 5 gate truly green and Phase 6 unblocked.
+
 ## Final verification (single-writer, 2026-06-06)
 - [x] All 14 `scripts/snowflake_cli/*.sh` pass `bash -n`.
 - [x] No functional `[connections.X]` writes or `private_key_file` writes remain in
