@@ -23,19 +23,19 @@ create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/ch
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `setup.sh` | ~ | Entry point; `--phase` dispatcher (prereq/init-profile/admin/loader/**transformer**/promote/all/list/switch), `--profile`/`--admin-conn`/`--loader-conn`/**`--transformer-conn`** selectors, chmods + runs 00–10 | 2026-06-04 | changing phase routing |
-| `_lib.sh` | ~ | Shared helpers (TOML parse/rewrite incl. top-level keys, JWT verify, conn-aware resolvers, key-path derivation, `list_connections`/`set_default_connection`, `prune_backups`) | 2026-06-01 | need exact awk/TOML logic |
-| `init_profile.sh` | ~120 | Local-only: seed `[connections.<admin>]` non-destructively (prompts/env) + set `default_connection_name`; runs inside `prereq` between 02 and 03 | 2026-06-01 | changing config.toml seeding |
+| `setup.sh` | ~ | Entry point; `--phase` dispatcher (prereq/init-profile/admin/loader/**transformer**/promote/all/list/switch), `--profile`/`--admin-conn`/`--loader-conn`/**`--transformer-conn`** selectors, chmods + runs 00–10 | 2026-06-06 | changing phase routing |
+| `_lib.sh` | ~ | Shared helpers (TOML parse/rewrite incl. top-level keys + **`remove_toml_section`**, JWT verify, **connections.toml-aware** resolvers, key-path derivation, `list_connections`/`set_default_connection`, `prune_backups`) | 2026-06-06 | need exact awk/TOML logic |
+| `init_profile.sh` | ~200 | Local-only: seed `[<admin>]` in **connections.toml** non-destructively (prompts/env) + set `default_connection_name` (config.toml); runs inside `prereq` between 02 and 03 | 2026-06-06 | changing connections.toml seeding |
 | `00_install_snowflake_cli.sh` | 29 | brew/pipx install, idempotent | prior | changing install path |
 | `01_init_snowflake_home.sh` | 25 | mkdir ~/.snowflake/{keys,logs}, chmod 700 | prior | changing perms/layout |
 | `02_generate_admin_keypair.sh` | 40 | PKCS#8 keypair, overwrite-guarded | prior | changing key type/encryption |
-| `03_lock_config_permissions.sh` | 34 | chmod 600 config.toml + key | prior | — |
-| `04_register_admin_public_key.sh` | 81 | ONLY password-auth call; registers RSA pubkey | prior | changing bootstrap auth |
-| `05_verify_admin_jwt.sh` | 54 | JWT verify vs current warehouse | prior | — |
-| `06_setup_loader_keypair.sh` | 107 | loader key-pair: lazy keygen → register pubkey via admin JWT → upsert `[connections.loader]` | 2026-05-31 | changing loader auth |
+| `03_lock_config_permissions.sh` | 41 | chmod 600 config.toml + connections.toml + key | 2026-06-06 | — |
+| `04_register_admin_public_key.sh` | 117 | ONLY password-auth call; registers RSA pubkey; preflights **connections.toml** | 2026-06-06 | changing bootstrap auth |
+| `05_verify_admin_jwt.sh` | 54 | JWT verify vs current warehouse (read from **connections.toml**) | 2026-06-06 | — |
+| `06_setup_loader_keypair.sh` | 107 | loader key-pair: lazy keygen → register pubkey via admin JWT → upsert `[loader]` in connections.toml (`private_key_path`) | 2026-06-06 | changing loader auth |
 | `07_test_loader_connection.sh` | 24 | `snow connection test -c loader` (key-pair; no `.env`) | 2026-05-31 | — |
-| `08_promote_admin_warehouse.sh` | 152 | promote admin warehouse → ARTWORK_WH, rewrite config | prior | changing promotion logic |
-| `09_setup_transformer_keypair.sh` *(NEW, 2026-06-04)* | ~120 | transformer key-pair (mirrors 06): lazy keygen → register pubkey via admin JWT → upsert `[connections.<conn>_transformer]` | 2026-06-04 | changing transformer auth |
+| `08_promote_admin_warehouse.sh` | 156 | promote admin warehouse → ARTWORK_WH, rewrite connections.toml | 2026-06-06 | changing promotion logic |
+| `09_setup_transformer_keypair.sh` *(NEW, 2026-06-04)* | ~120 | transformer key-pair (mirrors 06): lazy keygen → register pubkey via admin JWT → upsert `[<conn>_transformer]` in connections.toml (`private_key_path`) | 2026-06-06 | changing transformer auth |
 | `10_test_transformer_connection.sh` *(NEW, 2026-06-04)* | 26 | `snow connection test -c <conn>_transformer` (key-pair; no `.env`) | 2026-06-04 | — |
 
 ## git-setup/ (reviewed 2026-05-30 — see `ddl-infrastructure.md` "Git bind chain")

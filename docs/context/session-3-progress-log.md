@@ -2937,3 +2937,57 @@ exercise first). Wait for my go + date.
 ```
 
 - **End of this window (2026-06-05 Part 3d; CANONICAL -- supersedes Part 3c above. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: Unit 2 (dbt test) COMPLETE -- journal finalized with the real object_date FAIL 109 -> warn -> store_failures -> IaC audit schema arc + 3 decision forks (warn+store; IaC-owned DBT_TEST__AUDIT; keep-both source/model redundancy). Step 7 skipped. Unit 3 kicked off: stg_met__enrichment_status.sql authored as a VIEW over BRONZE.MET_ENRICHMENT_CONTROL (2327 rows), source declared in _met__sources.yml, Unit 3 journal created. APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO -- all workspace-only this turn. NEXT: owner syncs delta, then dbt run + dbt test on Mac to materialize STG_MET__ENRICHMENT_STATUS in SILVER.)**
+
+### 2026-06-06 (config.toml -> connections.toml migration + DUAL-INSTANCE INCIDENT)
+
+```
+Task: migrate Snowflake connection DEFINITIONS from config.toml to connections.toml
+so the VS Code extension + Python connector authenticate, keeping snow CLI + dbt working.
+Decisions (owner-confirmed, go date 2026-06-06):
+  D1 = remove [connections.*] from config.toml AFTER a verified cutover (Phase 6, GATED).
+  D2 = config.toml STAYS for default_connection_name + [cli.*] + future config.
+  D3 = key field written as private_key_path in connections.toml (fallback private_key_file
+       if Mac #2 snow --version too old -- owner to confirm version).
+
+Persistent plan/checklist: docs/context/connections-toml-migration-checklist.md (live;
+resume protocol + per-phase boxes + rollback). Built so a fresh window or a mid-run
+connection break can resume from the first unchecked [ ].
+
+Applied this window (workspace-only):
+  _lib.sh        : + SNOW_LIB_CONNECTIONS_TOML const; list_connections reads connections.toml
+                   (bare [name]); set_default_connection existence-checks connections.toml but
+                   keeps default_connection_name in config.toml; resolve_admin_account/user/
+                   warehouse read connections.toml; + remove_toml_section helper (for Phase 6).
+  init_profile.sh: shadow guard INVERTED -> connections.toml is now the PRIMARY seed target
+                   (bare [<admin>], private_key_path); default_connection_name stays config.toml.
+  03/04/05       : 03 chmod 600s connections.toml too; 04 preflight + 05 warehouse echo read
+                   connections.toml.
+  06/09/08       : seed loader/transformer + promote warehouse into connections.toml.
+  setup.sh       : comment/usage/echo wording (no logic change).
+  docs           : cli-connection.md, file-map.md, AGENTS.md status row updated.
+All scripts bash -n clean. Phase 6 cutover (strip config.toml [connections.*]) NOT run --
+GATED behind owner running `snow connection test -c mk07348{,_loader,_transformer}` on Mac #2.
+
+DUAL-INSTANCE INCIDENT: a SECOND Cortex instance ran the SAME plan concurrently ~16:30-16:32
+UTC and authored Phase 3 (06, 09) + Phase 4 (08) and rewrote parts of the checklist. Detected
+via my checklist edit failing ("string not found") + 06/09/08 mtimes I never set. SQL solo-check
+stayed 1 the whole time (file edits don't hit QUERY_HISTORY -- the SQL fork signal is BLIND to
+filesystem races; treat mtimes as the real signal). Owner chose "kill the other, I continue";
+CORTEX_FORK_INCIDENTS write DECLINED (applied-to-account stays NO). Other instance's 06/09/08
+reviewed = design-consistent + bash -n clean, KEPT. It MISSED 04's preflight (config.toml ->
+connections.toml) -- I fixed that. Lesson: the SQL solo-check is necessary but NOT sufficient
+for filesystem forks; mtime divergence on files-I-didn't-touch is the canary.
+
+APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO -- all workspace-only.
+
+Task 2 (README refresh, Phase 10) COMPLETE: scripts/snowflake_cli/README.md (191->78)
++ git-setup/README.md (113->73) condensed. Only the GATED Phase 6 cutover remains.
+
+FIRST RESPONSE next window: quote the latest `End of this window` header back, confirm solo=1
+AND mtime-quiescence on scripts/snowflake_cli/*, then -- after the owner runs the Mac #2
+`snow connection test` gate -- do the GATED Phase 6 config.toml cutover (remove the dead
+[connections.*] blocks via remove_toml_section, .bak first). Also confirm snow --version
+for D3. Wait for go + date.
+```
+
+- **End of this window (2026-06-06; CANONICAL -- supersedes the 2026-06-05 Part 3d marker. Account OBANOYY-MK07348, branch donkey-kong-sandbox. This turn: config.toml -> connections.toml migration Phases 1-10 APPLIED (workspace-only): _lib.sh (CONNECTIONS_TOML const, conn-aware resolvers read connections.toml, list_connections/set_default_connection split, NEW remove_toml_section), init_profile.sh (shadow guard inverted to primary seed path, private_key_path), 03/04/05 (connections.toml perms+preflight+echo), 06/09/08 (loader/transformer/promote -> connections.toml; authored by a CONCURRENT FORK, reviewed+kept), setup.sh wording, docs (cli-connection/file-map/AGENTS) + Task 2 READMEs condensed (scripts/snowflake_cli/README.md 191->78, git-setup/README.md 113->73) + cosmetic comment cleanup (02/07/10/cli-connection). All bash -n clean. config.toml retained for default_connection_name + [cli.*]. Phase 6 GATED cutover (remove config.toml [connections.*]) NOT run -- awaits owner `snow connection test` on Mac #2. DUAL-INSTANCE INCIDENT logged: 2nd instance raced the same plan ~16:30-16:43 (it authored 06/09/08 + Phases 8-10 docs/READMEs, reviewed+kept); owner killed it (took two attempts); SQL solo-check was blind (file edits, not queries) -- mtimes were the real signal. CORTEX_FORK_INCIDENTS write declined. APPLIED-TO-ACCOUNT: NO. PUSHED-TO-MAC: NO. NEXT: owner runs the Mac #2 `snow connection test` gate, then the GATED Phase 6 config.toml cutover; owner confirms snow --version for D3 (else swap private_key_path->private_key_file at the seed sites).)**

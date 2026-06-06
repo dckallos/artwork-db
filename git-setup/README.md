@@ -1,112 +1,72 @@
 # Git setup scripts
 
-These SQL files are the *only* scripts in this repo that depend on something
-outside of Snowflake's view of the repo (you, with ACCOUNTADMIN credentials
-and a local clone). They are applied with the Snowflake CLI (`snow sql`)
-via the same `scripts/apply_sql.sh` wrapper as everything else, just driven
-by `make bootstrap` (or `make iac`) instead of `make infra`.
+ACCOUNTADMIN-only, one-time setup of the **optional** in-Snowflake Git mirror
+(a `GIT REPOSITORY` object for `EXECUTE IMMEDIATE FROM '@...'`). These are the
+only scripts that depend on something outside Snowflake's view of the repo (you,
+with ACCOUNTADMIN creds + a local clone). Applied via `snow sql` through the same
+`scripts/apply_sql.sh` wrapper as everything else, driven by `make bootstrap`.
 
-## Why aren't these V### migration scripts?
+> **Naming note (flag, not yet fixed):** this doc still uses `B###__`/`V###__`/
+> `R###__` prefixes, but the on-disk files are unprefixed (`create_*.sql` /
+> `drop_*.sql`). Reconciling the prefixes is the separately-gated V/R/B reword —
+> out of scope here.
 
-The pipeline's normal migrations live in `infrastructure/` and are named
-`V001__create_*.sql`, `V002__create_*.sql`, etc. These `B###` scripts are kept
-separate because they are a one-time, ACCOUNTADMIN-only setup of the *optional*
-in-Snowflake execution convenience: the `GIT REPOSITORY` object that lets you
-run migrations from inside Snowflake via `EXECUTE IMMEDIATE FROM '@...'`.
+## Zero → working
 
-Source version control (GitHub) already tracks every file independently of
-Snowflake, so the `GIT REPOSITORY` object is NOT a change-tracking mechanism --
-it is a convenience only, and the pipeline applies everything from the laptop
-via `snow sql --filename` today. Per the 2026-05-29 design decision ("IaC Phase
-Ordering + Role Model: Git mirror runs last") this Git-mirror layer is applied
-LAST, AFTER core infrastructure (V then R). That ordering also resolves a
-dependency: `B003__create_git_repository.sql` ends with
-`GRANT READ ON GIT REPOSITORY artwork_db TO ROLE ARTWORK_ADMIN;`, and
-`ARTWORK_ADMIN` is created by `infrastructure/V001__create_roles.sql`, so infra
-must run first.
+```bash
+cp git-setup/.env.example git-setup/.env     # then set GITHUB_PAT=<fine-grained PAT>
+set -a; source git-setup/.env; set +a
+make iac                                      # runs infra (V→R) THEN git-setup (B)
+```
+
+Prereq: run `make infra` (or the all-in-one `make iac`) **first** — the Git phase
+runs LAST and grants READ on the repo to `ARTWORK_ADMIN`, which `create_roles.sql`
+creates. Setup is single-pass: all three forward scripts succeed in one run.
+
+## Forward scripts (run in numeric order, LAST in `make iac`)
+
+| Order | Script | Creates |
+|---|---|---|
+| 1 | `create_git_ops_db.sql` | `ARTWORK_OPS.GIT` DB/schema + `github_pat_artwork_db` SECRET (PAT via `<% github_pat %>`) |
+| 2 | `create_api_integration.sql` | API integration; whitelists the secret (`ALLOWED_AUTHENTICATION_SECRETS`) |
+| 3 | `create_git_repository.sql` | `GIT REPOSITORY artwork_db` (binds creds), FETCH, `GRANT READ … TO ROLE ARTWORK_ADMIN` |
+
+After these succeed, apply migrations either from your laptop (`make infra`,
+current default) or from inside Snowflake:
+`EXECUTE IMMEDIATE FROM '@ARTWORK_OPS.GIT.artwork_db/branches/main/infrastructure/V###__*.sql'`.
 
 ## Naming convention
 
-| Prefix             | Meaning                                                         |
-|--------------------|-----------------------------------------------------------------|
-| `B###__create_*`   | Git-setup forward. Manual, one-time, ACCOUNTADMIN-only. OPTIONAL trailing Git-mirror layer -- runs LAST, AFTER V/R (not first). |
-| `B###__drop_*`     | Git-setup rollback. Idempotent; safe pre-create. Dropped FIRST in teardown (before V###). |
-| `V###__create_*`   | Versioned forward migration; run by `make infra` or `make iac`. |
-| `V###__drop_*`     | Versioned rollback; run by `make rollback` or `make down`.      |
-| `R###__*`          | Repeatable. Safe to re-run anytime. No paired drop.             |
+| Prefix | Meaning |
+|---|---|
+| `B###__create_*` | Git-setup forward. Manual, one-time, ACCOUNTADMIN-only. OPTIONAL Git-mirror layer — runs LAST, after V/R. |
+| `B###__drop_*` | Git-setup rollback. Idempotent; dropped FIRST in teardown (before V###). |
+| `V###__create_*` / `V###__drop_*` | Versioned forward / rollback migration (`make infra` / `make rollback`). |
+| `R###__*` | Repeatable; safe to re-run anytime; no paired drop. |
 
-## Execution order
+Why not V### migrations? GitHub already version-controls every file, so the
+`GIT REPOSITORY` object is a convenience, not a change-tracking mechanism — hence
+it is applied LAST and kept separate from `infrastructure/`.
 
-Within this directory the three forward scripts always run in numeric order:
+<details>
+<summary>Private-repo PAT handling &amp; secret-echo safety</summary>
 
-1. `B001__create_git_ops_db.sql`
-2. `B002__create_api_integration.sql`
-3. `B003__create_git_repository.sql`
+`dckallos/artwork-db` is **private**, so the SECRET path is the default. The bind
+chain is split across the three forward scripts: the SECRET (`create_git_ops_db`)
+→ whitelist (`create_api_integration`, `ALLOWED_AUTHENTICATION_SECRETS`) → bind
+(`create_git_repository`, `GIT_CREDENTIALS`).
 
-But the git-setup (`B`) phase as a whole runs LAST in `make iac`, AFTER
-infrastructure (`V` then `R`). `python scripts/bootstrap.py --phase all`
-applies infra first, then git-setup, so the role hierarchy exists before
-`B003` grants READ on the GIT REPOSITORY to `ARTWORK_ADMIN`.
+- **No PAT in git.** The fine-grained token (Contents: Read) lives only in
+  gitignored `git-setup/.env`, injected at apply time via `-D "github_pat=…"`.
+  Only `git-setup/.env.example` (blank `GITHUB_PAT=`) is committed.
+- **Rotate:** edit `git-setup/.env`, re-run `make iac` (no `ALTER SECRET` step).
+- **Echo suppression:** the rendered `CREATE OR REPLACE SECRET` would print the
+  PAT to stdout, so `scripts/bootstrap.py` flags secret-bearing scripts and
+  `scripts/apply_sql.sh` discards their stdout (`SNOW_SUPPRESS_STDOUT=1`) while
+  keeping stderr. **If a PAT was ever printed, treat it as compromised:** revoke
+  + reissue on GitHub, update `git-setup/.env`, re-run `make iac`.
+- For a public repo you could drop the SECRET wiring; the default assumes private.
 
-### Prerequisite for standalone `make bootstrap`
-
-`make bootstrap` (== `--phase bootstrap`) applies ONLY the `B` scripts and
-presumes the role hierarchy already exists. `B003` grants READ on the GIT
-REPOSITORY to `ARTWORK_ADMIN`, which is created by
-`infrastructure/V001__create_roles.sql`. On a fresh account, run `make infra`
-(or the all-in-one `make iac`) BEFORE `make bootstrap`, or `B003` fails with
-`Role 'ARTWORK_ADMIN' does not exist or not authorized`. The standalone target
-intentionally does NOT trigger infra so it stays a narrow, composable step;
-`make iac` is the canonical fresh-account path.
-
-After all three succeed, you can either:
-
-- Continue applying migrations from your laptop via `make infra` (current
-  default), or
-- Apply them from inside Snowflake by `EXECUTE IMMEDIATE FROM
-  '@ARTWORK_OPS.GIT.artwork_db/branches/main/infrastructure/V###__*.sql'`.
-
-## Private repo?
-
-`dckallos/artwork-db` is a **private** GitHub repo, so the SECRET path is the
-default rather than an opt-in. The bind chain is split across the three
-forward scripts:
-
-1. `B001__create_git_ops_db.sql` creates `ARTWORK_OPS.GIT` and the
-   `github_pat_artwork_db` SECRET. Its `PASSWORD` is the snow sql templating
-   placeholder `<% github_pat %>`, substituted at apply time (see below).
-2. `B002__create_api_integration.sql` whitelists that secret via
-   `ALLOWED_AUTHENTICATION_SECRETS = (ARTWORK_OPS.GIT.github_pat_artwork_db)`.
-3. `B003__create_git_repository.sql` binds it via
-   `GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db`.
-
-No PAT is ever committed. The real fine-grained token (Contents: Read on
-`dckallos/artwork-db`) lives only in a gitignored env file and is injected at
-apply time via snow sql templating (`-D "github_pat=${GITHUB_PAT}"`). Setup is
-single-pass: B001, B002, and B003 all succeed in one `make iac` run.
-
-    cp git-setup/.env.example git-setup/.env
-    # edit git-setup/.env and set GITHUB_PAT=<your fine-grained PAT>
-    set -a; source git-setup/.env; set +a
-    make iac
-
-`git-setup/.env` is covered by the `.env` entry in `.gitignore`; only
-`git-setup/.env.example` (committed with a blank `GITHUB_PAT=`) lives in git.
-To rotate the PAT, update `git-setup/.env` and re-run `make iac` -- there is no
-`ALTER SECRET` step. For a public repo you could drop the SECRET wiring, but the
-default chain assumes private.
-
-### Secret echo suppression (PAT safety)
-
-`B001__create_git_ops_db.sql` renders the PAT into a `CREATE OR REPLACE SECRET`
-statement at apply time. The Snowflake CLI echoes each rendered statement to
-stdout, so an unguarded apply prints the PAT in cleartext (this happened on a
-prior failed run, leaking the token to the terminal and chat scrollback). To
-prevent recurrence, `scripts/bootstrap.py` flags any secret-bearing script and
-`scripts/apply_sql.sh` discards its stdout (`SNOW_SUPPRESS_STDOUT=1`) while
-preserving stderr for genuine errors. If a PAT was ever printed, treat it as
-compromised: revoke and reissue the fine-grained token on GitHub (Contents:
-Read on `dckallos/artwork-db`), update `git-setup/.env`, then re-run `make iac`.
-
-snow sql templating reference:
-[https://docs.snowflake.com/en/developer-guide/snowflake-cli/command-reference/sql-commands/sql](https://docs.snowflake.com/en/developer-guide/snowflake-cli/command-reference/sql-commands/sql)
+snow sql templating:
+<https://docs.snowflake.com/en/developer-guide/snowflake-cli/command-reference/sql-commands/sql>
+</details>
