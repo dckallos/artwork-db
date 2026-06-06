@@ -10,5 +10,5 @@ python-dotenv>=1.0.0
 
 # --- dbt Diagnostics Tool (lineage-aware error tracer) ---
 sqlglot>=26.0
-dbt-artifacts-parser>=1.0
+dbt-artifacts-parser>=0.13.0
 pyyaml>=6.0
