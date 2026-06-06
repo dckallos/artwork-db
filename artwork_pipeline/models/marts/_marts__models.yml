@@ -1,0 +1,350 @@
+# =============================================================================
+# _marts__models.yml -- Gold layer model contracts (enforced)
+# =============================================================================
+# These contracts define the PUBLIC API of the artwork medallion architecture.
+# Every downstream consumer (Cortex Analyst, dashboards, semantic views, apps)
+# depends on these column names and types being stable.
+#
+# contract: enforced: true means dbt will REFUSE to build the model if the SQL
+# output doesn't match this spec (column names, data types, column order).
+# This is compile-time enforcement -- not just a runtime test.
+#
+# WHY contract-first:
+#   Writing the YAML before the SQL forces you to design the interface THEN
+#   implement it. This prevents the common failure mode where mart schemas
+#   drift as SQL is tweaked, breaking downstream consumers silently.
+# =============================================================================
+
+version: 2
+
+models:
+
+  # =========================================================================
+  # dim_artists -- Artist dimension
+  # =========================================================================
+  # Grain: one row per artist entity (source-system-aware for multi-source future).
+  # PK: artist_id (surrogate, MD5 hash).
+  # Source: stg_met__artists (today); will UNION stg_cma__artists etc. later.
+  # =========================================================================
+  - name: dim_artists
+    description: >
+      Conformed artist dimension. One row per distinct artist entity across all
+      source museums. Keyed on a deterministic surrogate (hash of alpha_sort +
+      authority_url + source_system). Multi-source ready via source_system column.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: artist_id
+        data_type: varchar(32)
+        description: "Surrogate PK (MD5 hash of artist_alpha_sort + artist_ulan_url + source_system)"
+        constraints:
+          - type: not_null
+          - type: unique
+      - name: artist_display_name
+        data_type: varchar(16777216)
+        description: "Artist display name (e.g. 'Edgar Degas')"
+        constraints:
+          - type: not_null
+      - name: artist_alpha_sort
+        data_type: varchar(16777216)
+        description: "Sort-friendly name (e.g. 'Degas, Edgar')"
+        constraints:
+          - type: not_null
+      - name: artist_display_bio
+        data_type: varchar(16777216)
+        description: "Biographical summary (nationality + dates)"
+      - name: artist_nationality
+        data_type: varchar(16777216)
+        description: "Artist nationality as recorded by the source museum"
+      - name: artist_begin_date
+        data_type: varchar(16777216)
+        description: "Birth/active-start year (string, approximate dates possible)"
+      - name: artist_end_date
+        data_type: varchar(16777216)
+        description: "Death/active-end year (string, approximate dates possible)"
+      - name: artist_gender
+        data_type: varchar(16777216)
+        description: "Artist gender (NULL for anonymous/unknown)"
+      - name: artist_ulan_url
+        data_type: varchar(16777216)
+        description: "Getty ULAN authority URL (primary entity resolution key)"
+      - name: artist_wikidata_url
+        data_type: varchar(16777216)
+        description: "Wikidata entity URL"
+      - name: source_system
+        data_type: varchar(16777216)
+        description: "Originating museum system (e.g. 'met_museum', 'cma', 'aic')"
+        constraints:
+          - type: not_null
+      - name: _loaded_at
+        data_type: timestamp_ntz(9)
+        description: "Timestamp when this row was last loaded/refreshed by dbt"
+        constraints:
+          - type: not_null
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 50
+          max_value: 1000000
+
+  # =========================================================================
+  # dim_artworks -- Artwork dimension
+  # =========================================================================
+  # Grain: one row per artwork (source-system-aware).
+  # PK: artwork_id (surrogate, MD5 hash of source_system + source_object_id).
+  # Source: stg_met__artworks (today).
+  # =========================================================================
+  - name: dim_artworks
+    description: >
+      Conformed artwork dimension. One row per physical artwork across all source
+      museums. Contains descriptive attributes (title, date, medium, classification)
+      but NOT images (those live in fct_artwork_images). FK to dim_artists.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: artwork_id
+        data_type: varchar(32)
+        description: "Surrogate PK (MD5 hash of source_system + source_object_id)"
+        constraints:
+          - type: not_null
+          - type: unique
+      - name: source_object_id
+        data_type: number(38,0)
+        description: "Natural key from the source museum (Met objectID, CMA id, etc.)"
+        constraints:
+          - type: not_null
+      - name: artist_id
+        data_type: varchar(32)
+        description: "FK to dim_artists (primary artist for this artwork)"
+      - name: title
+        data_type: varchar(16777216)
+        description: "Artwork title"
+        constraints:
+          - type: not_null
+      - name: object_date
+        data_type: varchar(16777216)
+        description: "Display date string (e.g. '1st century A.D.', 'ca. 1665')"
+      - name: object_begin_date
+        data_type: number(38,0)
+        description: "Earliest year for this artwork (integer, for range queries)"
+      - name: object_end_date
+        data_type: number(38,0)
+        description: "Latest year for this artwork (integer, for range queries)"
+      - name: medium
+        data_type: varchar(16777216)
+        description: "Materials/technique (e.g. 'Oil on canvas')"
+      - name: dimensions
+        data_type: varchar(16777216)
+        description: "Physical dimensions string"
+      - name: classification
+        data_type: varchar(16777216)
+        description: "Object classification (e.g. 'Paintings', 'Sculpture')"
+      - name: department
+        data_type: varchar(16777216)
+        description: "Curatorial department at the source museum"
+      - name: culture
+        data_type: varchar(16777216)
+        description: "Cultural origin of the artwork"
+      - name: period
+        data_type: varchar(16777216)
+        description: "Historical period"
+      - name: dynasty
+        data_type: varchar(16777216)
+        description: "Dynasty (if applicable)"
+      - name: country
+        data_type: varchar(16777216)
+        description: "Country of origin"
+      - name: credit_line
+        data_type: varchar(16777216)
+        description: "Credit/provenance line"
+      - name: accession_number
+        data_type: varchar(16777216)
+        description: "Museum accession number"
+      - name: accession_year
+        data_type: varchar(16777216)
+        description: "Year of accession"
+      - name: is_public_domain
+        data_type: boolean
+        description: "Whether the artwork is in the public domain (CC0 eligible)"
+      - name: is_highlight
+        data_type: boolean
+        description: "Whether the museum considers this a highlight/masterpiece"
+      - name: link_resource
+        data_type: varchar(16777216)
+        description: "URL to the artwork page on the museum website"
+      - name: object_wikidata_url
+        data_type: varchar(16777216)
+        description: "Wikidata entity URL for this specific artwork"
+      - name: source_system
+        data_type: varchar(16777216)
+        description: "Originating museum system"
+        constraints:
+          - type: not_null
+      - name: _loaded_at
+        data_type: timestamp_ntz(9)
+        description: "Timestamp when this row was last loaded/refreshed by dbt"
+        constraints:
+          - type: not_null
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 1000000
+
+  # =========================================================================
+  # fct_artwork_images -- Image fact table
+  # =========================================================================
+  # Grain: one row per image per artwork.
+  # PK: image_id (surrogate, MD5 hash of artwork_id + image_type + ordinal_position).
+  # Source: stg_met__images.
+  # =========================================================================
+  - name: fct_artwork_images
+    description: >
+      Fact table of artwork images. One row per image (primary + additional) per
+      artwork. FK to dim_artworks. Contains URLs, type classification, and
+      ordering metadata. This is a factless fact (no measures) -- it records
+      the relationship between artworks and their available images.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: image_id
+        data_type: varchar(32)
+        description: "Surrogate PK (MD5 hash of artwork_id + image_type + ordinal_position)"
+        constraints:
+          - type: not_null
+          - type: unique
+      - name: artwork_id
+        data_type: varchar(32)
+        description: "FK to dim_artworks"
+        constraints:
+          - type: not_null
+      - name: image_url
+        data_type: varchar(16777216)
+        description: "Full-resolution image URL"
+        constraints:
+          - type: not_null
+      - name: image_url_small
+        data_type: varchar(16777216)
+        description: "Web-sized image URL (NULL for additional images)"
+      - name: image_type
+        data_type: varchar(16777216)
+        description: "Image category: 'primary' or 'additional'"
+        constraints:
+          - type: not_null
+      - name: ordinal_position
+        data_type: number(38,0)
+        description: "Display order (1 = primary, 2+ = additional)"
+        constraints:
+          - type: not_null
+      - name: source_system
+        data_type: varchar(16777216)
+        description: "Originating museum system"
+        constraints:
+          - type: not_null
+      - name: _loaded_at
+        data_type: timestamp_ntz(9)
+        description: "Timestamp when this row was last loaded/refreshed by dbt"
+        constraints:
+          - type: not_null
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 10000000
+
+  # =========================================================================
+  # openaccess_catalog -- Wide OBT for public-domain artworks with images
+  # =========================================================================
+  # Grain: one row per artwork that is both public-domain AND has a primary image.
+  # This is the "one-stop query" table for BI, Cortex Analyst, and apps.
+  # Pre-joined: artwork + primary artist + primary image URL.
+  # NOT a dimension or fact -- it's a denormalized One Big Table (OBT).
+  # =========================================================================
+  - name: openaccess_catalog
+    description: >
+      Denormalized catalog of public-domain artworks with images. Pre-joins
+      artwork attributes, primary artist, and primary image URL into a single
+      wide table optimized for consumption (BI dashboards, Cortex Analyst,
+      semantic views, app queries). Filtered to: is_public_domain = TRUE AND
+      primary image exists.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: artwork_id
+        data_type: varchar(32)
+        description: "Surrogate PK from dim_artworks"
+        constraints:
+          - type: not_null
+          - type: unique
+      - name: source_object_id
+        data_type: number(38,0)
+        description: "Natural key from the source museum"
+        constraints:
+          - type: not_null
+      - name: title
+        data_type: varchar(16777216)
+        description: "Artwork title"
+        constraints:
+          - type: not_null
+      - name: artist_display_name
+        data_type: varchar(16777216)
+        description: "Primary artist display name"
+      - name: artist_nationality
+        data_type: varchar(16777216)
+        description: "Primary artist nationality"
+      - name: object_date
+        data_type: varchar(16777216)
+        description: "Display date string"
+      - name: object_begin_date
+        data_type: number(38,0)
+        description: "Earliest year (for range filtering)"
+      - name: object_end_date
+        data_type: number(38,0)
+        description: "Latest year (for range filtering)"
+      - name: medium
+        data_type: varchar(16777216)
+        description: "Materials/technique"
+      - name: classification
+        data_type: varchar(16777216)
+        description: "Object classification"
+      - name: department
+        data_type: varchar(16777216)
+        description: "Curatorial department"
+      - name: culture
+        data_type: varchar(16777216)
+        description: "Cultural origin"
+      - name: country
+        data_type: varchar(16777216)
+        description: "Country of origin"
+      - name: primary_image_url
+        data_type: varchar(16777216)
+        description: "Full-resolution primary image URL"
+        constraints:
+          - type: not_null
+      - name: primary_image_small_url
+        data_type: varchar(16777216)
+        description: "Web-sized primary image URL"
+      - name: additional_image_count
+        data_type: number(38,0)
+        description: "Number of additional images available for this artwork"
+        constraints:
+          - type: not_null
+      - name: link_resource
+        data_type: varchar(16777216)
+        description: "URL to the artwork page on the museum website"
+      - name: source_system
+        data_type: varchar(16777216)
+        description: "Originating museum system"
+        constraints:
+          - type: not_null
+      - name: _loaded_at
+        data_type: timestamp_ntz(9)
+        description: "Timestamp when this row was last loaded/refreshed by dbt"
+        constraints:
+          - type: not_null
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # Must be <= dim_artworks (filtered subset).
+          min_value: 50
+          max_value: 1000000

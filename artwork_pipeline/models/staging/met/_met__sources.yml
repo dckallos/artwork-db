@@ -11,6 +11,11 @@ sources:
     description: "Met Museum OpenAccess data loaded by the extraction pipeline"
     database: ARTWORK_DB
     schema: BRONZE
+    freshness:
+      warn_after: {count: 7, period: day}
+      # No error_after until extraction is scheduled (manual today).
+      # This documents the expectation: Bronze should refresh at least weekly.
+    loaded_at_field: _EXTRACTED_AT
     tables:
       - name: raw_met_objects
         description: >
@@ -40,6 +45,7 @@ sources:
           discovery status, image-gate result, CDN liveness, the fetch lease, and
           last error. Source for stg_met__enrichment_status (Unit 3).
         identifier: MET_ENRICHMENT_CONTROL
+        freshness: null  # No reliable loaded_at column (LAST_ENRICHED_AT is NULL for pending rows)
         columns:
           - name: OBJECT_ID
             description: "Met objectID; join key to RAW_MET_OBJECTS / MET_CSV_SNAPSHOT"

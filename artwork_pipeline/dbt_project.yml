@@ -36,3 +36,37 @@ models:
       +materialized: table
       +schema: GOLD
       +tags: ["marts"]
+
+  # dbt_project_evaluator: materialized as views to avoid creating permanent tables.
+  # Run with: dbt build --select package:dbt_project_evaluator
+  dbt_project_evaluator:
+    +materialized: view
+    +schema: DBT_TEST__AUDIT
+
+# --- dbt_project_evaluator configuration ---
+# Defines naming conventions and thresholds for DAG hygiene checks.
+# Docs: https://dbt-labs.github.io/dbt-project-evaluator/
+vars:
+  dbt_project_evaluator:
+    # Naming prefixes expected per model type (our convention: stg_, dim_, fct_)
+    model_types:
+      - name: staging
+        config:
+          materialized: view
+        folder: staging
+        include_all_dag_nodes: false
+        node_types:
+          - model
+      - name: mart
+        config:
+          materialized: table
+        folder: marts
+        include_all_dag_nodes: false
+        node_types:
+          - model
+
+    # Models with fanout above this threshold are flagged
+    models_fanout_threshold: 5
+
+    # Documentation coverage: warn if below this % of models have descriptions
+    documentation_coverage_target: 100
