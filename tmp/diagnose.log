@@ -1,0 +1,154 @@
+~/dev/artwork-db/artwork_pipeline on donkey-kong-sandbox [$] via .venv
+% dbt-diagnostics diagnose
+
+======================================================================
+  dbt Diagnostics
+  64 result(s) | 4 error(s) | 0 skipped
+======================================================================
+
+  ERROR: test.artwork_pipeline.dbt_expectations_expect_table_row_count_to_be_between_dim_artists_1000000__50.818205a8b7
+  Class: runtime_error
+  ======================================================================
+
+  ROOT CAUSE:
+    File:       dbt_expectations_expect_table__98b6db461d321538c82cbd0334d55893.sql
+    Line:       16
+    Problem:    Object not found: ARTWORK_DB.GOLD.DIM_ARTISTS
+
+
+  COMPILED SQL (line 16):
+  | 15:
+  | 16: >>>     from ARTWORK_DB.GOLD.dim_artists
+  | 17:
+
+
+  LINEAGE TRACE: ARTWORK_DB.GOLD.DIM_ARTISTS
+  ........................................................
+
+✅ 818205a8b7 (failing model)
+     File: models/marts/_marts__models.yml
+     Manifest: None
+     Run: error
+
+❌ dim_artists
+     ARTWORK_DB.GOLD.dim_artists
+     File: models/marts/dim_artists.sql
+     Manifest: relation_name matches 'ARTWORK_DB.GOLD.DIM_ARTISTS'
+     Live: table does NOT exist in Snowflake
+
+  ........................................................
+  VERDICT: 'dim_artists' does not exist in Snowflake. '818205a8b7' references it but it was never materialized.
+
+  FIX:
+    Fix the error in model.artwork_pipeline.dim_artists, then re-run.
+
+
+  ERROR: test.artwork_pipeline.dbt_expectations_expect_table_row_count_to_be_between_dim_artworks_1000000__100.bd83d5f1a9
+  Class: runtime_error
+  ======================================================================
+
+  ROOT CAUSE:
+    File:       dbt_expectations_expect_table__2437f534c7ad571820982f5422ad57e9.sql
+    Line:       16
+    Problem:    Object not found: ARTWORK_DB.GOLD.DIM_ARTWORKS
+
+
+  COMPILED SQL (line 16):
+  | 15:
+  | 16: >>>     from ARTWORK_DB.GOLD.dim_artworks
+  | 17:
+
+
+  LINEAGE TRACE: ARTWORK_DB.GOLD.DIM_ARTWORKS
+  ........................................................
+
+✅ bd83d5f1a9 (failing model)
+     File: models/marts/_marts__models.yml
+     Manifest: None
+     Run: error
+
+❌ dim_artworks
+     ARTWORK_DB.GOLD.dim_artworks
+     File: models/marts/dim_artworks.sql
+     Manifest: relation_name matches 'ARTWORK_DB.GOLD.DIM_ARTWORKS'
+     Live: table does NOT exist in Snowflake
+
+  ........................................................
+  VERDICT: 'dim_artworks' does not exist in Snowflake. 'bd83d5f1a9' references it but it was never materialized.
+
+  FIX:
+    Fix the error in model.artwork_pipeline.dim_artworks, then re-run.
+
+
+  ERROR: test.artwork_pipeline.dbt_expectations_expect_table_row_count_to_be_between_fct_artwork_images_10000000__100.bdc9d25253
+  Class: runtime_error
+  ======================================================================
+
+  ROOT CAUSE:
+    File:       dbt_expectations_expect_table__03f838c8f656ffc60d8e2b720fcb0c69.sql
+    Line:       16
+    Problem:    Object not found: ARTWORK_DB.GOLD.FCT_ARTWORK_IMAGES
+
+
+  COMPILED SQL (line 16):
+  | 15:
+  | 16: >>>     from ARTWORK_DB.GOLD.fct_artwork_images
+  | 17:
+
+
+  LINEAGE TRACE: ARTWORK_DB.GOLD.FCT_ARTWORK_IMAGES
+  ........................................................
+
+✅ bdc9d25253 (failing model)
+     File: models/marts/_marts__models.yml
+     Manifest: None
+     Run: error
+
+❌ fct_artwork_images
+     ARTWORK_DB.GOLD.fct_artwork_images
+     File: models/marts/fct_artwork_images.sql
+     Manifest: relation_name matches 'ARTWORK_DB.GOLD.FCT_ARTWORK_IMAGES'
+     Live: table does NOT exist in Snowflake
+
+  ........................................................
+  VERDICT: 'fct_artwork_images' does not exist in Snowflake. 'bdc9d25253' references it but it was never materialized.
+
+  FIX:
+    Fix the error in model.artwork_pipeline.fct_artwork_images, then re-run.
+
+
+  ERROR: test.artwork_pipeline.dbt_expectations_expect_table_row_count_to_be_between_openaccess_catalog_1000000__50.c654a7250a
+  Class: runtime_error
+  ======================================================================
+
+  ROOT CAUSE:
+    File:       dbt_expectations_expect_table__227ccdf369dec00470e232bdf8ec4218.sql
+    Line:       16
+    Problem:    Object not found: ARTWORK_DB.GOLD.OPENACCESS_CATALOG
+
+
+  COMPILED SQL (line 16):
+  | 15:
+  | 16: >>>     from ARTWORK_DB.GOLD.openaccess_catalog
+  | 17:
+
+
+  LINEAGE TRACE: ARTWORK_DB.GOLD.OPENACCESS_CATALOG
+  ........................................................
+
+✅ c654a7250a (failing model)
+     File: models/marts/_marts__models.yml
+     Manifest: None
+     Run: error
+
+❌ openaccess_catalog
+     ARTWORK_DB.GOLD.openaccess_catalog
+     File: models/marts/openaccess_catalog.sql
+     Manifest: relation_name matches 'ARTWORK_DB.GOLD.OPENACCESS_CATALOG'
+     Live: table does NOT exist in Snowflake
+
+  ........................................................
+  VERDICT: 'openaccess_catalog' does not exist in Snowflake. 'c654a7250a' references it but it was never materialized.
+
+  FIX:
+    Fix the error in model.artwork_pipeline.openaccess_catalog, then re-run.
