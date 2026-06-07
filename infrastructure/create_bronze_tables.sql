@@ -24,13 +24,53 @@ COMMENT = 'Raw Met Museum API responses. One row per object.';
 
 -- Art Institute of Chicago
 CREATE TABLE IF NOT EXISTS RAW_AIC_ARTWORKS (
-    artwork_id      INT             COMMENT 'AIC API artwork id',
-    raw_payload     VARIANT         NOT NULL COMMENT 'Complete raw JSON response',
-    _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-    _source_system  VARCHAR         NOT NULL DEFAULT 'art_institute_chicago',
-    _batch_id       VARCHAR         NOT NULL
+    artwork_id        INT             NOT NULL
+        COMMENT 'AIC API artwork id; PK (one row per artwork)',
+    raw_payload       VARIANT         NOT NULL
+        COMMENT 'Complete raw JSON from the data dump or API response',
+    _extracted_at     TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+        COMMENT 'UTC timestamp the row was landed or last updated',
+    _source_system    VARCHAR         NOT NULL DEFAULT 'art_institute_chicago'
+        COMMENT 'Source system identifier',
+    _batch_id         VARCHAR         NOT NULL
+        COMMENT 'UUID identifying the extraction batch (snapshot or delta)',
+    _is_deleted       BOOLEAN         NOT NULL DEFAULT FALSE
+        COMMENT 'TRUE if artwork was detected as deaccessioned/withdrawn',
+    _deleted_at       TIMESTAMP_NTZ
+        COMMENT 'UTC timestamp when deaccession was detected (NULL if active)',
+    _deletion_reason  VARCHAR
+        COMMENT 'How deaccession was detected: snapshot_anti_join | api_404 | manual',
+    CONSTRAINT pk_raw_aic_artworks PRIMARY KEY (artwork_id)
 )
-COMMENT = 'Raw Art Institute of Chicago API responses. One row per artwork.';
+COMMENT = 'Raw AIC artworks (VARIANT). Both snapshot and delta paths MERGE here. Soft-delete columns track deaccessions for rights compliance.';
+
+CREATE TABLE IF NOT EXISTS RAW_AIC_AGENTS (
+    agent_id          INT             NOT NULL
+        COMMENT 'AIC API agent id; includes artists, donors, collectors',
+    raw_payload       VARIANT         NOT NULL
+        COMMENT 'Complete raw JSON from agents/ data dump',
+    _extracted_at     TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+        COMMENT 'UTC timestamp of extraction',
+    _source_system    VARCHAR         NOT NULL DEFAULT 'art_institute_chicago'
+        COMMENT 'Source system identifier',
+    _batch_id         VARCHAR         NOT NULL
+        COMMENT 'UUID identifying the extraction batch',
+    CONSTRAINT pk_raw_aic_agents PRIMARY KEY (agent_id)
+)
+COMMENT = 'Raw AIC agents (artists + non-artists). One row per agent_id (PK). Filter is_artist in Silver.';
+
+CREATE TABLE IF NOT EXISTS AIC_LOAD_WATERMARK (
+    entity_type             VARCHAR         NOT NULL
+        COMMENT 'Entity being tracked (artworks, agents)',
+    last_source_updated_at  TIMESTAMP_NTZ   NOT NULL
+        COMMENT 'Max source_updated_at from the last successful delta load',
+    last_batch_id           VARCHAR         NOT NULL
+        COMMENT 'Batch UUID of the last successful delta load',
+    updated_at              TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+        COMMENT 'When this watermark row was last written',
+    CONSTRAINT pk_aic_load_watermark PRIMARY KEY (entity_type)
+)
+COMMENT = 'High-water mark for AIC API delta queries. One row per entity type.';
 
 -- Cleveland Museum of Art: Artworks
 CREATE TABLE IF NOT EXISTS RAW_CMA_ARTWORKS (

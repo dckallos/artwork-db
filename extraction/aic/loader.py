@@ -228,7 +228,7 @@ def _copy_into_staging(
     """
     cur = conn.cursor().execute(sql)
     row = cur.fetchone()
-    rows_loaded = row[0] if row else 0
+    rows_loaded = row[3] if row and len(row) > 3 else 0
     logger.info("COPY INTO %s: %d rows loaded", staging_table, rows_loaded)
     return rows_loaded
 
