@@ -51,19 +51,24 @@ fixture_name() {
 }
 
 trigger_cmd() {
+    # Views don't fail on CREATE -- they fail when QUERIED. Use `dbt build`
+    # (run + test) to force Snowflake to actually evaluate the SQL.
+    # Compile-only scenarios (1-2) use `dbt compile` (they fail before SQL gen).
+    # All runtime scenarios use `dbt build` so the tests SELECT from the view
+    # and trigger the actual Snowflake evaluation error.
     case "$1" in
         1)  echo "dbt compile --select stg_met__artworks" ;;
         2)  echo "dbt compile --select stg_met__artists" ;;
-        3)  echo "dbt run --select stg_met__images" ;;
-        4)  echo "dbt run --select stg_met__images" ;;
-        5)  echo "dbt run --select stg_met__artworks" ;;
-        6)  echo "dbt run --select stg_met__artworks" ;;
-        7)  echo "dbt run --select stg_met__artworks" ;;
-        8)  echo "dbt run --select stg_met__enrichment_status" ;;
-        9)  echo "dbt run --select stg_met__artworks" ;;
-        10) echo "dbt run --select stg_met__artists" ;;
-        11) echo "dbt run --select stg_met__artworks+" ;;
-        12) echo "dbt run --select stg_met__artworks" ;;
+        3)  echo "dbt build --select stg_met__images" ;;
+        4)  echo "dbt build --select stg_met__images" ;;
+        5)  echo "dbt build --select stg_met__artworks" ;;
+        6)  echo "dbt build --select stg_met__artworks" ;;
+        7)  echo "dbt build --select stg_met__artworks" ;;
+        8)  echo "dbt build --select stg_met__enrichment_status" ;;
+        9)  echo "dbt build --select stg_met__artworks" ;;
+        10) echo "dbt build --select stg_met__artists" ;;
+        11) echo "dbt build --select stg_met__artworks+" ;;
+        12) echo "dbt build --select stg_met__artworks" ;;
         *)  echo "" ;;
     esac
 }

@@ -90,22 +90,27 @@ SCENARIOS = {
             "rejects it with SQL compilation error 001003 (syntax error)."
         ),
         "error_code": "001003 (SQL compilation syntax error)",
-        "trigger_cmd": "dbt run --select stg_met__images",
+        "trigger_cmd": "dbt build --select stg_met__images",
     },
 
     # =======================================================================
-    # RUNTIME DATA ERRORS (SQL compiles, Snowflake fails during execution)
+    # RUNTIME DATA ERRORS (SQL compiles, Snowflake rejects data)
     # =======================================================================
+    # NOTE: All staging models are materialized as VIEWS. Snowflake does NOT
+    # evaluate a view body at CREATE time -- only when someone SELECTs from it.
+    # Therefore `dbt run` alone succeeds (creates the broken view definition).
+    # We use `dbt build` (run + test) so the tests query the view and trigger
+    # the actual Snowflake runtime error.
     4: {
         "file": STAGING_DIR / "stg_met__images.sql",
         "original": "1                                                    AS ordinal_position,",
         "replacement": "1 / 0                                                AS ordinal_position,",
         "description": (
             "Division by zero (Snowflake 100035). The primary_images CTE evaluates "
-            "a constant 1/0 expression. Snowflake rejects it at runtime."
+            "a constant 1/0 expression. Snowflake rejects it when the view is queried."
         ),
         "error_code": "100035 (division by zero)",
-        "trigger_cmd": "dbt run --select stg_met__images",
+        "trigger_cmd": "dbt build --select stg_met__images",
     },
     5: {
         "file": STAGING_DIR / "stg_met__artworks.sql",
@@ -113,11 +118,11 @@ SCENARIOS = {
         "replacement": "raw_payload:csv:title::NUMBER(5,0)               AS object_begin_date,",
         "description": (
             "Numeric overflow (Snowflake 100132). Casts the title string (e.g. "
-            "'Marble Portrait Bust') to NUMBER(5,0). Overflows immediately because "
-            "the string is not a number, let alone one that fits in 5 digits."
+            "'Marble Portrait Bust') to NUMBER(5,0). Overflows when the view is "
+            "queried because the string is not numeric."
         ),
         "error_code": "100132 (numeric value out of range)",
-        "trigger_cmd": "dbt run --select stg_met__artworks",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
     },
     6: {
         "file": STAGING_DIR / "stg_met__artworks.sql",
@@ -125,10 +130,10 @@ SCENARIOS = {
         "replacement": "raw_payload:csv:department::VARCHAR(2)            AS department,",
         "description": (
             "String too long (Snowflake 100078). Casts department names like "
-            "'European Paintings' into VARCHAR(2). Overflows on any real data."
+            "'European Paintings' into VARCHAR(2). Overflows when the view is queried."
         ),
         "error_code": "100078 (string too long)",
-        "trigger_cmd": "dbt run --select stg_met__artworks",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
     },
 
     # =======================================================================
@@ -140,11 +145,11 @@ SCENARIOS = {
         "replacement": "FROM ARTWORK_DB.BRONZE.DOES_NOT_EXIST_TABLE",
         "description": (
             "Object does not exist (Snowflake 002003). Hardcodes a non-existent "
-            "table name (bypassing the source() macro). Snowflake fails at runtime "
-            "because the object doesn't exist."
+            "table name (bypassing the source() macro). Snowflake fails when "
+            "the view is queried because the underlying object doesn't exist."
         ),
         "error_code": "002003 (object does not exist)",
-        "trigger_cmd": "dbt run --select stg_met__artworks",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
     },
     8: {
         "file": STAGING_DIR / "stg_met__enrichment_status.sql",
@@ -157,7 +162,7 @@ SCENARIOS = {
             "both are useful fixtures."
         ),
         "error_code": "003001 or 002003 (privileges or missing object)",
-        "trigger_cmd": "dbt run --select stg_met__enrichment_status",
+        "trigger_cmd": "dbt build --select stg_met__enrichment_status",
     },
 
     # =======================================================================
@@ -170,10 +175,10 @@ SCENARIOS = {
         "description": (
             "Invalid identifier (Snowflake 000904). References a column name that "
             "does not exist on RAW_MET_OBJECTS (not a VARIANT path, an actual column "
-            "reference). Snowflake fails with 'invalid identifier'."
+            "reference). Snowflake fails when the view is queried."
         ),
         "error_code": "000904 (invalid identifier)",
-        "trigger_cmd": "dbt run --select stg_met__artworks",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
     },
     10: {
         "file": STAGING_DIR / "stg_met__artists.sql",
@@ -182,10 +187,10 @@ SCENARIOS = {
         "description": (
             "Invalid identifier in LATERAL output (Snowflake 000904). "
             "SPLIT_TO_TABLE produces (SEQ, INDEX, VALUE) but we reference "
-            "'nonexistent_field'. Snowflake rejects it as an invalid identifier."
+            "'nonexistent_field'. Snowflake rejects it when the view is queried."
         ),
         "error_code": "000904 (invalid identifier on lateral output)",
-        "trigger_cmd": "dbt run --select stg_met__artists",
+        "trigger_cmd": "dbt build --select stg_met__artists",
     },
 
     # =======================================================================
@@ -202,7 +207,7 @@ SCENARIOS = {
             "SELECT * will silently pass through an unexpected column."
         ),
         "error_code": "contract_violation (extra column in definition)",
-        "trigger_cmd": "dbt run --select stg_met__artworks+",
+        "trigger_cmd": "dbt build --select stg_met__artworks+",
     },
     12: {
         "file": STAGING_DIR / "stg_met__artworks.sql",
@@ -215,7 +220,132 @@ SCENARIOS = {
             "schema change that removes a column depended on by the whole DAG."
         ),
         "error_code": "000904 (invalid identifier -- upstream schema change)",
-        "trigger_cmd": "dbt run --select stg_met__artworks",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
+    },
+
+    # =======================================================================
+    # RUNTIME DATA ERRORS (SQL compiles, Snowflake rejects data)
+    # =======================================================================
+    4: {
+        "file": STAGING_DIR / "stg_met__images.sql",
+        "original": "1                                                    AS ordinal_position,",
+        "replacement": "1 / 0                                                AS ordinal_position,",
+        "description": (
+            "Division by zero (Snowflake 100035). The primary_images CTE evaluates "
+            "a constant 1/0 expression. Snowflake rejects it at runtime."
+        ),
+        "error_code": "100035 (division by zero)",
+        "trigger_cmd": "dbt build --select stg_met__images",
+    },
+    5: {
+        "file": STAGING_DIR / "stg_met__artworks.sql",
+        "original": "raw_payload:csv:object_begin_date::INT           AS object_begin_date,",
+        "replacement": "raw_payload:csv:title::NUMBER(5,0)               AS object_begin_date,",
+        "description": (
+            "Numeric overflow (Snowflake 100132). Casts the title string (e.g. "
+            "'Marble Portrait Bust') to NUMBER(5,0). Overflows immediately because "
+            "the string is not a number, let alone one that fits in 5 digits."
+        ),
+        "error_code": "100132 (numeric value out of range)",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
+    },
+    6: {
+        "file": STAGING_DIR / "stg_met__artworks.sql",
+        "original": "raw_payload:csv:department::STRING               AS department,",
+        "replacement": "raw_payload:csv:department::VARCHAR(2)            AS department,",
+        "description": (
+            "String too long (Snowflake 100078). Casts department names like "
+            "'European Paintings' into VARCHAR(2). Overflows on any real data."
+        ),
+        "error_code": "100078 (string too long)",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
+    },
+
+    # =======================================================================
+    # OBJECT / PERMISSION ERRORS (runtime, infrastructure mismatch)
+    # =======================================================================
+    7: {
+        "file": STAGING_DIR / "stg_met__artworks.sql",
+        "original": "FROM {{ source('met', 'raw_met_objects') }}",
+        "replacement": "FROM ARTWORK_DB.BRONZE.DOES_NOT_EXIST_TABLE",
+        "description": (
+            "Object does not exist (Snowflake 002003). Hardcodes a non-existent "
+            "table name (bypassing the source() macro). Snowflake fails at runtime "
+            "because the object doesn't exist."
+        ),
+        "error_code": "002003 (object does not exist)",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
+    },
+    8: {
+        "file": STAGING_DIR / "stg_met__enrichment_status.sql",
+        "original": "FROM {{ source('met', 'met_enrichment_control') }}",
+        "replacement": "FROM ARTWORK_DB.GOLD.MET_ENRICHMENT_CONTROL",
+        "description": (
+            "Insufficient privileges (Snowflake 003001). References the control "
+            "table in the GOLD schema where the transformer role likely lacks SELECT. "
+            "If the object happens to not exist in GOLD, you'll get 002003 instead -- "
+            "both are useful fixtures."
+        ),
+        "error_code": "003001 or 002003 (privileges or missing object)",
+        "trigger_cmd": "dbt build --select stg_met__enrichment_status",
+    },
+
+    # =======================================================================
+    # SCHEMA DRIFT / INVALID IDENTIFIER (runtime, column-level)
+    # =======================================================================
+    9: {
+        "file": STAGING_DIR / "stg_met__artworks.sql",
+        "original": "raw_payload:csv:title::STRING                    AS title,",
+        "replacement": "NONEXISTENT_TOP_LEVEL_COLUMN::STRING             AS title,",
+        "description": (
+            "Invalid identifier (Snowflake 000904). References a column name that "
+            "does not exist on RAW_MET_OBJECTS (not a VARIANT path, an actual column "
+            "reference). Snowflake fails with 'invalid identifier'."
+        ),
+        "error_code": "000904 (invalid identifier)",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
+    },
+    10: {
+        "file": STAGING_DIR / "stg_met__artists.sql",
+        "original": "TRIM(sn.value::STRING)                                              AS artist_display_name,",
+        "replacement": "TRIM(sn.nonexistent_field::STRING)                                  AS artist_display_name,",
+        "description": (
+            "Invalid identifier in LATERAL output (Snowflake 000904). "
+            "SPLIT_TO_TABLE produces (SEQ, INDEX, VALUE) but we reference "
+            "'nonexistent_field'. Snowflake rejects it as an invalid identifier."
+        ),
+        "error_code": "000904 (invalid identifier on lateral output)",
+        "trigger_cmd": "dbt build --select stg_met__artists",
+    },
+
+    # =======================================================================
+    # CONTRACT / TYPE MISMATCH (downstream test or contract enforcement)
+    # =======================================================================
+    11: {
+        "file": STAGING_DIR / "stg_met__artworks.sql",
+        "original": "raw_payload:csv:title::STRING                    AS title,",
+        "replacement": "raw_payload:csv:title::STRING                    AS title,\n        raw_payload:csv:NONEXISTENT_FIELD_XYZ::STRING   AS ghost_column,",
+        "description": (
+            "Extra column in projection. Adds a phantom column that makes the view "
+            "produce one more column than expected. If dim_artworks has a contract, "
+            "this causes a contract violation. Even without a contract, downstream "
+            "SELECT * will silently pass through an unexpected column."
+        ),
+        "error_code": "contract_violation (extra column in definition)",
+        "trigger_cmd": "dbt build --select stg_met__artworks+",
+    },
+    12: {
+        "file": STAGING_DIR / "stg_met__artworks.sql",
+        "original": "object_id,",
+        "replacement": "-- object_id,  -- REMOVED for failure injection",
+        "description": (
+            "Missing required column (drops object_id from the CTE). "
+            "Downstream models and tests that reference object_id will fail with "
+            "Snowflake 000904 (invalid identifier). This simulates an upstream "
+            "schema change that removes a column depended on by the whole DAG."
+        ),
+        "error_code": "000904 (invalid identifier -- upstream schema change)",
+        "trigger_cmd": "dbt build --select stg_met__artworks",
     },
 }
 
