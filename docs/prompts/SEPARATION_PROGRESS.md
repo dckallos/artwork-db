@@ -1,6 +1,6 @@
 # Separation Plan -- Progress Tracker
 
-## Status: Analysis Complete, Writing Plan
+## Status: Plan Complete -- Model C (sibling repos) DECIDED
 
 ## Analysis Summary (2026-06-07)
 
@@ -42,9 +42,15 @@
 - 4-repo: toolkit + artwork-iac + artwork-pipeline + dbt-diagnostics (splits infra from app)
 - Recommendation: 3-repo (artwork's DDL and pipeline are tightly coupled; same deploy lifecycle)
 
-### Plan writing: COMPLETE
+### Plan writing: COMPLETE (updated 2026-06-07)
 
-Written to `docs/prompts/REPO_SEPARATION_PLAN.md` (825 lines, 10 sections + 2 appendices).
+Written to `docs/prompts/REPO_SEPARATION_PLAN.md` (1081 lines, 10 sections + 2 appendices).
+
+### Key decision: Model C (sibling repos) -- LOCKED IN
+
+artwork-db references snowflake-toolkit via `TOOLKIT_DIR` env var pointing at a
+sibling directory. No embedding, no subtree, no submodule. Independent git
+histories. Rationale: single developer, active development on both, clean logs.
 
 ### Self-review checklist:
 - [x] Every file in repo assigned to exactly one target
@@ -54,7 +60,9 @@ Written to `docs/prompts/REPO_SEPARATION_PLAN.md` (825 lines, 10 sections + 2 ap
 - [x] Each repo has validation commands
 - [x] No artwork strings remain in toolkit (after refactoring prerequisites)
 - [x] dbt-diagnostics pip-installable standalone (after pyproject.toml fix)
-- [x] artwork-db references toolkit via TOOLKIT_DIR variable
-- [x] Risk mitigations documented (10 risks)
-- [x] Open questions with options + tradeoffs (5 decisions for owner)
+- [x] artwork-db references toolkit via TOOLKIT_DIR (sibling path)
+- [x] Risk mitigations documented (10 risks, including toolkit-not-found for Model C)
+- [x] Q1 decided (Model C); Q2-Q5 remain open with recommendations
 - [x] SQL_FILE coupling documented (scripts 06/09 -> git-setup/operator/)
+- [x] No vendor/ directory in artwork-db post-migration
+- [x] Appendix B Makefile uses realpath sibling resolution + fail-fast

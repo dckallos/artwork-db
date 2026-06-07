@@ -1,7 +1,7 @@
 # Repository Separation Plan
 
 > **Status:** PLAN ONLY -- no code changes, no git operations, no DDL.
-> **Date:** 2026-06-07
+> **Date:** 2026-06-07 (updated 2026-06-07: locked Model C sibling-repo approach)
 > **Branch:** `donkey-kong-sandbox`
 > **Author:** Cortex Code (Principal Engineer analysis)
 
@@ -12,26 +12,38 @@
 ### Target repositories (3-repo split)
 
 ```text
-artwork-db (monorepo)
-    |
-    +---> snowflake-toolkit        (GENERIC: reusable across any SF project)
-    |         Depends on: nothing
-    |
-    +---> artwork-db               (DOMAIN: museum pipeline IaC + ETL + dbt)
-    |         Depends on: snowflake-toolkit (as git subtree or submodule)
-    |
-    +---> dbt-diagnostics          (INDEPENDENT: pip-installable CLI tool)
-              Depends on: nothing (runtime config points at any dbt project)
+~/projects/
+  snowflake-toolkit/        (GENERIC: reusable across any SF project)
+      Depends on: nothing
+
+  artwork-db/               (DOMAIN: museum pipeline IaC + ETL + dbt)
+      Depends on: snowflake-toolkit via TOOLKIT_DIR env var / Makefile path
+
+  dbt-diagnostics/          (INDEPENDENT: pip-installable CLI tool)
+      Depends on: nothing (runtime config points at any dbt project)
 ```
 
-### Dependency direction (acyclic)
+### Consumption model: sibling repos (Model C -- DECIDED)
+
+The three repos live as **independent sibling directories** on disk. artwork-db
+references snowflake-toolkit via a `TOOLKIT_DIR` environment variable (defaulting
+to `../snowflake-toolkit`). There is no embedding, no git subtree, no submodule.
+Each repo has fully independent git history with zero interleaving.
 
 ```text
-artwork-db ----depends-on----> snowflake-toolkit
-artwork-db ----dev-depends---> dbt-diagnostics (optional; fixture generation)
-dbt-diagnostics ----0 deps---> (standalone)
-snowflake-toolkit ----0 deps-> (standalone)
+artwork-db ----sources scripts from----> snowflake-toolkit (sibling on disk)
+artwork-db ----dev-depends (pip)-------> dbt-diagnostics (sibling on disk)
+dbt-diagnostics ----0 deps------------> (standalone)
+snowflake-toolkit ----0 deps----------> (standalone)
 ```
+
+### Why Model C over subtree/submodule
+
+- Single developer actively iterating on both repos simultaneously
+- Clean independent git histories (no merge-commit noise, no SHA pointer bumps)
+- `TOOLKIT_DIR` is a one-line `.env` entry -- trivial wiring
+- No "clone must be self-contained" requirement (you control the machine)
+- Editing the toolkit doesn't require push/pull/subtree-dance -- just save and run
 
 ### Why 3 repos, not 2 or 4
 
@@ -39,7 +51,7 @@ snowflake-toolkit ----0 deps-> (standalone)
 dbt-diagnostics is already pip-installable and has its own test suite, versioning,
 changelog. Bundling it with artwork couples release cadences unnecessarily.
 
-**3-repo** (toolkit + artwork + dbt-diagnostics) -- **Recommended:**
+**3-repo** (toolkit + artwork + dbt-diagnostics) -- **Decided:**
 Clean ownership: toolkit = infra plumbing reusable by future projects;
 artwork = domain pipeline (DDL + extraction + dbt are deployed together, same
 lifecycle); dbt-diagnostics = standalone tool.
@@ -158,8 +170,8 @@ that ties it together.
 
 - `inject_failures.py` -- Fixture generation for dbt-diagnostics
 - `inject_failures.sh` -- E2E fixture runner
-- `Makefile` -- REFACTOR: update paths to reference toolkit location
-- `.env.example` -- Artwork-specific env vars
+- `Makefile` -- REFACTOR: add TOOLKIT_DIR pointing at sibling repo
+- `.env.example` -- Artwork-specific env vars (including TOOLKIT_DIR)
 - `profiles.yml.example` -- dbt profile template
 - `requirements.txt` -- Python deps for extraction
 - `.gitignore` -- Keep
@@ -176,8 +188,9 @@ that ties it together.
 - `docs/context/` (all non-framework docs) -- Project context (learning journals, plans, etc.)
 - `docs/prompts/` -- Keep
 
-**Toolkit integration:** The `snowflake-toolkit` is consumed as a **git subtree**
-at `vendor/snowflake-toolkit/` (see Section 3).
+**Toolkit integration:** artwork-db's Makefile resolves the toolkit via
+`TOOLKIT_DIR` (defaults to `../snowflake-toolkit`). No files from the toolkit
+live inside this repo. See Section 3.
 
 ### 2.3 dbt-diagnostics (new repo)
 
@@ -210,8 +223,8 @@ any dbt project on Snowflake.
 
 ### 3.1 snowflake-toolkit exposes (public interface)
 
-The toolkit is consumed via filesystem paths after being placed in the consuming
-project (git subtree, submodule, or manual copy). Its public interface:
+The toolkit is consumed via filesystem path. The consuming project sets
+`TOOLKIT_DIR` to point at the toolkit's clone directory. Its public interface:
 
 **`snowflake_cli/setup.sh`** -- Entry point.
 Accepts `--profile`, `--phase`, `--admin-conn`, `--loader-conn`, `--transformer-conn`.
@@ -244,31 +257,43 @@ framework components.
 - `TRANSFORMER_USER`, `TRANSFORMER_ROLE` -- service user for transformer keypair
 - `SNOW_CONNECTION` -- default snow CLI connection name
 
-### 3.2 artwork-db consumes toolkit
+### 3.2 artwork-db consumes toolkit (sibling path)
 
-The Makefile in artwork-db will reference the toolkit at a relative path:
+The Makefile in artwork-db resolves the toolkit from a sibling directory:
 
 ```makefile
-TOOLKIT_DIR := vendor/snowflake-toolkit
-# or if using submodule:
-# TOOLKIT_DIR := snowflake-toolkit
+# Resolve toolkit: env var > .env > default sibling path
+TOOLKIT_DIR ?= $(shell echo $${TOOLKIT_DIR:-../snowflake-toolkit})
 
 iac: chmod
-  bash $(TOOLKIT_DIR)/orchestrate_modern.sh \
-    --ddl-dir infrastructure/ \
-    --manifest scripts/manifest.txt \
-    --phase infra \
-    --connection $(CONN)
+	bash $(TOOLKIT_DIR)/orchestrate_modern.sh \
+	  --ddl-dir infrastructure/ \
+	  --manifest scripts/manifest.txt \
+	  --phase infra \
+	  --connection $(CONN)
 ```
 
-The `.env` in artwork-db sets the env vars the toolkit reads:
+The `.env` in artwork-db sets all toolkit env vars:
 
 ```bash
+# Toolkit location (sibling repo on disk)
+TOOLKIT_DIR=../snowflake-toolkit
+
+# Toolkit configuration
 SNOW_LIB_DEFAULT_WAREHOUSE=ARTWORK_WH
 LOADER_USER=ARTWORK_LOADER_SVC
 LOADER_ROLE=ARTWORK_LOADER
 TRANSFORMER_USER=ARTWORK_TRANSFORMER_SVC
 TRANSFORMER_ROLE=ARTWORK_TRANSFORMER
+```
+
+**Fail-fast guard:** The Makefile errors immediately if `TOOLKIT_DIR` doesn't
+exist, with a clear message:
+
+```makefile
+ifeq ($(wildcard $(TOOLKIT_DIR)/snowflake_cli/setup.sh),)
+  $(error snowflake-toolkit not found at $(TOOLKIT_DIR). Clone it as a sibling: git clone ... ../snowflake-toolkit)
+endif
 ```
 
 ### 3.3 dbt-diagnostics is standalone
@@ -283,7 +308,7 @@ TRANSFORMER_ROLE=ARTWORK_TRANSFORMER
 
 ```bash
 # In artwork-db's dev workflow:
-pip install -e ../dbt-diagnostics  # or pip install dbt-diagnostics from PyPI
+pip install -e ../dbt-diagnostics  # editable install from sibling
 dbt-diagnostics --project-dir artwork_pipeline/
 
 # Fixture generation (stays in artwork-db):
@@ -304,7 +329,6 @@ python inject_failures.py --discard-change 3
 | `git filter-repo --path` | Multiple non-contiguous paths | **snowflake-toolkit** |
 | `git subtree split --prefix` | Single contiguous subtree | **dbt-diagnostics** |
 | Fresh repo + squashed history | History not valuable | NOT recommended |
-| Monorepo + submodules out | Minimal disruption | NOT recommended |
 
 ### 4.2 Extraction commands
 
@@ -391,14 +415,14 @@ git remote add origin git@github.com:dckallos/snowflake-toolkit.git
 git push -u origin donkey-kong-sandbox
 ```
 
-#### artwork-db (stays as-is, toolkit removed later)
+#### artwork-db (stays as-is, toolkit files removed later)
 
 The monorepo continues working during migration. Once the toolkit repo is proven
 stable:
 
 ```bash
 # In the monorepo, AFTER confirming toolkit works standalone:
-# Remove toolkit files (they now live in vendor/snowflake-toolkit/ via subtree)
+# Remove toolkit files (they now live in the sibling snowflake-toolkit repo)
 git rm -r scripts/snowflake_cli/ scripts/lib/
 git rm scripts/orchestrate_modern.sh scripts/apply_sql.sh scripts/rollback_sql.sh
 git rm scripts/bootstrap.py scripts/bootstrap_chmod.sh
@@ -410,11 +434,7 @@ git rm -r scripts/sql/show_active_sessions.sql \
 git rm -r tests/framework/ tests/examples/ tests/integration/ tests/__init__.py
 git rm -r docs/framework/
 
-# Add toolkit back as subtree
-git subtree add --prefix=vendor/snowflake-toolkit \
-  git@github.com:dckallos/snowflake-toolkit.git donkey-kong-sandbox --squash
-
-git commit -m "Replace inline toolkit with git subtree from snowflake-toolkit repo"
+git commit -m "Remove toolkit files (now in sibling snowflake-toolkit repo)"
 ```
 
 ### 4.3 History validation
@@ -487,13 +507,13 @@ grep -rn "ARTWORK" . --include="*.sh" --include="*.py" \
 6. **Validate:** `./snowflake_cli/setup.sh --help` works, framework tests pass
 7. **Monorepo continues unchanged**
 
-### Phase 3: Integrate toolkit into artwork-db (switchover)
+### Phase 3: Wire artwork-db to sibling toolkit (switchover)
 
-1. In monorepo, add toolkit as git subtree at `vendor/snowflake-toolkit/`
-2. Update `Makefile` paths to use `vendor/snowflake-toolkit/` prefix
-3. Update `.env.example` to set all toolkit env vars explicitly
-4. Test: `make iac CONN=mk07348` works with the vendored toolkit
-5. Once green: remove the original `scripts/snowflake_cli/`, `scripts/lib/`, etc.
+1. Add `TOOLKIT_DIR=../snowflake-toolkit` to `.env.example`
+2. Update `Makefile` to resolve `TOOLKIT_DIR` and call toolkit scripts from there
+3. Add fail-fast guard (error if `TOOLKIT_DIR` path doesn't exist)
+4. Test: `make iac CONN=mk07348` works with the sibling toolkit
+5. Once green: `git rm` the original toolkit files from artwork-db (Section 4.2)
 6. Remove `docs/framework/` (now lives in toolkit repo)
 7. Commit the switchover
 
@@ -527,7 +547,7 @@ stays fully functional until Phase 3 switchover is explicitly confirmed.
 |------|----------|-----------|
 | `Makefile` | Stays in artwork-db | Orchestrates the artwork pipeline |
 | `requirements.txt` | Stays in artwork-db | Toolkit is pure bash |
-| `.env.example` | Stays in artwork-db | Toolkit uses README for env docs |
+| `.env.example` | Stays in artwork-db | Now includes TOOLKIT_DIR |
 | `AGENTS.md` | Stays in artwork-db | Toolkit gets a minimal README |
 | `CLAUDE.md` | Stays in artwork-db | Same as AGENTS.md |
 | `LICENSE` | Duplicated to all 3 | Each repo needs its own |
@@ -608,11 +628,13 @@ passes via `SQL_FILE=`.
 ### 7.3 Artwork-db preparation
 
 1. **`.env.example`** (Low)
-   Add explicit `SNOW_LIB_DEFAULT_WAREHOUSE=ARTWORK_WH`.
+   Add `TOOLKIT_DIR=../snowflake-toolkit` and explicit
+   `SNOW_LIB_DEFAULT_WAREHOUSE=ARTWORK_WH`.
 
 2. **`Makefile`** (Low)
-   Prepare `TOOLKIT_DIR` variable (initially `scripts`, later
-   `vendor/snowflake-toolkit`).
+   Add `TOOLKIT_DIR` resolution with fail-fast guard. Initially point at
+   local `scripts/` for backward compat during Phase 0; switch to sibling
+   in Phase 3.
 
 ---
 
@@ -621,7 +643,7 @@ passes via `SQL_FILE=`.
 ### 8.1 snowflake-toolkit standalone tests
 
 ```bash
-cd snowflake-toolkit/
+cd ~/projects/snowflake-toolkit/
 
 # Unit tests (no Snowflake connection needed)
 bash tests/framework/unit/test_connection_resolver.sh
@@ -644,7 +666,7 @@ grep -rn "ARTWORK\|artwork" . --include="*.sh" --include="*.py" \
 ### 8.2 dbt-diagnostics standalone tests
 
 ```bash
-cd dbt-diagnostics/
+cd ~/projects/dbt-diagnostics/
 
 # Install in editable mode
 pip install -e ".[dev]"
@@ -663,13 +685,14 @@ grep -rn "\.\./artwork" . --include="*.py"
 # Expected: 0 lines (config.yml has "." as default now)
 ```
 
-### 8.3 artwork-db with vendored toolkit
+### 8.3 artwork-db with sibling toolkit
 
 ```bash
-cd artwork-db/
+cd ~/projects/artwork-db/
 
-# Verify toolkit subtree exists
-ls vendor/snowflake-toolkit/snowflake_cli/setup.sh
+# Verify toolkit resolves
+make check-toolkit
+# (prints: "Using toolkit at ../snowflake-toolkit (OK)")
 
 # Full IaC apply (integration test)
 make iac CONN=mk07348
@@ -680,10 +703,10 @@ make extract-met
 # Full dbt build
 make dbt-build
 
-# Verify no broken references
+# Verify no broken internal references to removed paths
 grep -rn "scripts/snowflake_cli\|scripts/lib/" . \
-  --include="Makefile" --include="*.sh" | grep -v "vendor/"
-# Expected: 0 lines (all references point to vendor/snowflake-toolkit/)
+  --include="Makefile" --include="*.sh"
+# Expected: 0 lines
 ```
 
 ---
@@ -703,8 +726,8 @@ grep -rn "scripts/snowflake_cli\|scripts/lib/" . \
 - **Probability:** Medium
 - **Impact:** High
 - **Mitigation:** Phase 3 tests `make iac` BEFORE removing original files.
-  Rollback = git revert. The toolkit subtree is added FIRST, tested, THEN
-  originals removed.
+  Rollback = git revert. The Makefile first resolves to sibling, is tested,
+  THEN originals are deleted.
 
 ### Risk 3: `bootstrap.py` parameterization breaks preflight
 
@@ -714,12 +737,13 @@ grep -rn "scripts/snowflake_cli\|scripts/lib/" . \
   `assert-account-privileges` with explicit `--role-name ARTWORK_ADMIN` before
   and after refactor. Both must produce identical output.
 
-### Risk 4: Subtree update conflicts
+### Risk 4: Toolkit not present on disk
 
-- **Probability:** Low
-- **Impact:** Low
-- **Mitigation:** Use `--squash` so subtree history is collapsed; conflicts are
-  rare in practice for a library.
+- **Probability:** Medium (fresh machine, new clone)
+- **Impact:** Medium (make fails immediately)
+- **Mitigation:** Fail-fast `$(error ...)` in Makefile with clone instructions.
+  README documents the sibling requirement. Optional `make clone-deps` target
+  that runs `git clone` for missing siblings.
 
 ### Risk 5: CI setup for new repos
 
@@ -749,8 +773,9 @@ grep -rn "scripts/snowflake_cli\|scripts/lib/" . \
 - **Probability:** Medium
 - **Impact:** Low
 - **Mitigation:** Some future changes may need coordinated commits across repos
-  (e.g., toolkit API change + artwork-db consumer update). Semantic versioning
-  in toolkit; artwork-db pins to a specific toolkit commit via subtree.
+  (e.g., toolkit API change + artwork-db consumer update). With Model C, you
+  just edit both repos and commit each independently. No synchronization
+  mechanism is needed for a single developer.
 
 ### Risk 9: `inject_failures.py` needs both repos
 
@@ -760,43 +785,27 @@ grep -rn "scripts/snowflake_cli\|scripts/lib/" . \
   dbt-diagnostics. It generates fixtures that are manually copied. Document the
   workflow in README.
 
-### Risk 10: Stale toolkit copy in artwork-db
+### Risk 10: Version drift between toolkit and artwork-db
 
 - **Probability:** Medium
 - **Impact:** Low
-- **Mitigation:** `git subtree pull --squash` updates the vendored copy. Add a
-  Makefile target: `make update-toolkit`.
+- **Mitigation:** Both repos are on the same machine, edited by the same person.
+  If a toolkit change breaks artwork-db, you'll notice immediately when running
+  `make iac`. No version pinning is needed for a single-developer workflow.
+  If future multi-developer use arises, add a `TOOLKIT_COMMIT.txt` file that
+  records the expected toolkit SHA (checked by CI, not enforced locally).
 
 ---
 
 ## 10. Open Questions (Owner Decisions Required)
 
-### Q1: Toolkit consumption method -- git subtree vs git submodule vs package?
+### Q1: Toolkit consumption method
 
-**Option A: Git subtree (recommended)**
+**DECIDED: Model C (sibling repos on disk).**
 
-- Pros: Files are fully in the consuming repo; works offline; no `.gitmodules`
-  confusion; `git clone` just works; history squashed on pull
-- Cons: Slightly complex pull/push commands; files duplicated in consuming repo
-- Precedent: Kubernetes, many Google projects
-
-**Option B: Git submodule**
-
-- Pros: Clean separation; no file duplication; explicit version pinning
-- Cons: `git clone --recursive` required; easy to get into detached-HEAD state;
-  confuses less-experienced git users; CI needs extra steps
-- Precedent: Many open-source projects
-
-**Option C: Published shell package (e.g., basher)**
-
-- Pros: True package management; versioned releases
-- Cons: Shell package managers are niche; tooling is immature; adds a runtime
-  dependency on the package manager
-- Precedent: Rare in practice
-
-**Recommendation:** Option A (git subtree with `--squash`). It's the simplest
-model for a single developer, requires no extra tooling, and the consuming repo
-is always self-contained.
+artwork-db references snowflake-toolkit via `TOOLKIT_DIR` env var, defaulting to
+`../snowflake-toolkit`. No embedding, no git-level integration. Each repo has
+fully independent history.
 
 ### Q2: What happens to `scripts/orchestrate.sh` (legacy)?
 
@@ -952,8 +961,6 @@ dbt-diagnostics/
 
 ```text
 artwork-db/
-  vendor/
-    snowflake-toolkit/  (git subtree)
   infrastructure/
     create_*.sql / drop_*.sql (29 files)
     CLAUDE.md
@@ -1002,20 +1009,36 @@ artwork-db/
   .mcp.json
 ```
 
+Note: No `vendor/` directory. The toolkit is a sibling on disk, not embedded.
+
 ---
 
 ## Appendix B: Makefile After Migration (artwork-db)
 
 ```makefile
 # artwork-db Makefile (post-toolkit-extraction)
-TOOLKIT_DIR := vendor/snowflake-toolkit
+#
+# The toolkit lives as a sibling repo. Override TOOLKIT_DIR in .env or env:
+#   TOOLKIT_DIR=~/other/path/snowflake-toolkit make iac
+TOOLKIT_DIR ?= ../snowflake-toolkit
 CONN ?= admin
 VARS ?=
 DBT_PROJECT_DIR := artwork_pipeline
 
+# --- Fail-fast: toolkit must exist ---
+ifeq ($(wildcard $(TOOLKIT_DIR)/snowflake_cli/setup.sh),)
+  $(error snowflake-toolkit not found at $(TOOLKIT_DIR). \
+    Clone it: git clone git@github.com:dckallos/snowflake-toolkit.git $(TOOLKIT_DIR))
+endif
+
 # Toolkit entry points
 ORCHESTRATE := bash $(TOOLKIT_DIR)/orchestrate_modern.sh
 SETUP := bash $(TOOLKIT_DIR)/snowflake_cli/setup.sh
+
+.PHONY: check-toolkit chmod iac infra loader transformer
+
+check-toolkit:
+	@echo "Using toolkit at $(TOOLKIT_DIR) (OK)"
 
 chmod:
 	@bash $(TOOLKIT_DIR)/bootstrap_chmod.sh
@@ -1036,9 +1059,6 @@ loader: chmod
 transformer: chmod
 	$(SETUP) --profile $(CONN) --phase transformer
 
-# ... (dbt and extraction targets unchanged)
-
-update-toolkit:
-	git subtree pull --prefix=$(TOOLKIT_DIR) \
-	  git@github.com:dckallos/snowflake-toolkit.git donkey-kong-sandbox --squash
+# --- dbt and extraction targets unchanged ---
+# dbt-build, dbt-test, extract-met, etc. remain as-is
 ```
