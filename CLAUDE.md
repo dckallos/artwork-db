@@ -73,6 +73,7 @@ make dbt-test
 - artwork_pipeline/ -- dbt project (scaffolded; staging model stg_met__artworks exists)
 - git-setup/ -- Optional in-Snowflake Git mirror (runs LAST)
 - ../snowflake-toolkit/ -- Sibling repo: generic Snowflake CLI/IaC framework (TOOLKIT_DIR)
+- ../dbt-diagnostics/ -- Sibling repo: dbt error classifier + linter (pip install -e)
 
 **Snowflake objects**:
 - Account: OBANOYY-MK07348 (locator EP21559, AWS_US_EAST_2); admin PORCHFLAKE/ACCOUNTADMIN. Earlier trials pa37992 / HXCNOII-RS05429 (user PORCHANALYTICS) are RETIRED.

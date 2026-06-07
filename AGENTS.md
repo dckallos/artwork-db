@@ -22,7 +22,8 @@ dbt runs as the `ARTWORK_TRANSFORMER_SVC` service user (key-pair only):
 `make transformer CONN=mk07348` mints `mk07348_transformer_rsa_key.p8` +
 `[connections.mk07348_transformer]`. Both service users are defined in
 `infrastructure/create_service_user.sql`; their keys are registered out-of-band
-(not in the manifest) by `setup.sh --phase loader|transformer`.
+(not in the manifest) by `make loader|transformer` (which calls the toolkit's
+`setup.sh --phase loader|transformer`).
 
 ## Session-open ritual (do this first, every window)
 
@@ -195,10 +196,17 @@ Rules of thumb:
 
 ## Roadmap & deferred work
 
+- **Repo separation COMPLETE (Phase 3, 2026-06-07).** The generic IaC framework
+  (orchestration, CLI setup suite, framework tests, framework docs) now lives in
+  the sibling `snowflake-toolkit` repo (`../snowflake-toolkit`). The `dbt-diagnostics`
+  tool lives in `../dbt-diagnostics`. Both are on `donkey-kong-sandbox` branch (no
+  `main` yet). artwork-db's Makefile consumes the toolkit via `TOOLKIT_DIR`. 168
+  extracted files removed; artwork-specific scripts (`manifest.txt`,
+  `dbt_orchestrate.sh`, `orchestrate.sh`, artwork SQL checks) remain.
 - **Done (reviewed + documented):** Workflow 1 cli-connection (`trusted-prior`);
   Workflow 2 ddl-infrastructure incl. git-setup Git bind chain (read 2026-05-30)
-  and orchestration internals (`apply_sql.sh`, `rollback_sql.sh`, `bootstrap.py`,
-  read 2026-05-30); Workflow 3 extraction (`extraction/met/*` + root files, read
+  and orchestration internals (now in sibling `snowflake-toolkit` repo; reviewed
+  2026-05-30); Workflow 3 extraction (`extraction/met/*` + root files, read
   2026-05-30).
 - **Repo documentation pass: COMPLETE.** Every substantive file is documented or
   marked trivial in `file-map.md` (file/dir counts not hardcoded — reconcile via
@@ -248,10 +256,11 @@ Rules of thumb:
 - **Decided AND APPLIED 2026-05-31:** the four DDL cosmetic decisions (idempotency split, UPPERCASE identifiers, `grant_privileges.sql → create_grants.sql` rename wiring `drop_grants.sql`, reworded stale V/R/B comments) — landed via Session-3 `make infra`. Was previously gated; now historical.
 - **New gated items surfaced (record only — do NOT apply):**
   1. Reword stale V/R/B refs found outside infrastructure:
-     `extraction/met/README.md:37`, `/.env.example:9,13`, `apply_sql.sh:38`
-     ("B001"), and **`git-setup/README.md` (whole file — B001/B002/B003, V###,
+     `extraction/met/README.md:37`, `/.env.example:9,13`,
+     and **`git-setup/README.md` (whole file — B001/B002/B003, V###,
      R### scheme)**. (`config.py:53-54` V### ref FIXED 2026-05-31 during the
-     loader key-pair change.)
+     loader key-pair change. `apply_sql.sh:38` ref removed with Phase 3
+     repo separation — file now lives in snowflake-toolkit.)
   2. Decide the fate of `rename_and_update.py` — a spent one-shot rename migration
      (now dead; dense V###/R### source). Candidate for removal.
   3. `profiles.yml.example` uses `env_var()` + key-pair (dbt-core only) — add a
