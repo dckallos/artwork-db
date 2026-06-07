@@ -41,3 +41,5 @@ output/extension-map.md
 .envrc
 artwork_pipeline/.user.yml
 artwork_pipeline/models/staging/met/sample.csv
+
+.pytest_cache/
