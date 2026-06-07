@@ -70,8 +70,8 @@ class Config:
     snowflake_role: str = os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER")
     snowflake_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH")
     snowflake_database: str = os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB")
-    snowflake_schema: str = os.getenv("SNOWFLAKE_SCHEMA", "BRONZE")
-    snowflake_stage: str = os.getenv("SNOWFLAKE_STAGE", "bronze_load_stage")
+    snowflake_schema: str = "BRONZE"
+    snowflake_stage: str = "bronze_load_stage"
 
     def ensure_paths(self) -> None:
         """Create parent directories for local data files if missing."""
