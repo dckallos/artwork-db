@@ -25,7 +25,6 @@ frees them after the 30-min TTL, and re-running `enrich` picks them back up.
 """
 from __future__ import annotations
 
-import asyncio
 import gzip
 import json
 import logging
@@ -35,7 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import aiohttp
+import requests
 import snowflake.connector
 
 from .config import Config
@@ -65,12 +64,13 @@ def _classify_error(msg: Optional[str]) -> str:
       - "HTTP <status>: <body>"      non-retryable 4xx other than 404 -> http_4xx_<code>
                                      non-retryable 5xx (rare path)    -> http_5xx_<code>
       - "HTTP <status>"              retry-exhausted 429/5xx          -> http_<class>_<code>
-      - "ClientConnectorError: ..."                                  -> connect
-      - "ServerTimeoutError: ..." / "TimeoutError: ..."              -> timeout
-      - "ClientPayloadError: ..."                                    -> payload
-      - "ContentTypeError: ..."                                      -> parse
-      - "max retries exceeded"                                       -> retries_exhausted
-      - everything else                                              -> other:<head>
+      - "ConnectionError: ..."                                        -> connect
+      - "ConnectTimeout: ..."                                         -> connect
+      - "Timeout: ..." / "ReadTimeout: ..."                           -> timeout
+      - "ChunkedEncodingError: ..."                                   -> payload
+      - "ContentDecodingError: ..." / "JSONDecodeError: ..."          -> parse
+      - "max retries exceeded"                                        -> retries_exhausted
+      - everything else                                               -> other:<head>
     The bucket is intentionally low-cardinality: it shows up unsorted in INFO logs,
     so we want a tight enum, not a free-text histogram.
     """
@@ -90,14 +90,15 @@ def _classify_error(msg: Optional[str]) -> str:
             klass = "4xx" if code.startswith("4") else ("5xx" if code.startswith("5") else "xxx")
             return f"http_{klass}_{code}"
         return "http_unknown"
-    if msg.startswith("ClientConnectorError"):
+    # requests.ConnectionError or its subclass ConnectTimeout (which is also a Timeout).
+    if msg.startswith("ConnectionError") or msg.startswith("ConnectTimeout"):
         return "connect"
-    if "TimeoutError" in msg.split(":", 1)[0]:
-        # ServerTimeoutError, asyncio.TimeoutError, SocketTimeoutError, etc.
+    # requests.Timeout and its subclasses: ReadTimeout, ConnectTimeout (caught above).
+    if "Timeout" in msg.split(":", 1)[0]:
         return "timeout"
-    if msg.startswith("ClientPayloadError"):
+    if msg.startswith("ChunkedEncodingError"):
         return "payload"
-    if msg.startswith("ContentTypeError"):
+    if msg.startswith("ContentDecodingError") or msg.startswith("JSONDecodeError"):
         return "parse"
     if msg == "max retries exceeded":
         return "retries_exhausted"
@@ -139,44 +140,41 @@ def _claim_batch(
 
 
 # --------------------------------------------------------------------------- fetch
-async def _fetch_blocks(
+def _fetch_blocks(
     config: Config,
     object_ids: List[int],
     progress_every: int = 100,
     processed_offset: int = 0,
     total_label: str = "?",
-) -> Tuple[List[Dict[str, Any]], "_RateLimiter"]:
-    """Fetch image data for the claimed ids.
+) -> Tuple[List[Dict[str, Any]], _RateLimiter]:
+    """Fetch image data for the claimed ids via synchronous requests.
 
-    Returns (blocks, rate_limiter). The limiter is returned (not just consumed)
-    so the caller can read its throttle counters into the per-batch INFO log
-    after `asyncio.run` returns -- P-T2.
+    Returns (blocks, rate_limiter). The limiter is returned so the caller can
+    read its throttle counters into the per-batch INFO log -- P-T2.
 
     Emits a live "Progress" INFO line every `progress_every` completed API calls
-    (counted as each fetch finishes, not after the whole batch), so the operator
-    sees the running enriched total advance during the fetch. `processed_offset`
-    is the count already done in prior batches and `total_label` the worklist
-    denominator, so the line reads e.g. `Progress: 300/1,827 done=.. no_image=..`.
+    so the operator sees the running enriched total advance during the fetch.
+    `processed_offset` is the count already done in prior batches and `total_label`
+    the worklist denominator, so the line reads e.g. `Progress: 300/1,827 done=.. no_image=..`.
     """
     rate_limiter = _RateLimiter(config.api_requests_per_second)
-    throttle_gate = _ThrottleGate()  # global backoff shared by all workers
-    semaphore = asyncio.Semaphore(config.api_max_concurrency)
-    timeout = aiohttp.ClientTimeout(
-        total=None, connect=15, sock_read=config.api_request_timeout_seconds,
-    )
-    headers = {"User-Agent": config.api_user_agent, "Accept": "application/json"}
+    throttle_gate = _ThrottleGate()
+    timeout = float(config.api_request_timeout_seconds)
     blocks: List[Dict[str, Any]] = []
     counts: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
-    lock = asyncio.Lock()
 
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-
-        async def worker(oid: int) -> None:
-            async with semaphore:
-                object_id, status, payload, error = await _fetch_one(
-                    session, rate_limiter, throttle_gate,
-                    config.api_base, oid, config.api_max_retries,
-                )
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": config.api_user_agent,
+        "Accept": "application/json",
+    })
+    try:
+        for oid in object_ids:
+            object_id, status, payload, error = _fetch_one(
+                session, rate_limiter, throttle_gate,
+                config.api_base, oid, config.api_max_retries,
+                timeout=timeout,
+            )
             additional = (payload or {}).get("additionalImages") or [] if payload else []
             block = {
                 "object_id":           object_id,
@@ -187,19 +185,18 @@ async def _fetch_blocks(
                 "additional_images":   additional,
                 "enrichment_error":    (error or "")[:500] or None,
             }
-            async with lock:
-                blocks.append(block)
-                counts[status] = counts.get(status, 0) + 1
-                done_in_batch = len(blocks)
-                # Live heartbeat: log as each Nth API call completes.
-                if done_in_batch % progress_every == 0:
-                    logger.info(
-                        "Progress: %s/%s done=%s no_image=%s error=%s",
-                        f"{processed_offset + done_in_batch:,}", total_label,
-                        counts["done"], counts["no_image"], counts["error"],
-                    )
-
-        await asyncio.gather(*(worker(oid) for oid in object_ids))
+            blocks.append(block)
+            counts[status] = counts.get(status, 0) + 1
+            done_in_batch = len(blocks)
+            # Live heartbeat: log as each Nth API call completes.
+            if done_in_batch % progress_every == 0:
+                logger.info(
+                    "Progress: %s/%s done=%s no_image=%s error=%s",
+                    f"{processed_offset + done_in_batch:,}", total_label,
+                    counts["done"], counts["no_image"], counts["error"],
+                )
+    finally:
+        session.close()
 
     return blocks, rate_limiter
 
@@ -319,8 +316,8 @@ def _process_one_batch(
 
         _log_start(cur, batch_id)
         try:
-            blocks, rate_limiter = asyncio.run(
-                _fetch_blocks(config, claimed, progress_every, processed_offset, total_label)
+            blocks, rate_limiter = _fetch_blocks(
+                config, claimed, progress_every, processed_offset, total_label
             )
             counts: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
             for b in blocks:
