@@ -35,3 +35,4 @@ infrastructure/refresh_grants.sql
 git-setup/create_git_ops_db.sql
 git-setup/create_api_integration.sql
 git-setup/create_git_repository.sql
+git-setup/create_mcp_integration.sql
