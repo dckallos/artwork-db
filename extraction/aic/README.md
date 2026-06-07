@@ -50,7 +50,7 @@ Local data files (created on first run, gitignored):
 ## Quick start
 
     cd ~/dev/artwork-db
-    python -m venv .venv && source .venv/bin/activate
+    source .venv/bin/activate
     pip install -r extraction/aic/requirements.txt
     cp extraction/aic/.env.example .env   # then edit credentials
     python -m extraction.aic.run snapshot -v
