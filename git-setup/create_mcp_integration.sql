@@ -40,7 +40,7 @@ CREATE API INTEGRATION IF NOT EXISTS GITHUB_MCP_INTEGRATION
     API_PROVIDER         = external_mcp
     API_ALLOWED_PREFIXES = ('https://api.githubcopilot.com')
     API_USER_AUTHENTICATION = (
-        TYPE                       = OAUTH,
+        TYPE                       = OAUTH2,
         OAUTH_CLIENT_ID            = '<% github_oauth_client_id %>',
         OAUTH_CLIENT_SECRET        = '<% github_oauth_client_secret %>',
         OAUTH_TOKEN_ENDPOINT       = 'https://github.com/login/oauth/access_token',
@@ -53,7 +53,7 @@ CREATE API INTEGRATION IF NOT EXISTS GITHUB_MCP_INTEGRATION
 ALTER API INTEGRATION IF EXISTS GITHUB_MCP_INTEGRATION SET
     API_ALLOWED_PREFIXES = ('https://api.githubcopilot.com')
     API_USER_AUTHENTICATION = (
-        TYPE                       = OAUTH,
+        TYPE                       = OAUTH2,
         OAUTH_CLIENT_ID            = '<% github_oauth_client_id %>',
         OAUTH_CLIENT_SECRET        = '<% github_oauth_client_secret %>',
         OAUTH_TOKEN_ENDPOINT       = 'https://github.com/login/oauth/access_token',
