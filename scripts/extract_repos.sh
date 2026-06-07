@@ -17,10 +17,11 @@
 #
 # What it does:
 #   1. Clones artwork-db twice (fresh clones -- filter-repo is destructive)
-#   2. Extracts dbt-diagnostics (single path)
+#   2. Extracts dbt-diagnostics (single path + restructure)
 #   3. Extracts snowflake-toolkit (multiple paths + rename)
-#   4. Validates both extractions
-#   5. Prints manual push commands (does NOT push automatically)
+#   4. Validates both extractions (commit count, file count, sentinel files)
+#   5. Applies post-extraction path fixups (REPO_ROOT, pyproject.toml, etc.)
+#   6. Prints manual push commands (does NOT push automatically)
 #
 # What it does NOT do:
 #   - Push to any remote (you inspect first, then push manually)
@@ -50,6 +51,7 @@ separator() { echo ""; echo "========================================"; echo "";
 validate_extraction() {
     local repo_dir="$1"
     local label="$2"
+    local sentinel="${3:-}"
 
     local commit_count
     commit_count=$(git -C "$repo_dir" rev-list --count HEAD)
@@ -63,6 +65,10 @@ validate_extraction() {
 
     if [[ "$file_count" -eq 0 ]]; then
         err "$label extraction has 0 tracked files. Something went wrong."
+    fi
+
+    if [[ -n "$sentinel" && ! -f "$repo_dir/$sentinel" ]]; then
+        err "$label extraction missing sentinel file: $sentinel"
     fi
 
     log "$label: $commit_count commits, $file_count files -- OK"
@@ -124,7 +130,19 @@ log "Running git filter-repo (keeping dbt_diagnostics/ only)..."
 
 git filter-repo --path dbt_diagnostics/ --force
 
-validate_extraction "$WORK_DIR/$DIAGNOSTICS_REPO_NAME" "dbt-diagnostics"
+log "Restructuring paths (pyproject.toml + docs to repo root)..."
+
+git filter-repo \
+    --path-rename dbt_diagnostics/pyproject.toml:pyproject.toml \
+    --path-rename dbt_diagnostics/BUILD_PROMPT.md:BUILD_PROMPT.md \
+    --path-rename dbt_diagnostics/CHANGELOG.md:CHANGELOG.md \
+    --path-rename dbt_diagnostics/HANDOFF_PROMPT.md:docs/HANDOFF_PROMPT.md \
+    --path-rename dbt_diagnostics/HANDOFF_PROMPT_2.md:docs/HANDOFF_PROMPT_2.md \
+    --path-rename dbt_diagnostics/LINEAGE_TRAIL_PLAN.md:docs/LINEAGE_TRAIL_PLAN.md \
+    --force
+
+validate_extraction "$WORK_DIR/$DIAGNOSTICS_REPO_NAME" "dbt-diagnostics" \
+    "dbt_diagnostics/__init__.py"
 
 cd "$WORK_DIR"
 
@@ -161,6 +179,7 @@ git filter-repo \
     --path scripts/sql/show_active_sessions.sql \
     --path scripts/sql/show_admin_account_grants.sql \
     --path scripts/sql/checkpoint.sql \
+    --path git-setup/operator/register_admin_public_key.sql \
     --path tests/ \
     --path docs/framework/ \
     --force
@@ -184,15 +203,35 @@ git filter-repo \
     --path-rename scripts/git_mark_executable.sh:git_mark_executable.sh \
     --path-rename scripts/executable_files.txt:executable_files.txt \
     --path-rename scripts/sql/:sql/ \
+    --path-rename git-setup/operator/register_admin_public_key.sql:snowflake_cli/sql/register_admin_public_key.sql \
     --path-rename docs/framework/:docs/ \
     --force
 
-validate_extraction "$WORK_DIR/$TOOLKIT_REPO_NAME" "snowflake-toolkit"
+validate_extraction "$WORK_DIR/$TOOLKIT_REPO_NAME" "snowflake-toolkit" \
+    "snowflake_cli/_lib.sh"
 
 cd "$WORK_DIR"
 
 # =============================================================================
-# STEP 3: Summary and push instructions
+# STEP 3: Apply post-extraction path fixups
+# =============================================================================
+
+separator
+log "STEP 3: Applying post-extraction path fixups"
+
+FIXUP_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/post_extraction_fixup.sh"
+
+if [[ -f "$FIXUP_SCRIPT" ]]; then
+    bash "$FIXUP_SCRIPT" diagnostics "$WORK_DIR/$DIAGNOSTICS_REPO_NAME"
+    bash "$FIXUP_SCRIPT" toolkit "$WORK_DIR/$TOOLKIT_REPO_NAME"
+else
+    log "WARNING: post_extraction_fixup.sh not found at $FIXUP_SCRIPT"
+    log "Extracted repos have correct history but need manual path fixes."
+    log "See docs/reviews/extract_repos_verification.md for the list."
+fi
+
+# =============================================================================
+# STEP 4: Summary and push instructions
 # =============================================================================
 
 separator
