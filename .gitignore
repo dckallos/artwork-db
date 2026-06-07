@@ -46,3 +46,5 @@ artwork_pipeline/models/staging/met/sample.csv
 
 .folder
 
+logs/dbt.log
+artwork_pipeline/package-lock.yml
