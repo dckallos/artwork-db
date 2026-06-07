@@ -40,3 +40,4 @@ output/extension-map.md
 *.folder
 .envrc
 artwork_pipeline/.user.yml
+artwork_pipeline/models/staging/met/sample.csv
