@@ -1,0 +1,5 @@
+scripts/dbt_orchestrate.sh
+scripts/dbt_orchestrate_modern.sh
+scripts/orchestrate.sh
+scripts/extract_repos.sh
+scripts/post_extraction_fixup.sh
