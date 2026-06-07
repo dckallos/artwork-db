@@ -44,7 +44,7 @@
 
 ### Plan writing: COMPLETE (updated 2026-06-07)
 
-Written to `docs/prompts/REPO_SEPARATION_PLAN.md` (1081 lines, 10 sections + 2 appendices).
+Written to `docs/prompts/REPO_SEPARATION_PLAN.md` (1065 lines, 10 sections + 2 appendices).
 
 ### Key decision: Model C (sibling repos) -- LOCKED IN
 
