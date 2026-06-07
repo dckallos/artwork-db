@@ -51,9 +51,9 @@ class Config:
     # (e.g. 1s, 2s, 4s, 8s, 16s, 30s, 30s) can ride out a sustained throttle.
     api_base: str = MET_API_BASE
     api_max_concurrency: int = int(os.getenv("MET_API_CONCURRENCY", "8"))
-    api_requests_per_second: float = float(os.getenv("MET_API_RPS", "10"))
+    api_requests_per_second: float = float(os.getenv("MET_API_RPS", "40"))
     api_max_retries: int = int(os.getenv("MET_API_MAX_RETRIES", "8"))
-    api_request_timeout_seconds: int = int(os.getenv("MET_API_TIMEOUT", "30"))
+    api_request_timeout_seconds: int = int(os.getenv("MET_API_TIMEOUT", "20"))
     api_user_agent: str = os.getenv(
         "MET_API_USER_AGENT",
         "artwork-db/1.0 (contact: daniel@porchanalytics.com)",
