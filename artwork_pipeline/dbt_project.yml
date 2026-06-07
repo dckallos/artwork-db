@@ -37,10 +37,12 @@ models:
       +schema: GOLD
       +tags: ["marts"]
 
-  # dbt_project_evaluator: materialized as views to avoid creating permanent tables.
+  # dbt_project_evaluator: package requires its staging/graph models to use
+  # table materialization (enforced by check_model_is_table macro). Other models
+  # use view to avoid permanent table sprawl.
   # Run with: dbt build --select package:dbt_project_evaluator
   dbt_project_evaluator:
-    +materialized: view
+    +materialized: table
     +schema: DBT_TEST__AUDIT
 
 # --- dbt_project_evaluator configuration ---

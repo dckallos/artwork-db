@@ -140,13 +140,6 @@ dbt show --select stg_met__artworks --limit 20
 dbt build --select package:dbt_project_evaluator
 ```
 
-### Cost monitoring
-
-```bash
-# Build Snowflake monitoring models (requires ACCOUNT_USAGE access)
-dbt run --select package:dbt_snowflake_monitoring
-```
-
 ## Project Structure
 
 ```
@@ -202,7 +195,6 @@ Unapproved schema names fail at **compile time** (not runtime). To add a new sch
 | `dbt_expectations` | 50+ statistical/shape tests (Great Expectations-style) |
 | `audit_helper` | Row/column comparison during refactoring |
 | `dbt_project_evaluator` | DAG hygiene, naming conventions, fanout checks |
-| `dbt_snowflake_monitoring` | Per-query/model cost attribution |
 
 ## Key Design Decisions
 
