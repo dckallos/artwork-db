@@ -1,6 +1,7 @@
 # AIC Extraction Layer -- Design Document
 
-> **Status:** Design (not yet implemented). Written 2026-06-07.
+> **Status:** Design FINALIZED (all open questions resolved 2026-06-07).
+> Not yet implemented.
 > **Branch:** `donkey-kong-sandbox`
 > **Audience:** Owner + next-window Cortex sessions.
 > **Companion:** `docs/prompts/AIC_EXTRACTION_DESIGN_PROMPT.md` (the brief that
@@ -14,7 +15,7 @@
 
 | Path | Mechanism | Volume | Warehouse cost | Freshness | Complexity |
 |------|-----------|--------|---------------|-----------|------------|
-| **A: S3 data dump** | Download `artic-api-data.tar.bz2` (~115 MB), extract, transform to NDJSON, COPY+MERGE into Bronze | 131k artworks + 15k agents (Tier 1) | ~10-20 warehouse-seconds (XS, COPY INTO + MERGE) | Monthly (dump updated monthly per README) | Low (one download, local transform, one MERGE) |
+| **A: S3 data dump** | Download `artic-api-data.tar.bz2` (~115 MB), selectively extract Tier 1 folders, transform to NDJSON, COPY+MERGE into Bronze | 131k artworks + 15k agents (Tier 1) | ~10-20 warehouse-seconds (XS, COPY INTO + MERGE) | Monthly (dump updated monthly per README) | Low (one download, selective extract, one MERGE) |
 | **B: API incremental** | Paginate `/artworks/search` with `source_updated_at >= ?` range query, page size 100 | Varies (days since last sync) | ~5-10 warehouse-seconds per delta run | Near-real-time (hours) | Medium (pagination, rate-limit handling, watermark tracking) |
 | **Hybrid (chosen)** | A for initial load + monthly refresh; B for between-dump freshness | Full corpus on snapshot; deltas between | A cost + B cost (modest) | Hours (API delta cadence) | Medium overall, but each path is individually simple |
 
@@ -30,27 +31,58 @@
   complete records, and image URLs are constructible from `image_id` without
   any API round-trip.
 
+### Tar extraction approach: Selective (DECIDED)
+
+Use Python's `tarfile` member filtering to extract **only** the `json/artworks/`
+and `json/agents/` folders from the tar.bz2. This saves ~1.5 GB of temp disk
+(~1 GB extracted vs ~2.5 GB for the full archive) and avoids cluttering the
+local filesystem with 25 unused entity folders.
+
+```python
+# Pseudocode for selective extraction
+with tarfile.open(tar_path, "r:bz2") as tf:
+    members = [m for m in tf.getmembers()
+               if any(m.name.startswith(f"json/{entity}/")
+                      for entity in ["artworks", "agents"])]
+    tf.extractall(path=extract_dir, members=members)
+```
+
+### Snapshot data source: Individual JSON files (DECIDED)
+
+Use the individual JSON files from `json/artworks/*.json` (131k files, ~5KB
+each) rather than the convenience `getting-started/allArtworks.jsonl`.
+Rationale: individual JSONs contain the **complete** record (every field);
+the JSONL shortcut contains only key fields and may omit data needed in
+Silver/Gold (e.g., full `category_ids`, `term_titles`, `alt_image_ids`).
+
 ### Data flow (snapshot path)
 
 ```
-artic-api-data.tar.bz2 (S3)
+artic-api-data.tar.bz2 (S3, ~115 MB)
   |
-  v  [download + extract locally, ~2 min]
-json/artworks/*.json  +  json/agents/*.json
+  v  [download to data/aic_dump.tar.bz2, ~2 min]
   |
-  v  [Python: read each .json, emit NDJSON lines]
-data/aic_artworks.ndjson  +  data/aic_agents.ndjson
+  v  [selective extract: only json/artworks/ + json/agents/]
+data/aic_extract/json/artworks/*.json  (~131k files)
+data/aic_extract/json/agents/*.json    (~15k files)
   |
-  v  [PUT to @BRONZE_LOAD_STAGE/aic/]
+  v  [Python: read each .json, emit one NDJSON line per record]
+data/aic_artworks.ndjson  (~650 MB uncompressed NDJSON)
+data/aic_agents.ndjson    (~75 MB uncompressed NDJSON)
+  |
+  v  [PUT to @BRONZE_LOAD_STAGE/aic/artworks/ and /aic/agents/]
 Snowflake internal stage
   |
-  v  [COPY INTO temp staging table]
+  v  [COPY INTO temp staging table (CREATE TEMPORARY TABLE)]
   |
-  v  [MERGE INTO AIC_SNAPSHOT / RAW_AIC_AGENTS keyed on PK]
+  v  [MERGE INTO RAW_AIC_ARTWORKS / RAW_AIC_AGENTS keyed on PK]
 Bronze tables (idempotent, one row per entity)
+  |
+  v  [Post-MERGE: detect + soft-delete deaccessioned rows via _batch_id anti-join]
+_is_deleted = TRUE, _deleted_at = NOW() for rows not in current batch
 ```
 
-### Data flow (delta path)
+### Data flow (delta path -- future enhancement)
 
 ```
 API: /artworks/search?query[range][source_updated_at][gte]=<watermark>
@@ -103,6 +135,17 @@ Can revisit if a specific Gold use case emerges.
 
 ## 3. Bronze Table Design
 
+### Decision: Single artworks table (DECIDED -- OQ-2 resolved)
+
+AIC uses a **single `RAW_AIC_ARTWORKS` table** for both snapshot (dump) and
+delta (API) loads. This differs from the Met's two-table split because:
+
+1. AIC's dump and API return the **same JSON shape** -- no structural
+   difference to separate.
+2. Delete-detection works via `_batch_id` staleness (rows whose `_batch_id`
+   doesn't match the current snapshot batch were not in the dump).
+3. Simpler DDL, simpler Silver (no reconciliation between two tables).
+
 ### Design principles (aligned to Met pattern)
 
 1. **Bronze = land, don't interpret.** Store the complete API/dump JSON as
@@ -112,73 +155,84 @@ Can revisit if a specific Gold use case emerges.
    not to Bronze landing.
 3. **MERGE, not append.** Primary key declares uniqueness intent; the MERGE
    load pattern enforces it at runtime (Snowflake does not enforce PK/UNIQUE).
-4. **Delete-propagation via snapshot anti-join.** Objects present in a prior
-   snapshot but absent from the current dump are detected as deaccessions.
+4. **Soft-delete for deaccessions.** `_is_deleted` + `_deleted_at` +
+   `_deletion_reason` columns enable explicit rights-compliance signaling
+   without removing rows from Bronze.
 5. **Naming convention:** `RAW_AIC_{SOURCE_ENTITY_NAME}` in Bronze (preserves
    the source API's vocabulary). Human-readable renames happen in Silver.
 
+### Final Bronze table inventory (3 tables)
+
+| Table | Entity | Purpose |
+|-------|--------|---------|
+| `RAW_AIC_ARTWORKS` | artworks | Single table for both snapshot (dump) and delta (API) loads. One row per `artwork_id`. Soft-delete columns for deaccession tracking. |
+| `RAW_AIC_AGENTS` | agents | All agents (artists + non-artists). One row per `agent_id`. Loaded from the dump only (no delta path in v1). |
+| `AIC_LOAD_WATERMARK` | metadata | One row per entity type tracking last delta timestamp. |
+
 ### Proposed DDL
 
-#### AIC_SNAPSHOT (new -- peer to MET_CSV_SNAPSHOT)
-
-The authoritative full-dump landing table. One row per artwork, keyed on
-`artwork_id`. Supports re-runnable MERGE loads and deaccession detection.
+#### RAW_AIC_ARTWORKS (replaces the existing skeleton)
 
 ```sql
--- In infrastructure/create_bronze_tables.sql (append or new file)
-CREATE TABLE IF NOT EXISTS AIC_SNAPSHOT (
-    artwork_id      INT             NOT NULL
-        COMMENT 'AIC API artwork id (from data dump); PK -> one row per artwork',
-    raw_payload     VARIANT         NOT NULL
-        COMMENT 'Complete raw JSON from the data dump (one file per artwork)',
-    _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
-        COMMENT 'UTC timestamp the snapshot row was landed',
-    _source_system  VARCHAR         NOT NULL DEFAULT 'art_institute_chicago'
+CREATE OR REPLACE TABLE BRONZE.RAW_AIC_ARTWORKS (
+    artwork_id        INT             NOT NULL
+        COMMENT 'AIC API artwork id; PK (one row per artwork)',
+    raw_payload       VARIANT         NOT NULL
+        COMMENT 'Complete raw JSON from the data dump or API response',
+    _extracted_at     TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+        COMMENT 'UTC timestamp the row was landed or last updated',
+    _source_system    VARCHAR         NOT NULL DEFAULT 'art_institute_chicago'
         COMMENT 'Source system identifier',
-    _batch_id       VARCHAR         NOT NULL
-        COMMENT 'UUID identifying the extraction batch',
-    CONSTRAINT pk_aic_snapshot PRIMARY KEY (artwork_id)
+    _batch_id         VARCHAR         NOT NULL
+        COMMENT 'UUID identifying the extraction batch (snapshot or delta)',
+    _is_deleted       BOOLEAN         NOT NULL DEFAULT FALSE
+        COMMENT 'TRUE if artwork was detected as deaccessioned/withdrawn',
+    _deleted_at       TIMESTAMP_NTZ
+        COMMENT 'UTC timestamp when deaccession was detected (NULL if active)',
+    _deletion_reason  VARCHAR
+        COMMENT 'How deaccession was detected: snapshot_anti_join | api_404 | manual',
+    CONSTRAINT pk_raw_aic_artworks PRIMARY KEY (artwork_id)
 )
-COMMENT = 'Raw AIC data-dump snapshot (full artworks, VARIANT). One row per artwork_id (PK). Feeds delta detection + deaccession anti-join.';
+COMMENT = 'Raw AIC artworks (VARIANT). Both snapshot and delta paths MERGE here. Soft-delete columns track deaccessions for rights compliance.';
 ```
 
-#### RAW_AIC_ARTWORKS (exists -- add PK constraint)
-
-The existing table in `create_bronze_tables.sql` becomes the target for
-**API delta loads** (incremental upserts between dump refreshes). Propose
-adding a PK constraint for optimizer hints and consistency:
+#### RAW_AIC_AGENTS
 
 ```sql
--- Idempotent ALTER to add PK to existing table:
-ALTER TABLE IF EXISTS RAW_AIC_ARTWORKS
-    ADD CONSTRAINT pk_raw_aic_artworks PRIMARY KEY (artwork_id);
-```
-
-**Design note:** Two artwork tables (`AIC_SNAPSHOT` vs `RAW_AIC_ARTWORKS`)
-mirrors the Met pattern (`MET_CSV_SNAPSHOT` vs `RAW_MET_OBJECTS`). The
-snapshot is the complete truth from the bulk dump; the raw table accumulates
-API-sourced enrichments/deltas. Silver reconciles them.
-
-#### RAW_AIC_AGENTS (new)
-
-```sql
-CREATE TABLE IF NOT EXISTS RAW_AIC_AGENTS (
-    agent_id        INT             NOT NULL
+CREATE TABLE IF NOT EXISTS BRONZE.RAW_AIC_AGENTS (
+    agent_id          INT             NOT NULL
         COMMENT 'AIC API agent id; includes artists, donors, collectors',
-    raw_payload     VARIANT         NOT NULL
+    raw_payload       VARIANT         NOT NULL
         COMMENT 'Complete raw JSON from agents/ data dump',
-    _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+    _extracted_at     TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
         COMMENT 'UTC timestamp of extraction',
-    _source_system  VARCHAR         NOT NULL DEFAULT 'art_institute_chicago'
+    _source_system    VARCHAR         NOT NULL DEFAULT 'art_institute_chicago'
         COMMENT 'Source system identifier',
-    _batch_id       VARCHAR         NOT NULL
+    _batch_id         VARCHAR         NOT NULL
         COMMENT 'UUID identifying the extraction batch',
     CONSTRAINT pk_raw_aic_agents PRIMARY KEY (agent_id)
 )
 COMMENT = 'Raw AIC agents (artists + non-artists). One row per agent_id (PK). Filter is_artist in Silver.';
 ```
 
-#### Naming rationale
+#### AIC_LOAD_WATERMARK
+
+```sql
+CREATE TABLE IF NOT EXISTS BRONZE.AIC_LOAD_WATERMARK (
+    entity_type             VARCHAR         NOT NULL
+        COMMENT 'Entity being tracked (artworks, agents)',
+    last_source_updated_at  TIMESTAMP_NTZ   NOT NULL
+        COMMENT 'Max source_updated_at from the last successful delta load',
+    last_batch_id           VARCHAR         NOT NULL
+        COMMENT 'Batch UUID of the last successful delta load',
+    updated_at              TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+        COMMENT 'When this watermark row was last written',
+    CONSTRAINT pk_aic_load_watermark PRIMARY KEY (entity_type)
+)
+COMMENT = 'High-water mark for AIC API delta queries. One row per entity type.';
+```
+
+### Naming rationale
 
 | Layer | Table name | Why |
 |-------|-----------|-----|
@@ -203,9 +257,9 @@ extraction/aic/
     config.py            # Config dataclass + .env loading
     loader.py            # Snapshot + delta logic (download, transform, upload, merge)
     sql/
-        merge_aic_snapshot.sql      # MERGE INTO AIC_SNAPSHOT (template)
-        merge_aic_artworks.sql      # MERGE INTO RAW_AIC_ARTWORKS (delta path)
-        merge_aic_agents.sql        # MERGE INTO RAW_AIC_AGENTS (template)
+        merge_aic_artworks.sql   # MERGE INTO RAW_AIC_ARTWORKS (both paths)
+        merge_aic_agents.sql     # MERGE INTO RAW_AIC_AGENTS
+        soft_delete_deaccessioned.sql  # UPDATE _is_deleted for stale rows
 ```
 
 **Target: 3 Python files + 3 SQL templates.** Compare to Met's 10 Python
@@ -234,9 +288,9 @@ python -m extraction.aic.run <subcommand> [options]
 
 | Subcommand | Description | Options |
 |-----------|-------------|---------|
-| `snapshot` | Download the S3 data dump, extract Tier 1 entities, transform to NDJSON, MERGE into Bronze snapshot tables | `--no-refresh` (reuse cached tar), `--limit N` (cap records for smoke test), `--entities artworks,agents` (select which to load) |
+| `snapshot` | Download the S3 data dump, selectively extract Tier 1 entities, transform to NDJSON, MERGE into Bronze, soft-delete deaccessioned rows | `--no-refresh` (reuse cached tar), `--limit N` (cap records for smoke test), `--entities artworks,agents` (select which to load) |
 | `delta` | Query the API for records changed since the watermark, MERGE into `RAW_AIC_ARTWORKS` | `--since YYYY-MM-DD` (override watermark), `--limit N` (cap pages), `--dry-run` (fetch but don't upload) |
-| `status` | Print current watermark, row counts, last batch timestamp | (none) |
+| `status` | Print current watermark, row counts, last batch timestamp, deaccession count | (none) |
 
 ### Example usage
 
@@ -244,7 +298,10 @@ python -m extraction.aic.run <subcommand> [options]
 # Initial full load (first time)
 python -m extraction.aic.run snapshot
 
-# Incremental update (between monthly dumps)
+# Monthly refresh (re-download dump, re-MERGE, detect deaccessions)
+python -m extraction.aic.run snapshot
+
+# Incremental update (between monthly dumps) -- FUTURE ENHANCEMENT
 python -m extraction.aic.run delta
 
 # Smoke test (5 records only)
@@ -256,29 +313,106 @@ python -m extraction.aic.run status
 
 ---
 
-## 6. Delta / Freshness Strategy
+## 6. Deaccession Detection & Rights Compliance
+
+### Decision: Soft-delete in Bronze (DECIDED -- OQ-4 resolved)
+
+When a full snapshot run detects that an `artwork_id` was in the prior load
+but is NOT in the current dump, the row is **soft-deleted in place**:
+
+```sql
+-- soft_delete_deaccessioned.sql (run post-MERGE on each snapshot)
+UPDATE {target}
+SET _is_deleted      = TRUE,
+    _deleted_at      = CURRENT_TIMESTAMP(),
+    _deletion_reason = 'snapshot_anti_join'
+WHERE _batch_id != '{current_batch_id}'
+  AND _is_deleted = FALSE;
+```
+
+### Why soft-delete in Bronze (not Silver-only)?
+
+The owner's legal concern: if an artwork leaves the AIC and loses OpenAccess
+status, any downstream consumer of image URLs must stop serving that image
+**immediately** (next pipeline refresh). This requires the deaccession signal
+to be:
+
+1. **Explicit** -- not implicit (a stale `_batch_id` that Silver must interpret).
+2. **Visible at every layer** -- if someone queries Bronze directly (bypassing
+   Silver), the `_is_deleted = TRUE` flag is unambiguous.
+3. **Auditable** -- `_deleted_at` and `_deletion_reason` provide a compliance
+   trail ("we detected removal on date X via method Y").
+
+If we relied on Silver-only detection (Option C), a bug in the Silver model
+or a direct Bronze query would silently serve deaccessioned artwork images
+with no warning. For a rights-sensitive pipeline, the deletion signal must be
+at the source-of-truth layer.
+
+### Detection mechanisms (current + future)
+
+| Mechanism | Trigger | Latency | Status |
+|-----------|---------|---------|--------|
+| **Snapshot anti-join** | Monthly `snapshot` re-run: rows with stale `_batch_id` after MERGE | Up to 30 days | **v1 (implementing now)** |
+| **API liveness spot-check** | On each `delta` run: query API for a sample of known `artwork_id`s; 404 = soft-delete immediately | Hours | **Future enhancement** |
+| **Full liveness sweep** | Periodically check ALL 131k artwork_ids against the API | Hours (but expensive: 131k API calls) | **Future (if needed)** |
+| **Manual override** | Owner sets `_deletion_reason = 'manual'` via SQL | Immediate | **Always available** |
+
+### Downstream circuit-breakers (Silver + Gold)
+
+Every downstream model MUST filter on `_is_deleted`:
+
+```sql
+-- Silver model (dbt or DDL): hard exclusion
+WHERE _is_deleted = FALSE
+
+-- Silver image URL computation: double-gate (rights + liveness)
+CASE
+    WHEN _is_deleted = FALSE
+         AND raw_payload:is_public_domain::BOOLEAN = TRUE
+         AND raw_payload:image_id::STRING IS NOT NULL
+    THEN 'https://www.artic.edu/iiif/2/'
+         || raw_payload:image_id::STRING
+         || '/full/843,/0/default.jpg'
+    ELSE NULL
+END AS primary_image_url
+
+-- Gold OpenAccess listing: belt-and-suspenders
+WHERE is_public_domain = TRUE
+  AND is_deleted = FALSE
+```
+
+### API liveness spot-check (future enhancement design)
+
+When the `delta` subcommand is implemented, it should include an optional
+`--check-liveness` flag (or always-on sampling) that:
+
+1. Selects a random sample of N artwork_ids from `RAW_AIC_ARTWORKS` where
+   `_is_deleted = FALSE` (default N = 100, configurable).
+2. Queries the AIC API for each: `GET /api/v1/artworks/{id}`.
+3. If the API returns 404: immediately soft-delete that row
+   (`_deletion_reason = 'api_404'`).
+4. If the API returns 200: no action (artwork is still live).
+
+This reduces worst-case deaccession detection from 30 days to the delta
+cadence (e.g., daily). Cost: ~100 extra API calls per delta run (~10 seconds
+at AIC's typical 722ms response time).
+
+**Priority-weighted sampling:** Rather than pure random, preferentially
+check artworks that:
+- Have `is_public_domain = TRUE` (rights-sensitive subset)
+- Were last confirmed a long time ago (oldest `_extracted_at`)
+- Are being actively served in Gold (if usage tracking exists)
+
+---
+
+## 7. Delta / Freshness Strategy
 
 ### Watermark table: `AIC_LOAD_WATERMARK`
 
 A minimal one-row-per-entity control table tracking the high-water mark for
-incremental API queries:
+incremental API queries (see DDL in Section 3).
 
-```sql
-CREATE TABLE IF NOT EXISTS AIC_LOAD_WATERMARK (
-    entity_type             VARCHAR         NOT NULL
-        COMMENT 'Entity being tracked (artworks, agents)',
-    last_source_updated_at  TIMESTAMP_NTZ   NOT NULL
-        COMMENT 'Max source_updated_at from the last successful delta load',
-    last_batch_id           VARCHAR         NOT NULL
-        COMMENT 'Batch UUID of the last successful delta load',
-    updated_at              TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
-        COMMENT 'When this watermark row was last written',
-    CONSTRAINT pk_aic_load_watermark PRIMARY KEY (entity_type)
-)
-COMMENT = 'High-water mark for AIC API delta queries. One row per entity type.';
-```
-
-### Delta detection mechanism
+### Delta detection mechanism (future enhancement)
 
 The AIC API supports Elasticsearch range queries on `source_updated_at`:
 
@@ -288,61 +422,50 @@ GET /api/v1/artworks/search?query[range][source_updated_at][gte]=2025-01-01
     &limit=100&page=1&fields=id,title,image_id,...
 ```
 
-The loader:
+The loader (when implemented):
 1. Reads `last_source_updated_at` from `AIC_LOAD_WATERMARK` for entity `artworks`.
 2. Queries the API with that timestamp as the `gte` bound.
 3. Paginates until exhausted (or `--limit` cap hit).
 4. MERGEs results into `RAW_AIC_ARTWORKS`.
 5. Updates the watermark to `max(source_updated_at)` from the batch.
 
-### Snapshot refresh cadence
+### v1 scope: Snapshot only (manual monthly)
 
-The S3 dump is updated monthly. The `snapshot` subcommand should be re-run
-monthly (or whenever the owner wants a full reconciliation / deaccession
-check). Between dumps, `delta` keeps Bronze fresh.
+For v1 (development phase), only the `snapshot` subcommand is implemented.
+The `delta` subcommand is stubbed in the CLI (with a "not yet implemented"
+message) and fully designed here for future build-out. The watermark table
+DDL is created now so the schema is stable when delta is added.
 
-### Delete-propagation (deaccession detection)
+### Provenance tracking (DECIDED -- OQ-3 resolved)
 
-On each `snapshot` run, after the MERGE completes:
-- **Deaccessioned artworks** = rows in `AIC_SNAPSHOT` whose `artwork_id` does
-  NOT appear in the current dump's set of IDs.
-- Detection query (run post-MERGE):
+Both snapshot and delta writes go to the **same table** (`RAW_AIC_ARTWORKS`).
+Provenance is tracked via `_batch_id`:
+- Snapshot batches use a UUID prefixed with `snap_` (e.g., `snap_a1b2c3d4...`)
+- Delta batches use a UUID prefixed with `delta_` (e.g., `delta_e5f6g7h8...`)
 
-```sql
--- Detect deaccessioned artworks (present in prior snapshot, absent from current load)
-SELECT s.artwork_id, s.raw_payload:title::STRING AS title
-FROM BRONZE.AIC_SNAPSHOT s
-WHERE s._batch_id != '<current_batch_id>'
-  AND s.artwork_id NOT IN (
-      SELECT artwork_id FROM BRONZE.AIC_SNAPSHOT WHERE _batch_id = '<current_batch_id>'
-  );
-```
-
-**Note:** This query works because the MERGE updates `_batch_id` for all
-matched rows. Any row still carrying the old `_batch_id` after MERGE was NOT
-in the current dump -- i.e., it was removed (deaccessioned, merged, or
-withdrawn).
-
-**Alternative (cleaner):** Track a `_last_seen_batch_id` column and soft-delete
-rows not seen in the latest batch. Design decision deferred to implementation --
-both approaches work.
+This lets you distinguish the origin of any row's last update without
+needing separate tables. Delete-detection only fires on snapshot runs (where
+the MERGE touches all 131k rows and leaves stale `_batch_id` on removed
+artworks).
 
 ---
 
-## 7. Image URL Handling
+## 8. Image URL Handling
 
 ### Decision: Store `image_id` in Bronze; compute IIIF URL in Silver
 
 **Bronze:** The raw payload already contains `image_id` (a UUID string). No
 transformation needed. Land as-is inside the VARIANT blob.
 
-**Silver:** Compute the full IIIF URL as a derived column:
+**Silver:** Compute the full IIIF URL as a derived column, gated on BOTH
+`is_public_domain` AND `_is_deleted`:
 
 ```sql
 -- In a Silver model (dbt or DDL)
 CASE
     WHEN raw_payload:is_public_domain::BOOLEAN = TRUE
          AND raw_payload:image_id::STRING IS NOT NULL
+         AND _is_deleted = FALSE
     THEN 'https://www.artic.edu/iiif/2/'
          || raw_payload:image_id::STRING
          || '/full/843,/0/default.jpg'
@@ -355,8 +478,10 @@ END AS primary_image_url
 - AIC's license terms: images are CC0 **only when `is_public_domain` is true**.
 - Non-public-domain artworks may still have an `image_id`, but we MUST NOT
   construct/serve the URL (it would be a rights violation).
-- **Enforcement point:** Silver. Bronze stores everything; Silver applies the
-  gate. This keeps Bronze as an uninterpreted, replayable source of truth.
+- **Enforcement point:** Silver (with `_is_deleted` as an additional gate).
+  Bronze stores everything; Silver applies both the rights filter AND the
+  liveness filter. This keeps Bronze as an uninterpreted, replayable source
+  of truth while ensuring legal compliance at the consumption layer.
 
 ### The IIIF base URL
 
@@ -376,7 +501,7 @@ high-res but doubles bandwidth and storage. Use `843` as the default.
 
 ---
 
-## 8. Cross-Source Entity Resolution (Forward-Looking)
+## 9. Cross-Source Entity Resolution (Forward-Looking)
 
 ### The problem
 
@@ -434,20 +559,7 @@ CREATE TABLE GOLD.DIM_ARTISTS (
 
 ---
 
-## 9. Open Questions (Require Owner Input Before Implementation)
-
-| # | Question | Options | Impact |
-|---|----------|---------|--------|
-| **OQ-1** | Should `snapshot` load the full tar.bz2 (all 27 entity folders) and just MERGE Tier 1, or only extract Tier 1 folders from the tar? | A: Extract all, load Tier 1 (simpler tar handling). B: Selective extraction (saves disk but more complex tar logic). | Disk usage during extraction (~2.5 GB vs ~1 GB). |
-| **OQ-2** | Two-table pattern (`AIC_SNAPSHOT` + `RAW_AIC_ARTWORKS`) vs single table? The Met has this split because CSV snapshot and API enrichment are fundamentally different data. For AIC, the dump and API return the same shape. | A: Two tables (mirrors Met; snapshot for delete-detection, raw for deltas). B: Single table with MERGE from both paths (simpler; delete-detection via `_batch_id` staleness). | DDL complexity, Silver reconciliation logic. |
-| **OQ-3** | Should the delta path also update `AIC_SNAPSHOT`, or only `RAW_AIC_ARTWORKS`? | A: Delta updates both (single source of truth). B: Delta only touches raw; snapshot is only refreshed on full dump re-run (cleaner separation). | Deaccession detection accuracy between dump refreshes. |
-| **OQ-4** | Soft-delete strategy for deaccessioned artworks. | A: Add `_is_deleted BOOLEAN` + `_deleted_at TIMESTAMP` to snapshot table. B: Move to a separate `AIC_DEACCESSIONED` table. C: Just flag in Silver (don't mutate Bronze). | Whether Bronze ever mutates post-land. Option C is purest medallion. |
-| **OQ-5** | Should we load the `getting-started/allArtworks.jsonl` file (single JSONL, key fields only) as a lightweight alternative to extracting 131k individual JSON files? | A: Use individual JSONs (complete data, nothing lost). B: Use JSONL shortcut (faster, but fewer fields). C: Try JSONL first, fall back to individual JSONs if fields are insufficient. | Load speed vs data completeness. |
-| **OQ-6** | Frequency of `delta` runs -- manual only, or schedule a Snowflake Task? | A: Manual (`python -m extraction.aic.run delta`). B: Snowflake Task calling an external function / stored proc. C: Decide later after v1 works. | Automation complexity. |
-
----
-
-## 10. Summary of Decisions
+## 10. Summary of All Decisions
 
 | # | Decision | Choice | Key rationale |
 |---|----------|--------|---------------|
@@ -456,10 +568,17 @@ CREATE TABLE GOLD.DIM_ARTISTS (
 | D-3 | Bronze table naming | `RAW_AIC_AGENTS` (source vocab) | Bronze preserves API semantics; Silver renames to `AIC_ARTISTS`. |
 | D-4 | Load semantics | MERGE keyed on PK | Idempotent, supports delete-detection, matches Met pattern. |
 | D-5 | `is_public_domain` gate | Silver (not Bronze) | Bronze lands everything; Silver applies rights filtering for image URLs. |
-| D-6 | Image URLs | Compute in Silver from `image_id` | No API call needed; simple string construction with `is_public_domain` gate. |
+| D-6 | Image URLs | Compute in Silver from `image_id` | No API call needed; simple string construction with double gate (public domain + not deleted). |
 | D-7 | SQLite | None | No multi-hour crawl; re-run from scratch is cheap (~2 min). |
 | D-8 | Entity resolution | ULAN primary key; fuzzy name+dates fallback | Both sources expose ULAN; Gold `DIM_ARTISTS` unifies. |
 | D-9 | File count target | 3 Python + 3 SQL | Dramatically simpler than Met's 10-file architecture. |
+| D-10 | Tar extraction | Selective (Tier 1 folders only) | Saves ~1.5 GB temp disk; `tarfile` member filtering is straightforward. |
+| D-11 | Table count (artworks) | Single table (`RAW_AIC_ARTWORKS`) | Dump and API return same shape; no structural reason to split. |
+| D-12 | Deaccession handling | Soft-delete in Bronze (`_is_deleted` + `_deleted_at` + `_deletion_reason`) | Explicit, auditable, visible at every layer. Rights compliance demands unambiguous signal. |
+| D-13 | Deaccession detection | Monthly snapshot anti-join (v1); API liveness spot-check (future) | 30-day latency acceptable in dev; spot-check design ready for when production needs tighter SLA. |
+| D-14 | Delta provenance | `_batch_id` prefix distinguishes `snap_*` vs `delta_*` | Single table, clear lineage without schema complexity. |
+| D-15 | Snapshot data source | Individual JSON files (complete records) | JSONL shortcut may omit fields needed in Silver/Gold. |
+| D-16 | Delta scheduling | Manual only in v1; decide automation after v1 works | No premature complexity; `delta` CLI subcommand stubbed for future. |
 
 ---
 
@@ -474,13 +593,18 @@ AIC_DEFAULT_IMAGE_WIDTH = 843
 AIC_API_PAGE_SIZE = 100  # max supported by the API
 
 # Tier 1 entity folders in the data dump tar
-AIC_DUMP_ENTITY_FOLDERS = ["artworks", "agents"]
+AIC_TIER1_ENTITIES = ["artworks", "agents"]
+
+# Batch ID prefixes for provenance tracking
+BATCH_PREFIX_SNAPSHOT = "snap"
+BATCH_PREFIX_DELTA = "delta"
 ```
 
-## Appendix B: MERGE Template (snapshot path)
+## Appendix B: MERGE Template (artworks)
 
 ```sql
--- merge_aic_snapshot.sql (rendered with str.format)
+-- merge_aic_artworks.sql (rendered with str.format)
+-- Used by both snapshot and delta paths (same target table)
 MERGE INTO {target} AS t
 USING (
     SELECT artwork_id, raw_payload, _batch_id
@@ -491,12 +615,35 @@ ON t.artwork_id = s.artwork_id
 WHEN MATCHED THEN UPDATE SET
     t.raw_payload   = s.raw_payload,
     t._extracted_at = CURRENT_TIMESTAMP(),
-    t._batch_id     = s._batch_id
+    t._batch_id     = s._batch_id,
+    t._is_deleted   = FALSE,
+    t._deleted_at   = NULL,
+    t._deletion_reason = NULL
 WHEN NOT MATCHED THEN INSERT (artwork_id, raw_payload, _source_system, _batch_id)
     VALUES (s.artwork_id, s.raw_payload, 'art_institute_chicago', s._batch_id);
 ```
 
-## Appendix C: Comparison to Met Extractor
+**Note:** The WHEN MATCHED clause resets `_is_deleted` to FALSE. This handles
+the edge case where a previously-deaccessioned artwork reappears in a later
+dump (e.g., returned from loan, re-accessioned). The row is "un-deleted"
+automatically on the next MERGE.
+
+## Appendix C: Soft-Delete Template (post-snapshot)
+
+```sql
+-- soft_delete_deaccessioned.sql (rendered with str.format)
+-- Run AFTER the snapshot MERGE completes.
+-- Any row whose _batch_id does not match the current snapshot batch was NOT
+-- in the dump -> deaccessioned / withdrawn / merged into another record.
+UPDATE {target}
+SET _is_deleted      = TRUE,
+    _deleted_at      = CURRENT_TIMESTAMP(),
+    _deletion_reason = 'snapshot_anti_join'
+WHERE _batch_id != '{current_batch_id}'
+  AND _is_deleted = FALSE;
+```
+
+## Appendix D: Comparison to Met Extractor
 
 | Dimension | Met | AIC |
 |-----------|-----|-----|
@@ -507,4 +654,25 @@ WHEN NOT MATCHED THEN INSERT (artwork_id, raw_payload, _source_system, _batch_id
 | Enrichment pattern | Worklist: lease-claim-fetch-callback loop | N/A (dump has everything) |
 | File count | 10 Python + 11 SQL | 3 Python + 3 SQL |
 | Time to full load | Hours (API throttle at ~40 rps) | Minutes (download + transform + MERGE) |
-| Delete detection | Anti-join on `MET_CSV_SNAPSHOT` | Anti-join on `AIC_SNAPSHOT` (same pattern) |
+| Delete detection | Anti-join on `MET_CSV_SNAPSHOT` | Soft-delete via `_batch_id` staleness on `RAW_AIC_ARTWORKS` |
+| Deaccession columns | None (Met uses absence from snapshot) | `_is_deleted`, `_deleted_at`, `_deletion_reason` (explicit) |
+| Rights gate | `isPublicDomain` in Silver | `is_public_domain` AND `_is_deleted = FALSE` in Silver (double gate) |
+
+## Appendix E: Open Items Remaining (implementation-phase)
+
+These are NOT design decisions -- they are implementation details to resolve
+when coding begins:
+
+1. **Tar caching strategy:** How long to keep `data/aic_dump.tar.bz2` on disk?
+   (Propose: keep until next `--no-refresh` run overwrites it; `.gitignore` the
+   `data/` directory.)
+2. **NDJSON chunking:** Should `aic_artworks.ndjson` be split into multiple
+   files for parallel COPY INTO? (Propose: single file for v1; revisit if
+   COPY INTO takes >30 seconds.)
+3. **Temp staging table cleanup:** Use `CREATE TEMPORARY TABLE` (auto-drop on
+   session end) or explicit `DROP TABLE` after MERGE? (Propose: TEMPORARY.)
+4. **Error handling on download:** Retry logic for the S3 tar download (network
+   flap mid-download of 115 MB). (Propose: simple retry with `requests` +
+   `stream=True` + resume via `Range` header if supported.)
+5. **Progress reporting:** During the 131k JSON-to-NDJSON transform, emit
+   progress every N records. (Propose: every 10,000.)
