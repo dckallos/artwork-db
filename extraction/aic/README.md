@@ -111,12 +111,9 @@ watermark state for all AIC Bronze tables.
 | `SNOWFLAKE_ACCOUNT` | *(required)* | Snowflake account identifier. |
 | `SNOWFLAKE_USER` | *(required)* | Service user (`ARTWORK_LOADER_SVC`). |
 | `SNOWFLAKE_PRIVATE_KEY_FILE` | *(required)* | Path to the unencrypted `.p8` private key. |
-| `SNOWFLAKE_PRIVATE_KEY_FILE_PWD` | `None` | Passphrase (only if key is encrypted). |
 | `SNOWFLAKE_ROLE` | `ARTWORK_LOADER` | Role assumed for Bronze writes. |
 | `SNOWFLAKE_WAREHOUSE` | `ARTWORK_WH` | Warehouse for COPY/MERGE ops. |
 | `SNOWFLAKE_DATABASE` | `ARTWORK_DB` | Target database. |
-| `SNOWFLAKE_SCHEMA` | `BRONZE` | Target schema. |
-| `SNOWFLAKE_STAGE` | `bronze_load_stage` | Internal stage for PUT + COPY INTO. |
 | `AIC_DATA_DIR` | `./data` | Local directory for cached files. |
 | `AIC_TAR_PATH` | `./data/aic_dump.tar.bz2` | Path to the cached data dump. |
 | `AIC_EXTRACT_DIR` | `./data/aic_extract` | Extraction target directory. |

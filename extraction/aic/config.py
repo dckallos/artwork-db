@@ -66,7 +66,7 @@ class Config:
     snowflake_account: Optional[str] = os.getenv("SNOWFLAKE_ACCOUNT")
     snowflake_user: Optional[str] = os.getenv("SNOWFLAKE_USER")
     snowflake_private_key_file: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
-    snowflake_private_key_file_pwd: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE_PWD")
+    snowflake_private_key_file_pwd: Optional[str] = None
     snowflake_role: str = os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER")
     snowflake_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH")
     snowflake_database: str = os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB")
