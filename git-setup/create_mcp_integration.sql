@@ -66,5 +66,4 @@ ALTER API INTEGRATION IF EXISTS GITHUB_MCP_INTEGRATION SET
 -- 2. External MCP Server (schema-level, references the integration above)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE EXTERNAL MCP SERVER ARTWORK_OPS.GIT.GITHUB_MCP_SERVER
-    WITH NAME = 'GitHub'
     API_INTEGRATION = GITHUB_MCP_INTEGRATION;
