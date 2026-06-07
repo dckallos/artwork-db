@@ -58,6 +58,7 @@ ALTER API INTEGRATION IF EXISTS GITHUB_MCP_INTEGRATION SET
         OAUTH_CLIENT_SECRET        = '<% github_oauth_client_secret %>',
         OAUTH_TOKEN_ENDPOINT       = 'https://github.com/login/oauth/access_token',
         OAUTH_AUTHORIZATION_ENDPOINT = 'https://github.com/login/oauth/authorize'
+        OAUTH_ALLOWED_SCOPES = ('repo', 'read:org', 'read:user')
     )
     ENABLED = TRUE
     COMMENT = 'MCP connector: GitHub tools for Cortex Agents (OAuth per-user).';
@@ -66,4 +67,5 @@ ALTER API INTEGRATION IF EXISTS GITHUB_MCP_INTEGRATION SET
 -- 2. External MCP Server (schema-level, references the integration above)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE EXTERNAL MCP SERVER ARTWORK_OPS.GIT.GITHUB_MCP_SERVER
+    URL = 'https://api.githubcopilot.com/mcp'
     API_INTEGRATION = GITHUB_MCP_INTEGRATION;
