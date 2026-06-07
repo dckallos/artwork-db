@@ -50,7 +50,9 @@ class Config:
     # MAX_RETRIES=8 is large enough that a Retry-After-driven backoff sequence
     # (e.g. 1s, 2s, 4s, 8s, 16s, 30s, 30s) can ride out a sustained throttle.
     api_base: str = MET_API_BASE
-    api_max_concurrency: int = int(os.getenv("MET_API_CONCURRENCY", "8"))
+    # At 40 rps (often decaying to 5-10 under throttle), >3 workers adds
+    # contention without throughput gain. Reserved for future threading use.
+    api_max_concurrency: int = int(os.getenv("MET_API_CONCURRENCY", "3"))
     api_requests_per_second: float = float(os.getenv("MET_API_RPS", "40"))
     api_max_retries: int = int(os.getenv("MET_API_MAX_RETRIES", "8"))
     api_request_timeout_seconds: int = int(os.getenv("MET_API_TIMEOUT", "20"))

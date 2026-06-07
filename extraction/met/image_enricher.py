@@ -1,5 +1,5 @@
 """
-Asynchronously fetch image URLs from the Met API for every pending row.
+Fetch image URLs from the Met API for every pending row.
 
 Workflow for each met_artworks row with enrichment_status in ('pending', 'error'):
   1. GET /public/collection/v1/objects/{object_id}
@@ -18,11 +18,9 @@ Rate limiting (informed by the owner's prior production Met OA project):
     present; otherwise the GLOBAL throttle gate computes exponential backoff.
   - Adaptive RPS: after 3 consecutive throttles the limiter drops RPS 30 percent;
     on every success it edges back up 5 percent toward the configured ceiling.
-  - Global throttle gate: when ANY worker observes a throttle, ALL workers block
-    behind a shared backoff_until timestamp. Exponential backoff is driven by
-    consecutive global throttle signals, not per-object attempt counters. This
-    eliminates thundering-herd retries during throttle storms.
-  - Bounded semaphore caps concurrent in-flight requests.
+  - Global throttle gate: when ANY request observes a throttle, subsequent requests
+    block behind a shared backoff_until timestamp. Exponential backoff is driven by
+    consecutive global throttle signals, not per-object attempt counters.
   - 403/410 are NOT terminal: 403 is a throttle signal in disguise, 410 (Gone)
     is rare and rolled into the retry path so a transient masquerade does not
     look permanent. After exhausting retries, both fall through to terminal
@@ -30,18 +28,18 @@ Rate limiting (informed by the owner's prior production Met OA project):
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import random
 import sqlite3
 import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import aiohttp
+import requests
 
 from .config import Config
 from .db import connect, initialize_database, load_sql
@@ -95,13 +93,10 @@ class _RateLimiter:
         # Default ceiling is the configured RPS (no auto-overshoot above the
         # owner's chosen budget) but never lower than 5.0 so cool_up has room.
         self._max_rps = float(max_rps) if max_rps is not None else max(rps, 5.0)
-        self._lock = asyncio.Lock()
         self._next_allowed = 0.0
         self._throttle_burst = 0
-        # P-T2: per-run counters surfaced in the per-batch log so the throttle
-        # picture is visible without a re-query of the control table. These are
-        # read after a batch finishes; they aggregate every retry within
-        # _fetch_one across every worker for the limiter's lifetime.
+        # Per-run counters surfaced in the per-batch log so the throttle
+        # picture is visible without a re-query of the control table.
         self.throttle_403 = 0
         self.throttle_429 = 0
         self.throttle_other = 0   # 410 / 5xx that hit the same backoff path
@@ -111,16 +106,15 @@ class _RateLimiter:
     def rps(self) -> float:
         return self._rps
 
-    async def acquire(self) -> None:
+    def acquire(self) -> None:
         """Block until it is safe to issue another request."""
-        async with self._lock:
-            min_interval = 1.0 / self._rps if self._rps > 0 else 0.1
+        min_interval = 1.0 / self._rps if self._rps > 0 else 0.1
+        now = time.monotonic()
+        wait = self._next_allowed - now
+        if wait > 0:
+            time.sleep(wait)
             now = time.monotonic()
-            wait = self._next_allowed - now
-            if wait > 0:
-                await asyncio.sleep(wait)
-                now = time.monotonic()
-            self._next_allowed = now + min_interval
+        self._next_allowed = now + min_interval
 
     def note_throttle(self) -> None:
         """Throttle observed; after 3 in a row, decay RPS by 30 percent."""
@@ -145,57 +139,85 @@ class _RateLimiter:
 
 
 class _ThrottleGate:
-    """Global backoff gate shared by all workers.
+    """Global backoff gate.
 
-    When any worker observes a throttle (403/429/5xx), it signals the gate.
+    When a request observes a throttle (403/429/5xx), it signals the gate.
     The gate computes a global backoff_until timestamp using exponential backoff
-    driven by consecutive global throttle signals. ALL workers call
-    wait_if_paused() before each request attempt and block until the gate lifts.
-
-    This eliminates thundering-herd retries: instead of N workers independently
-    sleeping and re-firing at the same instant, the whole swarm drains behind
-    one shared wall-clock pause, then the RateLimiter meters them out one at a
-    time.
+    driven by consecutive global throttle signals. Subsequent requests call
+    wait_if_paused() before each attempt and block until the gate lifts.
     """
 
     def __init__(self, base_backoff: float = 0.8, max_backoff: float = 60.0) -> None:
         self._base = base_backoff
         self._max = max_backoff
-        self._lock = asyncio.Lock()
+        self._max_initial = max_backoff
+        self._max_ceiling = 300.0  # hard cap for chronic escalation
         self._backoff_until = 0.0  # monotonic timestamp
         self._consecutive_throttles = 0
+        # Chronic-failure detection: rolling window of recent outcomes.
+        self._history: deque = deque(maxlen=50)
+        self.chronic = False
 
-    async def signal_throttle(self, retry_after_hint: Optional[float]) -> None:
-        """A worker observed a throttle; extend the global pause."""
-        async with self._lock:
-            self._consecutive_throttles += 1
-            if retry_after_hint is not None and retry_after_hint > 0:
-                delay = retry_after_hint
-            else:
-                delay = min(
-                    self._max,
-                    self._base * (2 ** (self._consecutive_throttles - 1)),
-                )
-            delay += random.uniform(0, 0.5)  # jitter
-            new_until = time.monotonic() + delay
-            # Only extend; never shorten a pause already in effect.
-            if new_until > self._backoff_until:
-                self._backoff_until = new_until
+    def signal_throttle(self, retry_after_hint: Optional[float]) -> None:
+        """A throttle was observed; extend the global pause."""
+        self._consecutive_throttles += 1
+        self._history.append(False)
+        if retry_after_hint is not None and retry_after_hint > 0:
+            delay = retry_after_hint
+        else:
+            delay = min(
+                self._max,
+                self._base * (2 ** (self._consecutive_throttles - 1)),
+            )
+        delay += random.uniform(0, 0.5)  # jitter
+        new_until = time.monotonic() + delay
+        # Only extend; never shorten a pause already in effect.
+        if new_until > self._backoff_until:
+            self._backoff_until = new_until
+        # Chronic detection: once the window is full, check error ratio.
+        if len(self._history) == self._history.maxlen:
+            fails = self._history.maxlen - sum(self._history)
+            ratio = fails / self._history.maxlen
+            if ratio > 0.8:
+                if not self.chronic:
+                    self._max = min(self._max * 2, self._max_ceiling)
+                    self.chronic = True
+                    logger.warning(
+                        "Chronic throttle detected (%d/%d failures). "
+                        "Backoff ceiling raised to %.0fs. "
+                        "Consider stopping and investigating.",
+                        fails, self._history.maxlen, self._max,
+                    )
+                else:
+                    # Already chronic -- keep escalating the ceiling.
+                    self._max = min(self._max * 2, self._max_ceiling)
+                    logger.warning(
+                        "Chronic throttle persists. Backoff ceiling now %.0fs.",
+                        self._max,
+                    )
 
-    async def wait_if_paused(self) -> None:
+    def wait_if_paused(self) -> None:
         """Block until the global backoff window has elapsed."""
-        # Fast path: read without lock (monotonic reads are safe).
         now = time.monotonic()
         wait = self._backoff_until - now
         if wait > 0:
-            await asyncio.sleep(wait)
+            time.sleep(wait)
 
     def note_success(self) -> None:
-        """A worker got a non-throttle response; reset the escalation."""
+        """A non-throttle response was received; reset the escalation."""
         self._consecutive_throttles = 0
+        self._history.append(True)
+        if self.chronic:
+            self._history.clear()
+            self._max = self._max_initial
+            self.chronic = False
+            logger.info(
+                "Chronic throttle cleared after successful response. "
+                "Backoff ceiling reset to %.0fs.", self._max,
+            )
 
 
-def _retry_after_seconds(resp: aiohttp.ClientResponse) -> Optional[float]:
+def _retry_after_seconds(resp: requests.Response) -> Optional[float]:
     """Parse the `Retry-After` response header into a non-negative seconds delay.
 
     The header may be either:
@@ -230,13 +252,14 @@ def _pending_object_ids(conn: sqlite3.Connection) -> List[int]:
     return [r[0] for r in cur.fetchall()]
 
 
-async def _fetch_one(
-    session: aiohttp.ClientSession,
+def _fetch_one(
+    session: requests.Session,
     rate_limiter: _RateLimiter,
     throttle_gate: _ThrottleGate,
     api_base: str,
     object_id: int,
     max_retries: int,
+    timeout: float = 20,
 ) -> Tuple[int, str, Optional[Dict[str, Any]], Optional[str]]:
     """Fetch a single Met object record with global throttle gate.
 
@@ -254,75 +277,67 @@ async def _fetch_one(
       - Other 4xx (400/401/etc.) remain terminal -- those signal a bad request,
         not a rate limit, and retrying does not help.
 
-    Backoff is GLOBAL: when any worker signals a throttle, the shared
-    _ThrottleGate extends backoff_until for ALL workers. Per-object retry loops
-    no longer compute independent exponential delays -- they wait behind the
-    gate, then re-acquire the rate limiter before retrying.
+    Backoff is GLOBAL: when a throttle is observed, the shared _ThrottleGate
+    extends backoff_until. The next iteration blocks behind the gate via
+    wait_if_paused(), then re-acquires the rate limiter before retrying.
     """
     url = f"{api_base}/objects/{object_id}"
     last_error: Optional[str] = None
 
     for attempt in range(1, max_retries + 1):
         # Block behind the global gate (no-op if no active pause).
-        await throttle_gate.wait_if_paused()
-        await rate_limiter.acquire()
+        throttle_gate.wait_if_paused()
+        rate_limiter.acquire()
         try:
-            async with session.get(url) as resp:
-                status = resp.status
-                # 404 = does not exist; terminal no_image.
-                if status == 404:
-                    rate_limiter.cool_up()
-                    throttle_gate.note_success()
-                    return object_id, "no_image", None, None
+            resp = session.get(url, timeout=timeout)
+            status_code = resp.status_code
 
-                # Throttle / transient: 403 (Met returns this as soft-throttle),
-                # 410 (defensive; usually Gone but treated as transient first),
-                # 429 (rate limit), 5xx (transient server). Signal the global
-                # gate and let it compute the shared backoff.
-                if status in (403, 410, 429, 500, 502, 503, 504):
-                    last_error = f"HTTP {status}"
-                    retry_after = _retry_after_seconds(resp)
-                    # P-T2: surface the throttle picture in the per-batch log.
-                    if status == 403:
-                        rate_limiter.throttle_403 += 1
-                    elif status == 429:
-                        rate_limiter.throttle_429 += 1
-                    else:
-                        rate_limiter.throttle_other += 1
-                    rate_limiter.note_throttle()
-                    # Signal the global gate; it computes and extends the pause.
-                    await throttle_gate.signal_throttle(retry_after)
-                    # Track cumulative backoff for the per-batch summary. Use
-                    # the gate's computed delay (approximated as time until the
-                    # gate lifts from now).
-                    gate_wait = max(0.0, throttle_gate._backoff_until - time.monotonic())
-                    rate_limiter.backoff_seconds += gate_wait
-                    logger.debug(
-                        "oid=%s attempt=%s HTTP=%s gate_wait=%.1fs (rps=%.2f)",
-                        object_id, attempt, status, gate_wait, rate_limiter.rps,
-                    )
-                    # The actual wait happens at the top of the next iteration
-                    # via wait_if_paused() -- all workers converge there.
-                    continue
-
-                # Other 4xx: terminal client error.
-                if status >= 400:
-                    text = await resp.text()
-                    return object_id, "error", None, f"HTTP {status}: {text[:200]}"
-
-                # 2xx: parse and return.
-                payload = await resp.json(content_type=None)
-                primary = (payload or {}).get("primaryImage") or ""
+            # 404 = does not exist; terminal no_image.
+            if status_code == 404:
                 rate_limiter.cool_up()
                 throttle_gate.note_success()
-                if not primary:
-                    return object_id, "no_image", None, None
-                return object_id, "done", payload, None
+                return object_id, "no_image", None, None
 
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            # Throttle / transient: 403 (Met returns this as soft-throttle),
+            # 410 (defensive; usually Gone but treated as transient first),
+            # 429 (rate limit), 5xx (transient server). Signal the global
+            # gate and let it compute the shared backoff.
+            if status_code in (403, 410, 429, 500, 502, 503, 504):
+                last_error = f"HTTP {status_code}"
+                retry_after = _retry_after_seconds(resp)
+                if status_code == 403:
+                    rate_limiter.throttle_403 += 1
+                elif status_code == 429:
+                    rate_limiter.throttle_429 += 1
+                else:
+                    rate_limiter.throttle_other += 1
+                rate_limiter.note_throttle()
+                throttle_gate.signal_throttle(retry_after)
+                # Track cumulative backoff for the per-batch summary.
+                gate_wait = max(0.0, throttle_gate._backoff_until - time.monotonic())
+                rate_limiter.backoff_seconds += gate_wait
+                logger.debug(
+                    "oid=%s attempt=%s HTTP=%s gate_wait=%.1fs (rps=%.2f)",
+                    object_id, attempt, status_code, gate_wait, rate_limiter.rps,
+                )
+                continue
+
+            # Other 4xx: terminal client error.
+            if status_code >= 400:
+                return object_id, "error", None, f"HTTP {status_code}: {resp.text[:200]}"
+
+            # 2xx: parse and return.
+            payload = resp.json()
+            primary = (payload or {}).get("primaryImage") or ""
+            rate_limiter.cool_up()
+            throttle_gate.note_success()
+            if not primary:
+                return object_id, "no_image", None, None
+            return object_id, "done", payload, None
+
+        except requests.RequestException as exc:
             last_error = f"{type(exc).__name__}: {exc}"
-            # Network errors also signal the gate (transient infra issue).
-            await throttle_gate.signal_throttle(None)
+            throttle_gate.signal_throttle(None)
             logger.debug(
                 "oid=%s attempt=%s network exception (rps=%.2f)",
                 object_id, attempt, rate_limiter.rps,
@@ -370,54 +385,66 @@ def _apply_result(
         )
 
 
-async def _enrich_async(
+def _enrich_sync(
     config: Config,
     object_ids: List[int],
     progress_every: int = 500,
 ) -> Dict[str, int]:
-    """Drive the async fetch loop and persist results to SQLite."""
-    counters = {"done": 0, "no_image": 0, "error": 0}
+    """Drive the serial fetch loop and persist results to SQLite."""
+    counters: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
     rate_limiter = _RateLimiter(config.api_requests_per_second)
-    throttle_gate = _ThrottleGate()  # global backoff shared by all workers
-    semaphore = asyncio.Semaphore(config.api_max_concurrency)
-    timeout = aiohttp.ClientTimeout(
-        total=None, connect=15, sock_read=config.api_request_timeout_seconds,
-    )
-    headers = {
+    throttle_gate = _ThrottleGate()
+
+    session = requests.Session()
+    session.headers.update({
         "User-Agent": config.api_user_agent,
-        "Accept":     "application/json",
-    }
+        "Accept": "application/json",
+    })
+    request_timeout = config.api_request_timeout_seconds
 
     completed = 0
-    write_lock = asyncio.Lock()  # serializes SQLite writes from coroutines
+    chronic_checks = 0
 
     with connect(config.sqlite_path) as conn:
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-
-            async def worker(oid: int) -> None:
-                """Fetch one object and persist the result."""
-                nonlocal completed
-                async with semaphore:
-                    result = await _fetch_one(
-                        session, rate_limiter, throttle_gate,
-                        config.api_base, oid, config.api_max_retries,
-                    )
-                async with write_lock:
-                    _apply_result(conn, *result)
-                    counters[result[1]] += 1
-                    completed += 1
-                    if completed % progress_every == 0:
-                        conn.commit()
-                        logger.debug(
-                            "Enrich progress: %s/%s (done=%s no_image=%s error=%s)",
+        for oid in object_ids:
+            result = _fetch_one(
+                session, rate_limiter, throttle_gate,
+                config.api_base, oid, config.api_max_retries,
+                timeout=request_timeout,
+            )
+            _apply_result(conn, *result)
+            counters[result[1]] += 1
+            completed += 1
+            if completed % progress_every == 0:
+                conn.commit()
+                logger.debug(
+                    "Enrich progress: %s/%s (done=%s no_image=%s error=%s "
+                    "| 403=%s 429=%s other=%s backoff=%.1fs rps=%.2f)",
+                    f"{completed:,}", f"{len(object_ids):,}",
+                    counters["done"], counters["no_image"], counters["error"],
+                    rate_limiter.throttle_403, rate_limiter.throttle_429,
+                    rate_limiter.throttle_other, rate_limiter.backoff_seconds,
+                    rate_limiter.rps,
+                )
+                # Bail-out: if chronic throttle persists across 2 progress ticks,
+                # stop burning wall-clock time against a rejecting API.
+                if throttle_gate.chronic:
+                    chronic_checks += 1
+                    if chronic_checks >= 2:
+                        logger.error(
+                            "Bailing out: chronic API rejection detected. "
+                            "%s/%s objects completed. "
+                            "Re-run will resume from where we stopped.",
                             f"{completed:,}", f"{len(object_ids):,}",
-                            counters["done"], counters["no_image"], counters["error"],
                         )
+                        conn.commit()
+                        break
+                else:
+                    chronic_checks = 0
+        else:
+            conn.commit()
 
-            await asyncio.gather(*(worker(oid) for oid in object_ids))
-
-        conn.commit()
-
+    session.close()
     return counters
 
 
@@ -451,7 +478,7 @@ def enrich(config: Config) -> Dict[str, int]:
     status = "success"
     notes: Optional[str] = None
     try:
-        counters = asyncio.run(_enrich_async(config, pending))
+        counters = _enrich_sync(config, pending)
         notes = json.dumps(counters)
     except Exception as exc:
         status = "failed"
