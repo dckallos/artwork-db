@@ -85,7 +85,7 @@ def extract_entities(config: Config) -> Path:
     extract_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Extracting Tier 1 entities from %s", config.tar_path)
-    prefixes = tuple(f"json/{entity}/" for entity in AIC_TIER1_ENTITIES)
+    prefixes = tuple(f"artic-api-data/json/{entity}/" for entity in AIC_TIER1_ENTITIES)
 
     with tarfile.open(config.tar_path, "r:bz2") as tf:
         members = [m for m in tf.getmembers() if m.name.startswith(prefixes)]
@@ -148,7 +148,7 @@ def _transform_entity_to_ndjson(
 
 def transform_artworks(config: Config, limit: Optional[int] = None) -> Tuple[Path, int]:
     """Transform artworks JSON files to gzipped NDJSON. Returns (path, count)."""
-    json_dir = config.extract_dir / "json" / "artworks"
+    json_dir = config.extract_dir / "artic-api-data" / "json" / "artworks"
     output_path = config.data_dir / "aic_artworks.ndjson.gz"
     count = _transform_entity_to_ndjson(json_dir, output_path, "artworks", "id", limit)
     return output_path, count
@@ -156,7 +156,7 @@ def transform_artworks(config: Config, limit: Optional[int] = None) -> Tuple[Pat
 
 def transform_agents(config: Config, limit: Optional[int] = None) -> Tuple[Path, int]:
     """Transform agents JSON files to gzipped NDJSON. Returns (path, count)."""
-    json_dir = config.extract_dir / "json" / "agents"
+    json_dir = config.extract_dir / "artic-api-data" / "json" / "agents"
     output_path = config.data_dir / "aic_agents.ndjson.gz"
     count = _transform_entity_to_ndjson(json_dir, output_path, "agents", "id", limit)
     return output_path, count
