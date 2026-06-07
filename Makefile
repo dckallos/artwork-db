@@ -17,6 +17,10 @@
 
 DBT_PROJECT_DIR := artwork_pipeline
 
+# Toolkit scripts -- currently in-repo; after separation, sibling path.
+# Override via: TOOLKIT_DIR=../snowflake-toolkit make iac
+TOOLKIT_DIR ?= scripts
+
 # snow CLI connection that IaC targets. Defaults to "admin" (the historical
 # single-account behavior). Override to apply infra to a second account whose
 # admin connection was set up via `setup.sh --profile <label> --phase all`:
