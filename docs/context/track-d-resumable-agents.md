@@ -239,8 +239,8 @@ Token billing is opaque without observability. Set these up FROM PHASE A:
 
 ```
 # 1. Single-instance + state checks (per AGENTS.md discipline)
-bash scripts/check.sh
-bash scripts/checkpoint.sh 2026-06-XX-trackD start in_progress "Phase A smoke test"
+bash $(TOOLKIT_DIR)/check.sh
+bash $(TOOLKIT_DIR)/checkpoint.sh 2026-06-XX-trackD start in_progress "Phase A smoke test"
 
 # 2. Verify Cortex Agents is enabled in this account
 #    (run from a SQL worksheet — DO NOT inline-DDL anything beyond this read)
@@ -252,7 +252,7 @@ SHOW AGENTS IN ACCOUNT;
 # 4. Chat in the playground. Close tab. Reopen. Confirm thread persists.
 
 # 5. Decision: Phase B or stop. Checkpoint:
-bash scripts/checkpoint.sh 2026-06-XX-trackD phase-A-eval done "<verdict>"
+bash $(TOOLKIT_DIR)/checkpoint.sh 2026-06-XX-trackD phase-A-eval done "<verdict>"
 ```
 
 **Owner sign-off required before:** any `CREATE AGENT` SQL, any new
@@ -270,7 +270,7 @@ bash scripts/checkpoint.sh 2026-06-XX-trackD phase-A-eval done "<verdict>"
   predates this doc but covers tool semantics + observability).
 - **Web Search account-toggle history:** AGENTS.md gated item #6.
 - **Existing checkpoint substrate:** `BRONZE.RUN_CONTROL`,
-  `scripts/checkpoint.sh` (Phase D builds on this).
+  `$(TOOLKIT_DIR)/checkpoint.sh` (Phase D builds on this).
 - **Cortex Code (the thing we're augmenting, not replacing):**
   [Cortex Code in Snowsight docs](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-snowsight),
   [Cloud Agents announcement](https://www.snowflake.com/en/blog/cortex-code-governed-agent-data-stack/).

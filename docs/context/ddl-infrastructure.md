@@ -10,8 +10,9 @@
 - `infrastructure/drop_*.sql` — paired rollback scripts.
 - `infrastructure/grant_privileges.sql`, `infrastructure/refresh_grants.sql`,
   `infrastructure/drop_grants.sql`.
-- `scripts/bootstrap.py`, `scripts/orchestrate.sh`, `scripts/apply_sql.sh`,
-  `scripts/rollback_sql.sh`, `scripts/manifest.txt`.
+- `$(TOOLKIT_DIR)/bootstrap.py`, `scripts/orchestrate.sh` (legacy, local),
+  `$(TOOLKIT_DIR)/apply_sql.sh`, `$(TOOLKIT_DIR)/rollback_sql.sh`,
+  `scripts/manifest.txt` (artwork deploy ordering, stays local).
 - `Makefile` (already read — see notes below).
 - `git-setup/*` — full chain reviewed 2026-05-30: `create_git_ops_db.sql`,
   `create_api_integration.sql`, `create_git_repository.sql`, all three paired
@@ -48,7 +49,7 @@ treat it as **stale** and flag it for cleanup.
   **infrastructure first, then git-setup** (the Git-mirror layer runs LAST in
   `make iac`). Targets: `iac` / `infra` / `bootstrap` / `rollback FILE=…` /
   `down [FROM=…]` / `setup` / `pipeline`. Every IaC target depends on `chmod`
-  (via `scripts/bootstrap_chmod.sh`) so missing +x bits can't break a run.
+  (via `$(TOOLKIT_DIR)/bootstrap_chmod.sh`) so missing +x bits can't break a run.
   NOTE: the `down FROM=` value refers to a manifest entry, not a filename prefix
   — verify its exact form against `orchestrate.sh` when reviewed.
 
@@ -178,7 +179,7 @@ Previously summarized only behaviorally; the AGENTS.md roadmap flagged these as
 "internals un-read." Now read end-to-end — the existing summaries above are
 **accurate**. Internal detail worth keeping:
 
-- **`scripts/apply_sql.sh`** (67 ln). `set -euo pipefail`; connection precedence
+- **`$(TOOLKIT_DIR)/apply_sql.sh`** (67 ln). `set -euo pipefail`; connection precedence
   `arg > $SNOW_CONNECTION > "admin"`. Runs `snow sql --filename` with
   `--enhanced-exit-codes` (exit **5** on any statement failure — needed because
   plain `snow sql` only reports the LAST statement's status in multi-statement
@@ -187,12 +188,12 @@ Previously summarized only behaviorally; the AGENTS.md roadmap flagged these as
   `SNOW_SUPPRESS_STDOUT=1`, redirects stdout to `/dev/null` (no `exec`) and prints
   a remediation pointer on failure; otherwise `exec`s the CLI. stderr always
   preserved.
-- **`scripts/rollback_sql.sh`** (32 ln). Mirror of apply for paired drops; same
+- **`$(TOOLKIT_DIR)/rollback_sql.sh`** (32 ln). Mirror of apply for paired drops; same
   connection precedence and `-D github_pat`; always `exec`s with
   `--enhanced-exit-codes`. Relies on every drop being `DROP … IF EXISTS`, so it is
   safe even if the paired create never ran.
-- **`scripts/bootstrap.py`** (281 ln). Thin Python preflight; **authors no SQL**
-  (only runs the version-controlled `scripts/sql/show_admin_account_grants.sql`).
+- **`$(TOOLKIT_DIR)/bootstrap.py`** (281 ln). Thin Python preflight; **authors no SQL**
+  (only runs the version-controlled `$(TOOLKIT_DIR)/sql/show_admin_account_grants.sql`).
   Two subcommands: `verify-contract` (static — parses active `GRANT … ON ACCOUNT
   TO ROLE ARTWORK_ADMIN` lines in `create_roles.sql`, stripping `--` comments, and
   asserts they equal the `REQUIRED_ADMIN_ACCOUNT_PRIVILEGES` frozenset
@@ -208,7 +209,7 @@ Previously summarized only behaviorally; the AGENTS.md roadmap flagged these as
 Optional in-Snowflake mirror layer. Per the 2026-05-29 decision it runs **LAST**,
 after infrastructure (create_roles → … → refresh_grants), because
 `create_git_repository.sql` grants READ to `ARTWORK_ADMIN` (created by
-`create_roles.sql`). Applied via the same `scripts/apply_sql.sh` wrapper, driven by
+`create_roles.sql`). Applied via the same `$(TOOLKIT_DIR)/apply_sql.sh` wrapper, driven by
 `make bootstrap` / `make iac`. All three forward scripts succeed in a single pass.
 
 **Forward chain (numeric/dependency order):**
@@ -385,7 +386,7 @@ cascade from dropped parents) but means its only use is manual.
 - `infrastructure/drop_grants.sql`: "other V### drop scripts" (line ~11) and
   "grants on the ARTWORK_OPS database from B002" (line ~24).
 - `infrastructure/drop_roles.sql`: "applies V### drops in REVERSE order" (line ~9).
-- `scripts/apply_sql.sh:38` — "Secret-bearing applies (e.g. B001 renders the
+- `$(TOOLKIT_DIR)/apply_sql.sh:38` — "Secret-bearing applies (e.g. B001 renders the
   GitHub PAT …)" (B-prefix; reword to name the secret-bearing script/manifest).
 - `git-setup/README.md` (whole file) — narrative runbook written entirely in the
   retired `B001/B002/B003`, `V###`, `R###` prefix scheme (naming-convention table,
@@ -519,7 +520,7 @@ succeeded"; new objects created): `MET_ENRICHMENT_CONTROL`, `MET_CSV_SNAPSHOT`,
 SUCCEEDED). Privilege preflight passed live, validating the `bootstrap.py` ↔
 `create_roles.sql` `EXECUTE TASK` contract; LOADER VIEW grant landed; worklist returns
 0 rows pre-seed (bases empty), as designed. (`BRONZE.RUN_CONTROL` checkpoint table was
-added + applied the same day; see `create_run_control.sql` + the ad-hoc `scripts/check.sh`
+added + applied the same day; see `create_run_control.sql` + the ad-hoc `$(TOOLKIT_DIR)/check.sh`
 suite.)
 
 **Mentor-flag (Section C, not a DDL blocker):** `MET_CSV_SNAPSHOT` and

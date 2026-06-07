@@ -50,10 +50,11 @@ python -m extraction.met.run enrich-met      # Drain worklist: fetch images, ass
 # Legacy SQLite path (superseded; kept in CLI only):
 #   python -m extraction.met.run bootstrap|enrich|upload|all|status
 
-# Ad-hoc checks (safe)
-scripts/check.sh  # Show active sessions
-scripts/check.sh scripts/sql/show_pipeline_status.sql
-scripts/checkpoint.sh <run_id> <step> [status] [note]  # Write checkpoint
+# Ad-hoc checks (safe -- these live in the sibling snowflake-toolkit repo)
+# Resolve via TOOLKIT_DIR (defaults to ../snowflake-toolkit)
+bash ../snowflake-toolkit/check.sh  # Show active sessions
+bash ../snowflake-toolkit/check.sh scripts/sql/show_pipeline_status.sql
+bash ../snowflake-toolkit/checkpoint.sh <run_id> <step> [status] [note]  # Write checkpoint
 
 # dbt (when artwork_pipeline/ exists)
 make dbt-deps
@@ -67,10 +68,11 @@ make dbt-test
 
 **Key components**:
 - infrastructure/ -- Snowflake DDL (11 create/drop pairs)
-- scripts/ -- Orchestration layer (manifest.txt defines apply order)
+- scripts/ -- Project-specific orchestration (manifest.txt, dbt_orchestrate.sh)
 - extraction/met/ -- Met Museum OpenAccess loader (SQLite intermediate, Bronze target)
 - artwork_pipeline/ -- dbt project (scaffolded; staging model stg_met__artworks exists)
 - git-setup/ -- Optional in-Snowflake Git mirror (runs LAST)
+- ../snowflake-toolkit/ -- Sibling repo: generic Snowflake CLI/IaC framework (TOOLKIT_DIR)
 
 **Snowflake objects**:
 - Account: OBANOYY-MK07348 (locator EP21559, AWS_US_EAST_2); admin PORCHFLAKE/ACCOUNTADMIN. Earlier trials pa37992 / HXCNOII-RS05429 (user PORCHANALYTICS) are RETIRED.
@@ -79,7 +81,7 @@ make dbt-test
 - Service users (key-pair auth, TYPE=SERVICE): ARTWORK_LOADER_SVC (extraction -> Bronze), ARTWORK_TRANSFORMER_SVC (dbt -> Silver/Gold). Keys minted by `make loader|transformer CONN=<conn>`.
 - Git repo: ARTWORK_OPS.GIT.ARTWORK_DB
 
-**Connection flow**: scripts/orchestrate.sh -> apply_sql.sh -> snow sql --filename
+**Connection flow**: make iac -> $(TOOLKIT_DIR)/orchestrate_modern.sh -> apply_sql.sh -> snow sql --filename
 
 ## Your role
 

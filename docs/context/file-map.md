@@ -14,12 +14,12 @@ additions: `create_bronze_views.sql`/`drop_bronze_views.sql` (`MET_WORKLIST`);
 `create_run_control.sql`/`drop_run_control.sql` (`RUN_CONTROL` checkpoint table);
 `MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT` in `create_bronze_tables.sql`; real
 `MET_LEASE_RECLAIM_TASK` in `create_tasks.sql`; and the `grant_privileges.sql →
-create_grants.sql` rename. Plus a standalone read-only ops suite — `scripts/check.sh`,
-`scripts/checkpoint.sh`, `scripts/sql/show_{active_sessions,run_control,pipeline_status}.sql`
+create_grants.sql` rename. Plus a standalone read-only ops suite — `$(TOOLKIT_DIR)/check.sh`,
+`$(TOOLKIT_DIR)/checkpoint.sh`, `scripts/sql/show_{run_control,pipeline_status}.sql`
 — and two append-only docs: `docs/context/session-3-progress-log.md` (restart trail)
 + `docs/context/connection-resilience.md` (research + advisory-lease design).
 
-## scripts/snowflake_cli/ (Workflow 1 — reviewed)
+## snowflake_cli/ (NOW in sibling `snowflake-toolkit` repo — Workflow 1 reviewed)
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
@@ -82,18 +82,24 @@ rename makes grants an auto-paired `create_`).
 
 ## scripts/ (orchestration — Workflow 2)
 
+> **Post-Phase-3 note:** `orchestrate_modern.sh`, `apply_sql.sh`, `rollback_sql.sh`,
+> `bootstrap.py`, `bootstrap_chmod.sh`, `check.sh`, `checkpoint.sh`, `lib/`,
+> `snowflake_cli/`, and framework tests have moved to the sibling `snowflake-toolkit`
+> repo. What remains here is artwork-specific: manifest, legacy orchestrate.sh,
+> dbt orchestration, secret_bearing.txt, artwork-specific SQL checks, and archival
+> extraction scripts.
+
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `orchestrate.sh` | — | bash IaC entry point; reads `manifest.txt`, maps `--phase {bootstrap\|infra\|all\|down}` by directory, pairs `create_→drop_`, runs preflight after `create_roles.sql` | prior | changing phase routing / preflight / secret suppression |
+| `orchestrate.sh` | — | bash IaC entry point (legacy); reads `manifest.txt`, maps `--phase {bootstrap\|infra\|all\|down}` by directory, pairs `create_→drop_`, runs preflight after `create_roles.sql` | prior | changing phase routing / preflight / secret suppression |
 | `manifest.txt` | — | **single source of apply order** (forward) + teardown reversal; header has stale V/R/B + `bootstrap.py` refs | prior | changing apply order |
-| `bootstrap.py` | 281 | thin Python preflight (`verify-contract`, `assert-account-privileges`); authors no SQL | 2026-05-30 | changing privilege checks |
-| `apply_sql.sh` | 67 | `snow sql --filename` forward wrapper; `--enhanced-exit-codes`; `SNOW_SUPPRESS_STDOUT` secret path; **stale B001 ref l.38** | 2026-05-30 | debugging CLI invocation |
-| `rollback_sql.sh` | 32 | paired-drop wrapper; mirrors apply connection logic | 2026-05-30 | debugging CLI invocation |
 | `secret_bearing.txt` | — | scripts whose stdout is suppressed (fail-closed on PAT marker) | prior | adding secret-bearing scripts |
-| `bootstrap_chmod.sh`, `git_mark_executable.sh`, `executable_files.txt`, `sql/show_admin_account_grants.sql` | — | chmod policy + helpers | prior | — |
-| `check.sh` *(NEW, Session-3)* | 36 | standalone read-only ad-hoc SQL runner (`snow sql --filename`); not in orchestrator | 2026-05-31 | adding/altering ad-hoc checks |
-| `checkpoint.sh` *(NEW, Session-3)* | 51 | write one `RUN_CONTROL` checkpoint (`<run_id> <step> [status] [note]`); standalone DML, sets QUERY_TAG | 2026-05-31 | changing checkpoint write |
-| `sql/show_active_sessions.sql`, `sql/show_run_control.sql`, `sql/show_pipeline_status.sql` *(NEW, Session-3)* | — | read-only checks: live sessions / fork detection, run-control trail + dual-instance smell test, pipeline object+task status | 2026-05-31 | — |
+| `dbt_orchestrate.sh` | — | artwork-specific dbt orchestration (stays local) | prior | changing dbt run logic |
+| `dbt_orchestrate_modern.sh` | — | artwork-specific dbt orchestration (modern variant, stays local) | prior | changing dbt run logic |
+| `sql/show_pipeline_status.sql` | — | artwork-specific: pipeline object+task status | 2026-05-31 | — |
+| `sql/show_run_control.sql` | — | artwork-specific: run-control trail + dual-instance smell test | 2026-05-31 | — |
+| `extract_repos.sh` | — | archival: the `git filter-repo` extraction script (served its purpose) | prior | — |
+| `post_extraction_fixup.sh` | — | archival: post-extraction companion (served its purpose) | prior | — |
 
 ## Root / other
 

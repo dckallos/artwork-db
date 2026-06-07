@@ -39,7 +39,7 @@ weeks.** Most data-engineering pain is goal-2-shaped.
 
 Don't skip these. Each is a 10-second SQL or page-load.
 
-- [ ] `bash scripts/check.sh` shows exactly one `cortex_code_snowsight` session.
+- [ ] `bash $(TOOLKIT_DIR)/check.sh` shows exactly one `cortex_code_snowsight` session.
 - [ ] `SHOW PARAMETERS LIKE 'ABORT_DETACHED_QUERY' IN ACCOUNT;` returns `true`
       (proves rec #2 is live).
 - [ ] `SHOW ALERTS IN ACCOUNT;` lists `CORTEX_FORK_ALERT`, scheduled (proves
@@ -167,7 +167,7 @@ Possible tools (pick 1, ship it, then decide on the next):
 - [ ] A `cortex_search` service over Met object descriptions. **Real money** —
       verify $/GB-month before building. Defer if the questions can be
       answered with `cortex_analyst` alone.
-- [ ] An MCP tool that calls `scripts/check.sh` or `scripts/checkpoint.sh`,
+- [ ] An MCP tool that calls `$(TOOLKIT_DIR)/check.sh` or `$(TOOLKIT_DIR)/checkpoint.sh`,
       so the agent participates in the run-control trail. (This is where
       Track D starts to subsume the Track-1 visibility suite.)
 

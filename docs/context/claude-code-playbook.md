@@ -56,7 +56,7 @@ Start of session:
 - [ ] Read AGENTS.md fully
 - [ ] Check current branch: `git status`
 - [ ] Review Status table for your domain
-- [ ] Run `scripts/check.sh` for system state
+- [ ] Run `$(TOOLKIT_DIR)/check.sh` for system state
 
 During work:
 - [ ] Update STATUS.md after completing items

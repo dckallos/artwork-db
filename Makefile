@@ -17,9 +17,15 @@
 
 DBT_PROJECT_DIR := artwork_pipeline
 
-# Toolkit scripts -- currently in-repo; after separation, sibling path.
-# Override via: TOOLKIT_DIR=../snowflake-toolkit make iac
-TOOLKIT_DIR ?= scripts
+# Toolkit lives as a sibling repo (extracted from this monorepo).
+# Override via: TOOLKIT_DIR=~/other/path/snowflake-toolkit make iac
+TOOLKIT_DIR ?= ../snowflake-toolkit
+
+# --- Fail-fast: toolkit must exist ---
+ifeq ($(wildcard $(TOOLKIT_DIR)/snowflake_cli/setup.sh),)
+  $(error snowflake-toolkit not found at $(TOOLKIT_DIR). \
+    Clone it: git clone git@github.com-dckallos:dckallos/snowflake-toolkit.git $(TOOLKIT_DIR))
+endif
 
 # snow CLI connection that IaC targets. Defaults to "admin" (the historical
 # single-account behavior). Override to apply infra to a second account whose
@@ -36,13 +42,13 @@ CONN ?= admin
 VARS ?=
 
 # ---------- Executable bit policy (Phase 0.6 IaC strategy 3.4) ----------
-# Idempotent chmod 0755 for every .sh bootstrap.py shells out to. Prereq of
+# Idempotent chmod 0755 for every .sh the toolkit shells out to. Prereq of
 # every IaC target so a missing +x bit can't break `make iac`. Allow-list lives
-# in scripts/bootstrap_chmod.sh (don't duplicate). Run via `bash` so it works
-# even when that script is itself 0644.
+# in the toolkit's executable_files.txt. Run via `bash` so it works even when
+# that script is itself 0644.
 
 chmod:
-	@bash scripts/bootstrap_chmod.sh
+	@bash $(TOOLKIT_DIR)/bootstrap_chmod.sh
 
 # ---------- IaC ----------
 # Targets that run bootstrap.py depend on `chmod` so the .sh files are +x
@@ -50,7 +56,7 @@ chmod:
 
 iac: chmod
 	@echo "==> Applying ALL IaC (B + V + R) via bash orchestrator -> snow sql --filename..."
-	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
+	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
 	$(call run_bootstrap,$(CONN),$(VARS))
 
 # git-setup (B) is the optional trailing Git-mirror layer; per the 2026-05-29
@@ -66,12 +72,12 @@ bootstrap: chmod
 
 infra: chmod
 	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."
-	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
+	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
 
 # ---------- Loader credential (key-pair) ----------
 # Mint + register the ARTWORK_LOADER_SVC key pair and wire a key-pair snow CLI
 # connection for the account whose ADMIN connection is named CONN. Wraps the
-# version-controlled scripts/snowflake_cli suite so the loader credential
+# snowflake-toolkit's snowflake_cli suite so the loader credential
 # lifecycle runs through the same `make` front door as the rest of IaC:
 #   make loader CONN=mk07348
 # With --profile <CONN>, setup.sh namespaces BOTH the connection and key file:
@@ -84,7 +90,7 @@ infra: chmod
 # overwrites another account's [connections.loader].
 loader: chmod
 	@echo "==> Establishing loader key-pair for profile '$(CONN)' (additive; new key + connection)..."
-	bash scripts/snowflake_cli/setup.sh --profile $(CONN) --phase loader
+	bash $(TOOLKIT_DIR)/snowflake_cli/setup.sh --profile $(CONN) --phase loader
 
 # ---------- Transformer (dbt) credential (key-pair) ----------
 # Same as `loader`, for the ARTWORK_TRANSFORMER_SVC dbt identity. Requires
@@ -95,24 +101,24 @@ loader: chmod
 # ARTWORK_TRANSFORMER_SVC via git-setup/operator/register_transformer_public_key.sql.
 transformer: chmod
 	@echo "==> Establishing transformer (dbt) key-pair for profile '$(CONN)' (additive; new key + connection)..."
-	bash scripts/snowflake_cli/setup.sh --profile $(CONN) --phase transformer
+	bash $(TOOLKIT_DIR)/snowflake_cli/setup.sh --profile $(CONN) --phase transformer
 
 rollback: chmod
 	@if [ -z "$(FILE)" ]; then \
 		echo "usage: make rollback FILE=infrastructure/create_stages.sql"; \
 		exit 64; \
 	fi
-	@PREFIX=$(FILE); \
-		echo "==> Rolling back $$PREFIX via paired drop script..."; \
-		bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --file $$PREFIX --connection $(CONN)
+  @PREFIX=$(FILE); \
+    echo "==> Rolling back $$PREFIX via paired drop script..."; \
+    bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --file $$PREFIX --connection $(CONN)
 
 down: chmod
 	@echo "==> Tearing down ALL IaC (paired drops in reverse order)..."
-	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --connection $(CONN)
+	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --connection $(CONN)
 
 down-from: chmod
 	@if [ -z "$(FROM)" ]; then echo "usage: make down-from FROM=create_stages.sql"; exit 64; fi
-	bash scripts/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --from $(FROM) --connection $(CONN)
+	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase down --from $(FROM) --connection $(CONN)
 
 # ---------- Extraction ----------
 # The Met CLI entry point is `python -m extraction.met.run <subcommand>`.
@@ -193,7 +199,7 @@ clean:
 
 # Helper function to run bootstrap with optional variables
 define run_bootstrap
-	$(if $(2),\
-		bash -c 'vars="$(2)"; cmd="bash scripts/orchestrate_modern.sh --ddl-dir git-setup/ --manifest scripts/manifest.txt --phase bootstrap --connection $(1)"; for var in $$vars; do cmd="$$cmd --var $$var"; done; eval "$$cmd"',\
-		bash scripts/orchestrate_modern.sh --ddl-dir git-setup/ --manifest scripts/manifest.txt --phase bootstrap --connection $(1))
+  $(if $(2),\
+    bash -c 'vars="$(2)"; cmd="bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir git-setup/ --manifest scripts/manifest.txt --phase bootstrap --connection $(1)"; for var in $$vars; do cmd="$$cmd --var $$var"; done; eval "$$cmd"',\
+    bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir git-setup/ --manifest scripts/manifest.txt --phase bootstrap --connection $(1))
 endef

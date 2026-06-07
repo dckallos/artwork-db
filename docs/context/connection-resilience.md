@@ -3,7 +3,7 @@
 > **Tier-1 reference doc.** Created 2026-05-31. Companion to
 > `session-3-progress-log.md` (the empirical incident record) and
 > `cortex-ai-agents-playbook.md` (Cortex Agents primitives).
-> **Single-instance confirmed before authoring** (`scripts/check.sh` 2026-05-31:
+> **Single-instance confirmed before authoring** (`$(TOOLKIT_DIR)/check.sh` 2026-05-31:
 > exactly 1 `cortex_code_snowsight` session). **Read-before-write** discipline
 > applied to every shared file touched.
 >
@@ -71,7 +71,7 @@ rec #1 returns to the table.
 | 2 | A. Session params | **`ALTER ACCOUNT SET ABORT_DETACHED_QUERY = TRUE`** — Snowflake auto-aborts in-progress queries 5 min after the client connection drops. | **Partial** — kills *queries* in the ghost session but NOT the agent process or its file writes (workspace edits aren't necessarily query-shaped). Still worthwhile. | Trivial | Yes (one DDL) | [Parameters → ABORT_DETACHED_QUERY](https://docs.snowflake.com/en/sql-reference/parameters), [Snowflake KB](https://community.snowflake.com/s/article/Why-am-I-seeing-my-queries-cancelled-when-I-didn-t-cancel-them) |
 | 3 | F. Detection | **Snowflake Alert: >1 `cortex_code_snowsight` session active** — scheduled query against `INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER`; sends notification when forks appear. | **Detective, not preventive** — pairs with #1 to surface incidents. | Low (one `CREATE ALERT`) | Yes | [CREATE ALERT](https://docs.snowflake.com/en/sql-reference/sql/create-alert), [Alerts overview](https://docs.snowflake.com/en/user-guide/alerts) |
 | 4 | D. Client | **Tab-discipline runbook** — close the old Snowsight tab *before* opening a new one; never resubmit a prompt from a fresh tab while the original is still loading. | **Direct** but human-dependent. The 100% reliable kill (verified: `session-3-progress-log.md` §RUNBOOK). | Trivial | No (procedural) | This doc §6.D + the existing log §RUNBOOK. |
-| 5 | C. Resume the work | **Continue the existing `RUN_CONTROL` checkpoint pattern** — every multi-step task writes idempotent step rows, so a stunned window's resume costs ≤1 step of rework. **Already built and in use.** | **Mitigates damage**, doesn't prevent forks. | None (already built) | Yes (already IaC) | `BRONZE.RUN_CONTROL` table; `scripts/checkpoint.sh`. |
+| 5 | C. Resume the work | **Continue the existing `RUN_CONTROL` checkpoint pattern** — every multi-step task writes idempotent step rows, so a stunned window's resume costs ≤1 step of rework. **Already built and in use.** | **Mitigates damage**, doesn't prevent forks. | None (already built) | Yes (already IaC) | `BRONZE.RUN_CONTROL` table; `$(TOOLKIT_DIR)/checkpoint.sh`. |
 | 6 | A. Session params | **Set a UI session policy with a shorter idle timeout** (`SESSION_UI_IDLE_TIMEOUT_MINS`, e.g. 60) so a stunned window auto-logs-out instead of running indefinitely. | **Indirect** — bounds the ghost's lifetime. Default is now 4h (BCR-2139, 2026); can lower to 5 min. | Low | Yes (`CREATE SESSION POLICY`) | [Session policies](https://docs.snowflake.com/en/user-guide/session-policies), [BCR-2139](https://docs.snowflake.com/en/release-notes/bcr-bundles/2026_01/bcr-2139) |
 | 7 | C. Resumable agent | **Migrate scriptable workflows to Cortex Agents Run API + threads** — programmatic, thread-persisted alternative to the Code UI for repeat workflows (e.g. "apply infra"). Stunned client-side reconnect resumes the same `thread_id`. | **Architectural fix** — Code UI's "fresh session" defect is bypassed entirely for batch workflows. | High (build an agent + thread driver) | Yes (`CREATE AGENT FROM SPECIFICATION`) | [Cortex Agents Run](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run), [Threads API](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-threads-rest-api), [SNOWFLAKE.CORTEX.AGENT_RUN](https://docs.snowflake.com/en/sql-reference/functions/agent_run-snowflake-cortex) |
 | 8 | B. Cortex Code | **File feedback to Snowflake** — Cortex Code Snowsight ships fresh-each-session by design; only the vendor can add single-flight enforcement at the product layer. | **Long-term** — no immediate user-side action. | None on our side | No | [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code) (no documented single-flight) — `⚠ unverified`: no public release-note mentions ghost-session prevention. |
@@ -200,9 +200,9 @@ Wraps the MERGE + verification. Returns exit 0 (we own the lease) or non-zero
 background. New ritual:
 
 ```
-bash scripts/check.sh                                   # detect forks (today)
-bash scripts/claim.sh 2026-05-31-recon                  # NEW — block-or-yield
-bash scripts/checkpoint.sh 2026-05-31-recon resume in_progress
+bash $(TOOLKIT_DIR)/check.sh                             # detect forks (today)
+bash $(TOOLKIT_DIR)/claim.sh 2026-05-31-recon            # NEW — block-or-yield
+bash $(TOOLKIT_DIR)/checkpoint.sh 2026-05-31-recon resume in_progress
 ... actual work ...
 ```
 
@@ -259,10 +259,10 @@ exit code; it's enforced by the AGENTS.md ritual + by humans at first.)
   `(run_id, step)`, VARIANT checkpoint, session_id/query_tag provenance.
   **Already in IaC** (`infrastructure/create_run_control.sql`,
   Session-3 applied).
-- `scripts/checkpoint.sh` — write a `RUN_CONTROL` row, sets `QUERY_TAG`.
-  **Already in scripts.**
-- `scripts/sql/show_run_control.sql` — reads back the trail; smell-tests for
-  multi-instance writes. **Already in scripts.**
+- `$(TOOLKIT_DIR)/checkpoint.sh` — write a `RUN_CONTROL` row, sets `QUERY_TAG`.
+  **Already in toolkit.**
+- `$(TOOLKIT_DIR)/sql/show_run_control.sql` — reads back the trail; smell-tests for
+  multi-instance writes. **Already in toolkit.**
 - **`QUERY_TAG` correlation.** The cortex_code_snowsight tag is already used
   for fork detection (`show_active_sessions.sql`). For richer correlation,
   set a tag including the `run_id`:
@@ -314,7 +314,7 @@ CREATE ALERT IF NOT EXISTS BRONZE.CORTEX_FORK_ALERT
   THEN CALL SYSTEM$SEND_EMAIL(...);
 ```
 
-Pairs with the existing `scripts/sql/show_active_sessions.sql` for
+Pairs with the existing `$(TOOLKIT_DIR)/sql/show_active_sessions.sql` for
 on-demand inspection. The alert mechanics are well-documented
 ([CREATE ALERT](https://docs.snowflake.com/en/sql-reference/sql/create-alert)).
 
@@ -355,7 +355,7 @@ N minutes" is a one-line addition to `show_run_control.sql`.
   (the dual-instance evidence + the abort/close-tab runbook).
 - Cortex Agents primitives: `docs/context/cortex-ai-agents-playbook.md` §3.
 - Existing checkpoint/lease infrastructure already in IaC:
-  `infrastructure/create_run_control.sql`, `scripts/check.sh`,
-  `scripts/checkpoint.sh`, `scripts/sql/show_*.sql`.
+  `infrastructure/create_run_control.sql`, `$(TOOLKIT_DIR)/check.sh`,
+  `$(TOOLKIT_DIR)/checkpoint.sh`, `$(TOOLKIT_DIR)/sql/show_*.sql`.
 - AGENTS.md "single-instance discipline" + "read-before-write" rules — this
   doc is the technical implementation behind those rules.

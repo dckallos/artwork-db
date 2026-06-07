@@ -5,12 +5,13 @@ this doc alone. Escalate to source only via the triggers at the bottom.
 
 ## Entry point & shape
 
-- **`scripts/snowflake_cli/setup.sh`** — single entry point, `--phase` flag:
+- **`$(TOOLKIT_DIR)/snowflake_cli/setup.sh`** (sibling `snowflake-toolkit` repo)
+  — single entry point, `--phase` flag:
   `prereq | admin | loader | promote | all`. It chmods child scripts, then runs
-  the numbered `00`–`08` scripts in order. Phases map to trust boundaries:
+  the numbered `00`–`10` scripts in order. Phases map to trust boundaries:
   `prereq` (local only) → `admin` (Snowflake-side, one password use) →
-  `make iac` (creates objects) → `promote` → `loader`.
-- **`scripts/snowflake_cli/_lib.sh`** — shared helpers. **Sourced, not executed.**
+  `make iac` (creates objects) → `promote` → `loader` → `transformer`.
+- **`$(TOOLKIT_DIR)/snowflake_cli/_lib.sh`** — shared helpers. **Sourced, not executed.**
   Relies on `${VAR:-}` for `set -u` safety. Key helpers:
   `resolve_admin_account/user/warehouse`, `parse_toml_value`,
   `replace_toml_value_in_section` (atomic connections.toml edit),
