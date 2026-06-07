@@ -50,22 +50,12 @@ models:
 # Docs: https://dbt-labs.github.io/dbt-project-evaluator/
 vars:
   dbt_project_evaluator:
-    # Naming prefixes expected per model type (our convention: stg_, dim_, fct_)
+    # Model types: simple strings -- the package uses these as value comparisons
+    # AND column-name suffixes in generated SQL. Dicts get serialized as Python
+    # repr strings, breaking the compiled SQL.
     model_types:
-      - name: staging
-        config:
-          materialized: view
-        folder: staging
-        include_all_dag_nodes: false
-        node_types:
-          - model
-      - name: mart
-        config:
-          materialized: table
-        folder: marts
-        include_all_dag_nodes: false
-        node_types:
-          - model
+      - staging
+      - mart
 
     # Models with fanout above this threshold are flagged
     models_fanout_threshold: 5
