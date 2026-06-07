@@ -52,6 +52,8 @@ Local data files (created on first run, gitignored):
     cd ~/dev/artwork-db
     source .venv/bin/activate
     pip install -r extraction/aic/requirements.txt
+    # copy only if you don't have a .env yet otherwise this isn't wise
+    # TODO: Update cp logic
     cp extraction/aic/.env.example .env   # then edit credentials
     python -m extraction.aic.run snapshot -v
 
