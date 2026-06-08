@@ -32,6 +32,8 @@ models:
       +schema: SILVER
       met:
         +tags: ["met", "staging"]
+      aic:
+        +tags: ["aic", "staging"]
     marts:
       +materialized: table
       +schema: GOLD
