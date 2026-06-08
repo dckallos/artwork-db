@@ -24,8 +24,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # 134,078 non-deleted as of 2026-06-07.
           # Lower bound catches empty/truncated loads; upper bound catches cross-joins.
-          min_value: 100000
-          max_value: 200000
+          arguments:
+            min_value: 100000
+            max_value: 200000
           config:
             severity: error
     columns:
@@ -70,8 +71,9 @@ models:
         description: "FK to RAW_AIC_AGENTS.agent_id (used in Gold join to dim_artists)"
         tests:
           - relationships:
-              to: ref('stg_aic__artists')
-              field: agent_id
+              arguments:
+                to: ref('stg_aic__artists')
+                field: agent_id
               config:
                 severity: warn
                 # ~5% of artworks have NULL artist_id (anonymous works).
@@ -90,7 +92,8 @@ models:
         description: "Source system identifier (lineage pass-through)"
         tests:
           - accepted_values:
-              values: ['art_institute_chicago']
+              arguments:
+                values: ['art_institute_chicago']
 
   - name: stg_aic__artists
     description: >
@@ -103,8 +106,9 @@ models:
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # 16,051 agents as of 2026-06-07.
-          min_value: 10000
-          max_value: 50000
+          arguments:
+            min_value: 10000
+            max_value: 50000
           config:
             severity: error
     columns:
@@ -149,7 +153,8 @@ models:
         description: "Source system identifier (lineage pass-through)"
         tests:
           - accepted_values:
-              values: ['art_institute_chicago']
+              arguments:
+                values: ['art_institute_chicago']
 
   - name: stg_aic__images
     description: >
@@ -162,8 +167,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # 119,903 primary + 17,480 alt = ~137,383 expected.
           # Lower bound allows for minor source changes; upper guards cross-joins.
-          min_value: 100000
-          max_value: 500000
+          arguments:
+            min_value: 100000
+            max_value: 500000
           config:
             severity: error
     columns:
@@ -172,8 +178,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_aic__artworks')
-              field: artwork_id
+              arguments:
+                to: ref('stg_aic__artworks')
+                field: artwork_id
       - name: source_image_id
         description: >
           Raw IIIF UUID from AIC (36-char hyphenated format). Carried through
@@ -182,7 +189,8 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_match_regex:
               # All AIC image IDs are 36-char hyphenated UUIDs (verified 2026-06-07).
-              regex: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              arguments:
+                regex: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
               config:
                 severity: warn
       - name: image_url
@@ -190,7 +198,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_match_regex:
-              regex: "^https://www\\.artic\\.edu/iiif/2/"
+              arguments:
+                regex: "^https://www\\.artic\\.edu/iiif/2/"
               config:
                 severity: warn
       - name: image_url_small
@@ -202,7 +211,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['primary', 'additional']
+              arguments:
+                values: ['primary', 'additional']
       - name: ordinal_position
         description: "Display order: 1 = primary, 2+ = additional images"
         tests:
@@ -213,4 +223,5 @@ models:
         description: "Source system identifier (lineage pass-through)"
         tests:
           - accepted_values:
-              values: ['art_institute_chicago']
+              arguments:
+                values: ['art_institute_chicago']

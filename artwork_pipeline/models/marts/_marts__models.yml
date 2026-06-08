@@ -84,8 +84,9 @@ models:
           - type: not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 50
-          max_value: 1000000
+          arguments:
+            min_value: 50
+            max_value: 1000000
 
   # =========================================================================
   # dim_artworks -- Artwork dimension
@@ -188,8 +189,9 @@ models:
           - type: not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 100
-          max_value: 1000000
+          arguments:
+            min_value: 100
+            max_value: 1000000
 
   # =========================================================================
   # fct_artwork_images -- Image fact table
@@ -249,8 +251,9 @@ models:
           - type: not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 100
-          max_value: 10000000
+          arguments:
+            min_value: 100
+            max_value: 10000000
 
   # =========================================================================
   # openaccess_catalog -- Wide OBT for public-domain artworks with images
@@ -346,5 +349,6 @@ models:
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # Must be <= dim_artworks (filtered subset).
-          min_value: 50
-          max_value: 1000000
+          arguments:
+            min_value: 50
+            max_value: 1000000

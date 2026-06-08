@@ -14,8 +14,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # Guard against catastrophic data loss. Current seed = 503; full Met = ~480k.
           # Lower bound catches empty/truncated loads; upper bound catches accidental cross-joins.
-          min_value: 100
-          max_value: 1000000
+          arguments:
+            min_value: 100
+            max_value: 1000000
           config:
             severity: error
     columns:
@@ -58,8 +59,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # Must be >= artworks row count (every seeded object gets a control row).
           # Current: 2327; full Met slice could be much larger.
-          min_value: 100
-          max_value: 1000000
+          arguments:
+            min_value: 100
+            max_value: 1000000
           config:
             severity: error
     columns:
@@ -102,8 +104,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # Deduplication should produce fewer rows than source (503 objects -> ~262 artists).
           # Upper bound guards against dedup failure (if it equals source count, something broke).
-          min_value: 50
-          max_value: 500
+          arguments:
+            min_value: 50
+            max_value: 500
           config:
             severity: error
     columns:
@@ -123,8 +126,9 @@ models:
           - dbt_expectations.expect_column_proportion_of_unique_values_to_be_between:
               # After dedup, alpha_sort should be 100% unique (it's part of the key grain).
               # If this drops below 0.99, the dedup logic has a bug.
-              min_value: 0.99
-              max_value: 1.0
+              arguments:
+                min_value: 0.99
+                max_value: 1.0
       - name: artist_display_bio
         description: "Biographical summary (nationality + dates)"
       - name: artist_nationality
@@ -153,8 +157,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           # Must be >= source row count (every object has at least 1 primary image).
           # Current: 910 (503 primary + 407 additional). Upper bound guards cross-join bugs.
-          min_value: 100
-          max_value: 5000000
+          arguments:
+            min_value: 100
+            max_value: 5000000
           config:
             severity: error
     columns:
@@ -172,7 +177,8 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_match_regex:
               # All Met image URLs should be HTTPS on their CDN domain.
-              regex: "^https://images\\.metmuseum\\.org/"
+              arguments:
+                regex: "^https://images\\.metmuseum\\.org/"
               config:
                 severity: warn
       - name: image_url_small
