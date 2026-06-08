@@ -14,11 +14,12 @@ sources:
     description: "Art Institute of Chicago open-access data loaded by the extraction pipeline"
     database: ARTWORK_DB
     schema: BRONZE
-    freshness:
-      warn_after: {count: 30, period: day}
-      # No error_after until extraction is scheduled (manual today).
-      # AIC data dump refreshes periodically -- 30-day warning is appropriate.
-    loaded_at_field: _EXTRACTED_AT
+    config:
+      freshness:
+        warn_after: {count: 30, period: day}
+        # No error_after until extraction is scheduled (manual today).
+        # AIC data dump refreshes periodically -- 30-day warning is appropriate.
+      loaded_at_field: _EXTRACTED_AT
     tables:
       - name: raw_aic_artworks
         description: >

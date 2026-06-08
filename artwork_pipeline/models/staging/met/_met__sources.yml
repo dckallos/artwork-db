@@ -11,11 +11,12 @@ sources:
     description: "Met Museum OpenAccess data loaded by the extraction pipeline"
     database: ARTWORK_DB
     schema: BRONZE
-    freshness:
-      warn_after: {count: 7, period: day}
-      # No error_after until extraction is scheduled (manual today).
-      # This documents the expectation: Bronze should refresh at least weekly.
-    loaded_at_field: _EXTRACTED_AT
+    config:
+      freshness:
+        warn_after: {count: 7, period: day}
+        # No error_after until extraction is scheduled (manual today).
+        # This documents the expectation: Bronze should refresh at least weekly.
+      loaded_at_field: _EXTRACTED_AT
     tables:
       - name: raw_met_objects
         description: >
