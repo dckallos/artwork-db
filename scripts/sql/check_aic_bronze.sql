@@ -52,7 +52,7 @@ GROUP BY 1
 ORDER BY 1;
 
 -- 4) Batch provenance (most recent batches)
-SELECT _batch_id, _source_system, COUNT(*) AS rows,
+SELECT _batch_id, _source_system, COUNT(*) AS row_count,
        MIN(_extracted_at) AS batch_start, MAX(_extracted_at) AS batch_end
 FROM ARTWORK_DB.BRONZE.RAW_AIC_ARTWORKS
 GROUP BY 1, 2
