@@ -42,6 +42,10 @@ deeply before responding. Specifically:
    and whether the pattern you're setting here scales or creates tech debt.
 4. When implementing the governance tests, think through what actually breaks
    first in a multi-source Gold layer and whether the proposed tests catch it.
+5. Before recommending which Gold model to make incremental, think through what
+   `is_incremental()` actually means for a UNION ALL of two sources -- what
+   happens on the first run vs subsequent runs, and what the merge behavior
+   implies for late-arriving corrections from either source.
 
 ---
 
@@ -212,6 +216,67 @@ Gold evolves:
   Different domains, different URL structure. Do any downstream consumers assume
   a single URL pattern?
 
+### 7. Incremental Materialization & Cluster Keys (learning-motivated)
+
+The current Gold models are all `+materialized: table` (full rebuild every run).
+The dataset (~134k artworks, ~137k images) doesn't strictly demand incremental
+processing -- but the human explicitly wants to exercise incremental mechanics
+and cluster keys as a learning objective. The question is WHERE and HOW.
+
+**Candidate models for incremental:**
+
+| Model | Grain | Volume | Update pattern | Incremental fit? |
+|-------|-------|--------|----------------|-----------------|
+| `dim_artists` | One row per artist | ~14k AIC + ~161 Met | Rarely changes; new artists arrive with new artworks | Low (SCD Type 1 -- merge on key) |
+| `dim_artworks` | One row per artwork | ~134k AIC + ~503 Met | New extractions add rows; metadata updates are rare | Medium (append-dominant, occasional update) |
+| `fct_artwork_images` | One row per image per artwork | ~137k AIC + ~910 Met | Append-only: new images appear with new artworks; existing images never change | High (classic append fact) |
+| `openaccess_catalog` | One row per public-domain artwork with image | ~58k combined | Derived from dims/facts; rebuilds when upstream changes | Low (OBT; easier to full-refresh) |
+
+**Questions to discuss:**
+
+- **Which model is the best teaching vehicle?** `fct_artwork_images` is the
+  highest-volume, most append-like table -- classic incremental territory. But
+  `dim_artworks` exercises the more complex pattern (merge with updates). Which
+  teaches more? Should we do both?
+
+- **`unique_key` for multi-source UNION:** For `fct_artwork_images`, the PK is
+  `image_id` (a surrogate MD5). But if the surrogate key formula ever changes,
+  an incremental model accumulates zombie rows (old keys not matched by new keys
+  on merge). How do you handle surrogate key evolution on incremental models?
+
+- **`is_incremental()` and UNION ALL interaction:** When the model is incremental,
+  each source CTE needs a filter like:
+  ```sql
+  {% if is_incremental() %}
+  WHERE _extracted_at > (SELECT MAX(_loaded_at) FROM {{ this }})
+  {% endif %}
+  ```
+  But `_extracted_at` semantics differ by source (Met uses enrichment timestamps;
+  AIC uses dump-load timestamps). Does a single watermark column work, or do you
+  need per-source watermarks?
+
+- **Cluster keys on Snowflake:** At ~137k image rows, Snowflake's automatic
+  micro-partitioning is sufficient. But for learning purposes:
+  - `fct_artwork_images` queried by `source_system` + `artwork_id` -> cluster on those?
+  - `dim_artworks` queried by `source_system` + `classification` -> cluster on those?
+  - What's the cost of maintaining a cluster key vs the query benefit at this scale?
+  - When does it become worth it? (10M rows? 100M? What's the heuristic?)
+
+- **`on_schema_change` configuration:** Incremental models must declare how to
+  handle schema drift. Options: `fail`, `append_new_columns`, `sync_all_columns`,
+  `ignore`. With an enforced contract, which setting is correct? (Hint: the
+  contract already prevents unexpected schema changes, so the interaction is
+  worth understanding.)
+
+- **First-run behavior:** On first run (or `--full-refresh`), dbt creates the
+  table normally. On subsequent runs, it executes a MERGE (or INSERT based on
+  strategy). What does the compiled SQL look like for each strategy (`merge`,
+  `delete+insert`, `append`)? Show the actual Snowflake SQL that dbt generates.
+
+- **`dbt-diagnostics` angle:** What does a failed incremental build look like in
+  the diagnostics output? E.g., if the `unique_key` produces duplicates (merge
+  doesn't deduplicate; it updates), does `dbt-diagnostics` surface this?
+
 ---
 
 ## Existing Code (the AI must read these files from the workspace)
@@ -292,7 +357,7 @@ but HOW to implement them may still have sharp edges to discuss.
 | D6 | `source_image_id` carried to Gold | Single column for all sources, or source-specific? |
 | D7 | Thumbnail on artworks, not images | Does Gold need these columns, or are they Silver-only? |
 | D8 | AIC staging tagged `["aic", "staging"]` | Does `dbt build --select tag:aic` also run Gold? (No -- discuss) |
-| D9 | AIC staging as views | Performance impact on Gold materialization at 134k rows? |
+| D9 | AIC staging as views; Gold as `table` | Performance at 134k rows? Should one Gold model go incremental for learning? |
 
 ---
 
@@ -352,7 +417,8 @@ By the end of this conversation, the human should have:
 - Governance tests that actually catch the failure modes they're designed for
 - Understanding of UNION column-ordering risks and the chosen mitigation
 - Confidence that `openaccess_catalog` handles the 100x row-count increase gracefully
-- **Working, compilable code** for all Phase 3 files
+- A decision on which Gold model(s) to make incremental, with `unique_key`, incremental strategy, and cluster key choices
+- **Working, compilable code** for all Phase 3 files (including the incremental model)
 
 The human should also have LEARNED:
 - How dbt contracts interact with UNION ALL (what they catch vs what they miss)
@@ -361,6 +427,9 @@ The human should also have LEARNED:
 - When `dbt build` vs `dbt run + dbt test` produces different outcomes
 - The operational difference between "test fails" and "test catches the right failure"
 - How to use `dbt-diagnostics` to validate error handling before it matters
+- How `is_incremental()` interacts with multi-source UNIONs and what `unique_key` controls at merge time
+- The compiled SQL that dbt generates for `merge` vs `delete+insert` vs `append` strategies on Snowflake
+- When cluster keys provide value vs when they're premature optimization (the heuristic)
 
 ---
 
