@@ -22,9 +22,9 @@ models:
   # =========================================================================
   # dim_artists -- Artist dimension
   # =========================================================================
-  # Grain: one row per artist entity (source-system-aware for multi-source future).
+  # Grain: one row per artist entity per source system.
   # PK: artist_id (surrogate, MD5 hash).
-  # Source: stg_met__artists (today); will UNION stg_cma__artists etc. later.
+  # Sources: stg_met__artists, stg_aic__artists (filtered to is_artist=TRUE).
   # =========================================================================
   - name: dim_artists
     description: >
@@ -74,9 +74,12 @@ models:
         description: "Wikidata entity URL"
       - name: source_system
         data_type: varchar(16777216)
-        description: "Originating museum system (e.g. 'met_museum', 'cma', 'aic')"
+        description: "Originating museum system (e.g. 'met_museum', 'art_institute_chicago')"
         constraints:
           - type: not_null
+        tests:
+          - accepted_values:
+              values: ['met_museum', 'art_institute_chicago']
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"
@@ -84,16 +87,21 @@ models:
           - type: not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          arguments:
-            min_value: 50
-            max_value: 1000000
+          min_value: 50
+          max_value: 1000000
+      - dbt_expectations.expect_column_distinct_count_to_be_between:
+          column_name: source_system
+          min_value: 2
+          max_value: 2
+          config:
+            severity: error
 
   # =========================================================================
   # dim_artworks -- Artwork dimension
   # =========================================================================
   # Grain: one row per artwork (source-system-aware).
   # PK: artwork_id (surrogate, MD5 hash of source_system + source_object_id).
-  # Source: stg_met__artworks (today).
+  # Sources: stg_met__artworks, stg_aic__artworks.
   # =========================================================================
   - name: dim_artworks
     description: >
@@ -112,12 +120,17 @@ models:
           - type: unique
       - name: source_object_id
         data_type: number(38,0)
-        description: "Natural key from the source museum (Met objectID, CMA id, etc.)"
+        description: "Natural key from the source museum (Met objectID, AIC artwork_id)"
         constraints:
           - type: not_null
       - name: artist_id
         data_type: varchar(32)
         description: "FK to dim_artists (primary artist for this artwork)"
+        tests:
+          - dbt_expectations.expect_column_proportion_of_values_to_be_between:
+              min_value: 0.75
+              max_value: 1.0
+              row_condition: "source_system = 'art_institute_chicago'"
       - name: title
         data_type: varchar(16777216)
         description: "Artwork title"
@@ -182,6 +195,9 @@ models:
         description: "Originating museum system"
         constraints:
           - type: not_null
+        tests:
+          - accepted_values:
+              values: ['met_museum', 'art_institute_chicago']
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"
@@ -189,23 +205,29 @@ models:
           - type: not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          arguments:
-            min_value: 100
-            max_value: 1000000
+          min_value: 100
+          max_value: 1000000
+      - dbt_expectations.expect_column_distinct_count_to_be_between:
+          column_name: source_system
+          min_value: 2
+          max_value: 2
+          config:
+            severity: error
 
   # =========================================================================
-  # fct_artwork_images -- Image fact table
+  # fct_artwork_images -- Image fact table (incremental)
   # =========================================================================
   # Grain: one row per image per artwork.
   # PK: image_id (surrogate, MD5 hash of artwork_id + image_type + ordinal_position).
-  # Source: stg_met__images.
+  # Sources: stg_met__images, stg_aic__images.
+  # Materialization: incremental (merge on image_id), cluster_by [source_system].
   # =========================================================================
   - name: fct_artwork_images
     description: >
       Fact table of artwork images. One row per image (primary + additional) per
       artwork. FK to dim_artworks. Contains URLs, type classification, and
-      ordering metadata. This is a factless fact (no measures) -- it records
-      the relationship between artworks and their available images.
+      ordering metadata. Incremental: merge strategy on image_id with _extracted_at
+      watermark filter. Cluster key on source_system (learning exercise).
     config:
       contract:
         enforced: true
@@ -213,47 +235,62 @@ models:
       - name: image_id
         data_type: varchar(32)
         description: "Surrogate PK (MD5 hash of artwork_id + image_type + ordinal_position)"
-        constraints:
-          - type: not_null
-          - type: unique
+        tests:
+          - unique
+          - not_null
       - name: artwork_id
         data_type: varchar(32)
         description: "FK to dim_artworks"
-        constraints:
-          - type: not_null
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_artworks')
+              field: artwork_id
+      - name: source_image_id
+        data_type: varchar(16777216)
+        description: "Source system's native image identifier. AIC: IIIF UUID. Met: NULL."
       - name: image_url
         data_type: varchar(16777216)
         description: "Full-resolution image URL"
-        constraints:
-          - type: not_null
+        tests:
+          - not_null
       - name: image_url_small
         data_type: varchar(16777216)
-        description: "Web-sized image URL (NULL for additional images)"
+        description: "Web-sized image URL (NULL for Met additional images)"
       - name: image_type
         data_type: varchar(16777216)
         description: "Image category: 'primary' or 'additional'"
-        constraints:
-          - type: not_null
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['primary', 'additional']
       - name: ordinal_position
         data_type: number(38,0)
         description: "Display order (1 = primary, 2+ = additional)"
-        constraints:
-          - type: not_null
+        tests:
+          - not_null
       - name: source_system
         data_type: varchar(16777216)
         description: "Originating museum system"
-        constraints:
-          - type: not_null
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['met_museum', 'art_institute_chicago']
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"
-        constraints:
-          - type: not_null
+        tests:
+          - not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          arguments:
-            min_value: 100
-            max_value: 10000000
+          min_value: 100
+          max_value: 10000000
+      - dbt_expectations.expect_column_distinct_count_to_be_between:
+          column_name: source_system
+          min_value: 2
+          max_value: 2
+          config:
+            severity: error
 
   # =========================================================================
   # openaccess_catalog -- Wide OBT for public-domain artworks with images
@@ -348,7 +385,5 @@ models:
           - type: not_null
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
-          # Must be <= dim_artworks (filtered subset).
-          arguments:
-            min_value: 50
-            max_value: 1000000
+          min_value: 50
+          max_value: 1000000
