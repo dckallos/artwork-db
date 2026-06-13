@@ -89,10 +89,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 50
           max_value: 1000000
-      - dbt_expectations.expect_column_distinct_count_to_be_between:
+      - dbt_expectations.expect_column_distinct_count_to_equal:
           column_name: source_system
-          min_value: 2
-          max_value: 2
+          value: 2
           config:
             severity: error
 
@@ -202,10 +201,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 100
           max_value: 1000000
-      - dbt_expectations.expect_column_distinct_count_to_be_between:
+      - dbt_expectations.expect_column_distinct_count_to_equal:
           column_name: source_system
-          min_value: 2
-          max_value: 2
+          value: 2
           config:
             severity: error
 
@@ -280,10 +278,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 100
           max_value: 10000000
-      - dbt_expectations.expect_column_distinct_count_to_be_between:
+      - dbt_expectations.expect_column_distinct_count_to_equal:
           column_name: source_system
-          min_value: 2
-          max_value: 2
+          value: 2
           config:
             severity: error
 
