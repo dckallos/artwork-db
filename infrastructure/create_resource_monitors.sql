@@ -21,7 +21,7 @@ USE ROLE ACCOUNTADMIN;
 -- ---------------------------------------------------------------------------
 CREATE RESOURCE MONITOR IF NOT EXISTS ARTWORK_WH_MONITOR
     WITH
-        CREDIT_QUOTA = 20
+        CREDIT_QUOTA = 25
         FREQUENCY = MONTHLY
         START_TIMESTAMP = IMMEDIATELY
         TRIGGERS
