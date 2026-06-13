@@ -71,3 +71,7 @@ SELECT
     source_system,
     _loaded_at
 FROM unioned
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY artist_alpha_sort, COALESCE(artist_ulan_url, ''), source_system
+    ORDER BY artist_begin_date NULLS LAST
+) = 1
