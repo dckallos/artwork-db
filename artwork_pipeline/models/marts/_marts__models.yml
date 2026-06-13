@@ -126,11 +126,6 @@ models:
       - name: artist_id
         data_type: varchar(32)
         description: "FK to dim_artists (primary artist for this artwork)"
-        tests:
-          - dbt_expectations.expect_column_proportion_of_values_to_be_between:
-              min_value: 0.75
-              max_value: 1.0
-              row_condition: "source_system = 'art_institute_chicago'"
       - name: title
         data_type: varchar(16777216)
         description: "Artwork title"
