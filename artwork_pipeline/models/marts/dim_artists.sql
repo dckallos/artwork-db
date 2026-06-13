@@ -23,7 +23,7 @@ WITH met_artists AS (
         artist_ulan_url,
         artist_wikidata_url,
         'met_museum' AS source_system,
-        CURRENT_TIMESTAMP() AS _loaded_at
+        CURRENT_TIMESTAMP()::TIMESTAMP_NTZ AS _loaded_at
     FROM {{ ref('stg_met__artists') }}
 
 ),
