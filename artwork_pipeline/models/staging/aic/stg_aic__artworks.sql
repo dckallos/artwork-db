@@ -33,7 +33,7 @@ typed AS (
         artwork_id,
 
         -- Core artwork attributes
-        raw_payload:title::STRING                          AS title,
+        COALESCE(raw_payload:title::STRING, 'Untitled')     AS title,
         raw_payload:date_display::STRING                   AS date_display,
         raw_payload:date_start::INT                        AS date_start,
         raw_payload:date_end::INT                          AS date_end,
