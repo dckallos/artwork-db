@@ -124,7 +124,7 @@ SELECT
     all_artworks.link_resource,
     all_artworks.object_wikidata_url,
     all_artworks.source_system,
-    CURRENT_TIMESTAMP() AS _loaded_at
+    CURRENT_TIMESTAMP()::TIMESTAMP_NTZ AS _loaded_at
 FROM all_artworks
 LEFT JOIN artists
     ON all_artworks.primary_artist_alpha_sort = artists.artist_alpha_sort

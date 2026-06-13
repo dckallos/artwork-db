@@ -91,7 +91,7 @@ SELECT
     all_images.image_type,
     all_images.ordinal_position,
     all_images.source_system,
-    CURRENT_TIMESTAMP() AS _loaded_at
+    CURRENT_TIMESTAMP()::TIMESTAMP_NTZ AS _loaded_at
 FROM all_images
 INNER JOIN artworks
     ON all_images.source_object_id = artworks.source_object_id

@@ -42,7 +42,7 @@ aic_artists AS (
         _ulan_url                           AS artist_ulan_url,
         NULL::STRING                        AS artist_wikidata_url,
         'art_institute_chicago'             AS source_system,
-        CURRENT_TIMESTAMP()                 AS _loaded_at
+        CURRENT_TIMESTAMP()::TIMESTAMP_NTZ   AS _loaded_at
     FROM {{ ref('stg_aic__artists') }}
     WHERE is_artist = TRUE
 

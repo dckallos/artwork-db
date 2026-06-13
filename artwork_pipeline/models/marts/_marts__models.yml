@@ -79,7 +79,8 @@ models:
           - type: not_null
         tests:
           - accepted_values:
-              values: ['met_museum', 'art_institute_chicago']
+              arguments:
+                values: ['met_museum', 'art_institute_chicago']
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"
@@ -191,7 +192,8 @@ models:
           - type: not_null
         tests:
           - accepted_values:
-              values: ['met_museum', 'art_institute_chicago']
+              arguments:
+                values: ['met_museum', 'art_institute_chicago']
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"
@@ -256,7 +258,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['primary', 'additional']
+              arguments:
+                values: ['primary', 'additional']
       - name: ordinal_position
         data_type: number(38,0)
         description: "Display order (1 = primary, 2+ = additional)"
@@ -268,7 +271,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['met_museum', 'art_institute_chicago']
+              arguments:
+                values: ['met_museum', 'art_institute_chicago']
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"

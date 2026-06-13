@@ -69,7 +69,7 @@ SELECT
     COALESCE(image_counts.additional_image_count, 0) AS additional_image_count,
     artworks.link_resource,
     artworks.source_system,
-    CURRENT_TIMESTAMP() AS _loaded_at
+    CURRENT_TIMESTAMP()::TIMESTAMP_NTZ AS _loaded_at
 FROM artworks
 INNER JOIN primary_images
     ON artworks.artwork_id = primary_images.artwork_id
