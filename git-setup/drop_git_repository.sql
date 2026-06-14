@@ -35,4 +35,10 @@ USE ROLE ACCOUNTADMIN;
 -- Use the fully qualified name so this script is order-independent of any
 -- preceding USE DATABASE / USE SCHEMA statement, including the case where
 -- ARTWORK_OPS has already been torn down (IF EXISTS still applies cleanly).
+-- All three repos share the API integration + github_pat_artwork_db SECRET, so
+-- all three must drop here (the FIRST git-setup rollback step) before
+-- create_api_integration.sql / create_git_ops_db.sql can be torn down. Dropping
+-- the repos leaves the shared integration + secret in place.
 DROP GIT REPOSITORY IF EXISTS ARTWORK_OPS.GIT.artwork_db;
+DROP GIT REPOSITORY IF EXISTS ARTWORK_OPS.GIT.dbt_diagnostics;
+DROP GIT REPOSITORY IF EXISTS ARTWORK_OPS.GIT.snowflake_toolkit;

@@ -74,3 +74,47 @@ ALTER GIT REPOSITORY artwork_db FETCH;
 -- Grant read access to ARTWORK_ADMIN so that role can drive future
 -- in-Snowflake migrations without escalating to ACCOUNTADMIN.
 GRANT READ ON GIT REPOSITORY artwork_db TO ROLE ARTWORK_ADMIN;
+
+-- -----------------------------------------------------------------------------
+-- Sibling repos (dckallos/dbt-diagnostics, dckallos/snowflake-toolkit).
+--
+-- These REUSE the same wiring as artwork_db (no new integration / secret): the
+-- API integration GITHUB_ARTWORK_DB_INTEGRATION already whitelists the whole
+-- 'https://github.com/dckallos/' prefix and the github_pat_artwork_db SECRET is
+-- a dckallos PAT, so it authenticates every dckallos repo. Kept in THIS file
+-- (rather than separate create_*.sql files) because all three GIT REPOSITORY
+-- objects are one logical concern bound to the same integration + secret; the
+-- paired drop_git_repository.sql drops all three. Each block is independently
+-- idempotent (CREATE IF NOT EXISTS + convergent ALTER ... SET; ORIGIN is
+-- create-only). Reachable from inside Snowflake at:
+--   @ARTWORK_OPS.GIT.dbt_diagnostics/branches/<branch>/<path>
+--   @ARTWORK_OPS.GIT.snowflake_toolkit/branches/<branch>/<path>
+-- -----------------------------------------------------------------------------
+
+CREATE GIT REPOSITORY IF NOT EXISTS dbt_diagnostics
+    API_INTEGRATION = GITHUB_ARTWORK_DB_INTEGRATION
+    GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db
+    ORIGIN          = 'https://github.com/dckallos/dbt-diagnostics.git'
+    COMMENT         = 'Read-only mirror of the dbt-diagnostics repo for in-Snowflake IaC.';
+
+ALTER GIT REPOSITORY IF EXISTS dbt_diagnostics SET
+    API_INTEGRATION = GITHUB_ARTWORK_DB_INTEGRATION
+    GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db;
+
+ALTER GIT REPOSITORY dbt_diagnostics FETCH;
+
+GRANT READ ON GIT REPOSITORY dbt_diagnostics TO ROLE ARTWORK_ADMIN;
+
+CREATE GIT REPOSITORY IF NOT EXISTS snowflake_toolkit
+    API_INTEGRATION = GITHUB_ARTWORK_DB_INTEGRATION
+    GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db
+    ORIGIN          = 'https://github.com/dckallos/snowflake-toolkit.git'
+    COMMENT         = 'Read-only mirror of the snowflake-toolkit repo for in-Snowflake IaC.';
+
+ALTER GIT REPOSITORY IF EXISTS snowflake_toolkit SET
+    API_INTEGRATION = GITHUB_ARTWORK_DB_INTEGRATION
+    GIT_CREDENTIALS = ARTWORK_OPS.GIT.github_pat_artwork_db;
+
+ALTER GIT REPOSITORY snowflake_toolkit FETCH;
+
+GRANT READ ON GIT REPOSITORY snowflake_toolkit TO ROLE ARTWORK_ADMIN;

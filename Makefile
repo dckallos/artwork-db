@@ -41,6 +41,37 @@ CONN ?= admin
 # Framework forwards these as -D parameters to snow sql for template substitution.
 VARS ?=
 
+# ---------- git-setup credentials from .env (no manual VARS= needed) ----------
+# The git-setup SQL templates expect three secrets injected at apply time:
+#   github_pat, github_oauth_client_id, github_oauth_client_secret
+# Source: an exported environment variable wins; otherwise the value is read
+# straight from ENV_FILE (default .env), so `make iac` works whether you ran
+# the toolkit's load_profile.sh, `set -a; source .env; set +a`, or nothing.
+# This is the fix for the "inert MCP integration" foot-gun: empty creds are
+# NEVER injected (see GIT_VARS below) -- a missing key is simply omitted.
+ENV_FILE ?= .env
+
+# getenvfile,NAME -> value of NAME= from ENV_FILE (first match), with one layer
+# of surrounding single/double quotes stripped (matches load_profile.sh).
+getenvfile = $(strip $(shell test -f $(ENV_FILE) && sed -n 's/^$(1)=//p' $(ENV_FILE) | head -n1 | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//"))
+
+# Simply-expanded (:=) so the self-reference resolves to the EXPORTED env value
+# (make imports env vars) and falls back to the file -- no recursion.
+GITHUB_PAT                 := $(or $(GITHUB_PAT),$(call getenvfile,GITHUB_PAT))
+GITHUB_OAUTH_CLIENT_ID     := $(or $(GITHUB_OAUTH_CLIENT_ID),$(call getenvfile,GITHUB_OAUTH_CLIENT_ID))
+GITHUB_OAUTH_CLIENT_SECRET := $(or $(GITHUB_OAUTH_CLIENT_SECRET),$(call getenvfile,GITHUB_OAUTH_CLIENT_SECRET))
+
+# Emit a name=value pair ONLY when the value is non-empty, so an unset OAuth id
+# is never injected as ''. This is what keeps the MCP integration from going inert.
+GIT_VARS := \
+  $(if $(GITHUB_PAT),github_pat=$(GITHUB_PAT)) \
+  $(if $(GITHUB_OAUTH_CLIENT_ID),github_oauth_client_id=$(GITHUB_OAUTH_CLIENT_ID)) \
+  $(if $(GITHUB_OAUTH_CLIENT_SECRET),github_oauth_client_secret=$(GITHUB_OAUTH_CLIENT_SECRET))
+
+# What the bootstrap (git-setup) phase actually injects. An explicit VARS= fully
+# overrides the auto-derived creds (escape hatch); otherwise GIT_VARS is used.
+BOOTSTRAP_VARS := $(if $(strip $(VARS)),$(VARS),$(GIT_VARS))
+
 # ---------- Executable bit policy (Phase 0.6 IaC strategy 3.4) ----------
 # Idempotent chmod 0755 for every .sh the toolkit shells out to. Prereq of
 # every IaC target so a missing +x bit can't break `make iac`. Allow-list lives
@@ -57,7 +88,7 @@ chmod:
 iac: chmod
 	@echo "==> Applying ALL IaC (B + V + R) via bash orchestrator -> snow sql --filename..."
 	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
-	$(call run_bootstrap,$(CONN),$(VARS))
+	$(call run_bootstrap,$(CONN),$(BOOTSTRAP_VARS))
 
 # git-setup (B) is the optional trailing Git-mirror layer; per the 2026-05-29
 # design decision it runs LAST in `make iac` (after V/R). Standalone run needs
@@ -68,7 +99,7 @@ bootstrap: chmod
 	@echo "    NOTE: B is the OPTIONAL trailing Git-mirror layer (runs LAST in 'make iac')."
 	@echo "    Standalone 'make bootstrap' presumes ARTWORK_ADMIN already exists"
 	@echo "    (created by infrastructure/V001 via 'make infra' or 'make iac')."
-	$(call run_bootstrap,$(CONN),$(VARS))
+	$(call run_bootstrap,$(CONN),$(BOOTSTRAP_VARS))
 
 infra: chmod
 	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."

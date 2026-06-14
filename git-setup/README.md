@@ -11,17 +11,43 @@ with ACCOUNTADMIN creds + a local clone). Applied via `snow sql` through the sam
 > `drop_*.sql`). Reconciling the prefixes is the separately-gated V/R/B reword —
 > out of scope here.
 
-## Zero → working
+## Zero -> working
+
+All three secrets the git-setup SQL templates need -- `github_pat`,
+`github_oauth_client_id`, `github_oauth_client_secret` -- now come from your
+**root `.env`** automatically. You do NOT pass `VARS=` by hand anymore; the
+Makefile reads them (exported env wins, else straight from `.env`) and injects
+only the keys that have a value.
 
 ```bash
-cp git-setup/.env.example git-setup/.env     # then set GITHUB_PAT=<fine-grained PAT>
-set -a; source git-setup/.env; set +a
-make iac                                      # runs infra (V→R) THEN git-setup (B)
+cp .env.example .env                 # then fill GITHUB_PAT + GITHUB_OAUTH_CLIENT_ID/SECRET
+make iac CONN=gn33397                 # runs infra (V->R) THEN git-setup (B); creds auto-injected
 ```
 
-Prereq: run `make infra` (or the all-in-one `make iac`) **first** — the Git phase
+That is the whole flow. The two optional `source` steps below only matter for
+*other* tooling (extraction / dbt), not for git-setup creds:
+
+```bash
+# (optional) export the Snowflake/dbt connection vars for extraction + dbt:
+source ../snowflake-toolkit/load_profile.sh .env
+# (optional, alternative) export EVERYTHING in .env into the shell:
+set -a; source .env; set +a
+```
+
+> **Why `source load_profile.sh` is NOT enough on its own for git-setup:** the
+> toolkit's `load_profile.sh` exports only a hard-coded list of 9 `SNOWFLAKE_*`
+> / `DBT_SNOWFLAKE_*` vars -- it deliberately does **not** carry the GitHub PAT
+> or OAuth creds. Relying on it alone left `OAUTH_CLIENT_ID`/`SECRET` empty and
+> produced an inert MCP integration. The Makefile's `.env` auto-read (above)
+> closes that gap, so `make iac` works whether or not you sourced anything.
+
+**Credential precedence** (highest first): explicit `make ... VARS="..."`
+(full override) > exported environment variable > value in `.env` (`ENV_FILE`).
+An empty/unset key is omitted entirely -- empty creds are never injected.
+
+Prereq: run `make infra` (or the all-in-one `make iac`) **first** -- the Git phase
 runs LAST and grants READ on the repo to `ARTWORK_ADMIN`, which `create_roles.sql`
-creates. Setup is single-pass: all three forward scripts succeed in one run.
+creates. Setup is single-pass: all forward scripts succeed in one run.
 
 ## Forward scripts (run in numeric order, LAST in `make iac`)
 
@@ -29,7 +55,8 @@ creates. Setup is single-pass: all three forward scripts succeed in one run.
 |---|---|---|
 | 1 | `create_git_ops_db.sql` | `ARTWORK_OPS.GIT` DB/schema + `github_pat_artwork_db` SECRET (PAT via `<% github_pat %>`) |
 | 2 | `create_api_integration.sql` | API integration; whitelists the secret (`ALLOWED_AUTHENTICATION_SECRETS`) |
-| 3 | `create_git_repository.sql` | `GIT REPOSITORY artwork_db` (binds creds), FETCH, `GRANT READ … TO ROLE ARTWORK_ADMIN` |
+| 3 | `create_git_repository.sql` | 3 `GIT REPOSITORY` objects -- `artwork_db`, `dbt_diagnostics`, `snowflake_toolkit` (all reuse the same integration + secret), FETCH, `GRANT READ … TO ROLE ARTWORK_ADMIN` |
+| 4 | `create_mcp_integration.sql` | `GITHUB_MCP_INTEGRATION` API integration (OAuth via `<% github_oauth_client_id/secret %>`) + `GITHUB_MCP_SERVER` EXTERNAL MCP SERVER for Cortex Agents |
 
 After these succeed, apply migrations either from your laptop (`make infra`,
 current default) or from inside Snowflake:
