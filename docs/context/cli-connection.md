@@ -105,7 +105,7 @@ parameterized so a SECOND account can be onboarded without collisions.
     `default_connection_name` (timestamped backup, chmod 600).
 - **Onboard a 2nd account end-to-end:**
   `setup.sh --profile clientb --phase all`, then (targeting that account)
-  `make iac CONN=clientb` (Makefile threads `CONN` → `orchestrate.sh --connection`
+  `make iac CONN=clientb` (Makefile threads `CONN` into the sibling toolkit `--connection`
   through `iac`/`infra`/`bootstrap`/`down`/`down-from`/`rollback`; default `admin`),
   then `--profile clientb --phase promote` / `--phase loader`.
 

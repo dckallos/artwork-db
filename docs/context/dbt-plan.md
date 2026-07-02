@@ -45,14 +45,14 @@ spine exists to attach it to.
 
 ### D4. dbt as a peer IaC track
 
-dbt does NOT live inside `orchestrate.sh`/`manifest.txt`. It is a parallel Makefile
+dbt does NOT live inside the IaC toolkit orchestrator/`manifest.txt`. It is a parallel Makefile
 target that runs AFTER infrastructure. Rationale: clean separation of concerns; each
 tool owns its domain; the Makefile encodes the dependency order.
 
 Execution model:
 ```
 make all
-  |-- make infra          [existing: orchestrate.sh -> manifest.txt -> snow sql]
+  |-- make infra          [current: sibling snowflake-toolkit -> manifest.txt -> snow sql]
   |-- make dbt-build      [new: dbt_orchestrate.sh --phase build]
   |-- make bootstrap      [existing: git-setup, runs LAST]
 ```
@@ -169,7 +169,7 @@ artwork_pipeline/                  # dbt project root (NEW)
   macros/                          # if needed beyond dbt-utils
 
 scripts/
-  dbt_orchestrate.sh               # NEW: peer to orchestrate.sh
+  dbt_orchestrate.sh               # peer to the IaC toolkit orchestrator
   dbt_teardown.sh                  # NEW: schema-level reset (or phase of above)
 
 Makefile                           # MODIFIED: new targets added
@@ -182,7 +182,7 @@ Makefile                           # MODIFIED: new targets added
 | Phase | What it does | Equivalent |
 |---|---|---|
 | `--phase init` | Create/verify virtualenv, pip install dbt-snowflake, `dbt deps`, `dbt debug` | `setup.sh --phase loader` |
-| `--phase build` | Source `.env`, export vars, run `dbt build` | `orchestrate.sh` (the main apply) |
+| `--phase build` | Source `.env`, export vars, run `dbt build` | the IaC apply path |
 | `--phase test` | `dbt test` only (no model execution) | `check.sh` |
 | `--phase teardown` | DROP + recreate Silver/Gold schemas, restore grants | `rollback_sql.sh` |
 | `--phase full-refresh` | `dbt build --full-refresh` | nuclear reset for incrementals |

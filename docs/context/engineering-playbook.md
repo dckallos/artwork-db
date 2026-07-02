@@ -374,7 +374,7 @@ models:
 ### 5b. Snowflake-native dbt vs dbt-core — and the repo's profile gap
 
 - **dbt-core (current repo direction):** `profiles.yml.example` uses
-  `env_var()` + key-pair auth. Per AGENTS.md/extraction.md this is **dbt-core
+  `env_var()` + key-pair auth. Per the current dbt/extraction docs this is **dbt-core
   only** — env vars aren't available when dbt runs *inside* Snowflake. That is the
   noted gap.
 - **dbt Projects on Snowflake (native, now GA):** dbt runs *inside* Snowflake as a

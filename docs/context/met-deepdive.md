@@ -58,7 +58,7 @@
     "image URLs are API-only" premise holds for us.
     (https://huggingface.co/datasets/metmuseum/openaccess)
 
-## What already exists (grounding — see `extraction.md`)
+## What already exists (grounding — see `extraction/met/README.md`; older `extraction.md` is archived)
 
 The `extraction/met/` package is a mature 3-phase, resumable, idempotent ETL:
 bootstrap (CSV→SQLite UPSERT, image cols preserved across refreshes) → enrich
@@ -138,7 +138,7 @@ is about *policy and hardening decisions on top of that*, not a rebuild.
 |---|---|---|---|
 | `AUTO-01` | exploring | Can Snowflake Tasks/Streams *schedule detection* of stale/missing images? | Yes — a scheduled Task can compute "needs discovery or revalidation" (null image ∨ `metadataDate` advanced ∨ last-checked age exceeded) into a worklist table. (Note: `infrastructure/create_tasks.sql` is currently a placeholder.) **Strawman 2026-05-30:** the "needs work" predicate is realized as the `MET_WORKLIST` **view's** `WHERE` clause (no separate worklist table to maintain); a Task's job shrinks to lease-reclaim/housekeeping rather than recomputing a materialized list. Streams rejected for the queue role (see §2). See Session-1 strawman §2. |
 | `AUTO-02` | exploring | **Worklist pattern** to reconcile "automate from Snowflake" with "fetch cheaply on the Mac." | Snowflake (Task) writes a prioritized worklist table → the Mac polls/drains it, fetches, and uploads results → Snowflake marks them done. Snowflake decides *what*; the Mac does the *fetch*. Resolves the `PIPE-01`/`PIPE-05`/`IMG-06` tension at minimal cost. **Strawman 2026-05-30:** "writes a worklist table" sharpened to a **view + lease columns** — drain = read bounded slice then atomic `MERGE` claim (`claimed_by_batch`/`claimed_at`); "marks them done" = the single batch status-callback MERGE (O(1)/batch guard). See Session-1 strawman §2–§3. |
-| `AUTO-03` | open | **(Mentor-flagged.)** How do we get run history into Snowflake so automation is auditable? | Today `extraction_runs` lives only in SQLite and the Bronze `extraction_log` table is never written (per `extraction.md`). For Snowflake-driven scheduling we need run/phase history *in* Snowflake — land each phase's `running→success/failed` + counts into `BRONZE.extraction_log` so Tasks and dashboards can see it. Ties `AUTO-01`, `PIPE-05`. **Session-2 review 2026-05-30:** confirmed `extraction_log` is still written nowhere; `run.py`'s `status` reads only SQLite `extraction_runs`. Design-only this session — the batch status-callback path (strawman §3) is the natural carrier for a phase-level run record too. Build deferred to Session 3. **Session-2b correction 2026-05-30:** the target table **already exists** — `infrastructure/create_bronze_tables.sql` defines `BRONZE.extraction_log` (`log_id AUTOINCREMENT, source_system, batch_id, records_loaded, started_at, completed_at, status, error_message`). So `AUTO-03` needs **no DDL** — only the Python write path. Build-ready. |
+| `AUTO-03` | open | **(Mentor-flagged.)** How do we get run history into Snowflake so automation is auditable? | Today `extraction_runs` lives only in SQLite and the Bronze `extraction_log` table is never written (per the historical extraction notes). For Snowflake-driven scheduling we need run/phase history *in* Snowflake — land each phase's `running→success/failed` + counts into `BRONZE.extraction_log` so Tasks and dashboards can see it. Ties `AUTO-01`, `PIPE-05`. **Session-2 review 2026-05-30:** confirmed `extraction_log` is still written nowhere; `run.py`'s `status` reads only SQLite `extraction_runs`. Design-only this session — the batch status-callback path (strawman §3) is the natural carrier for a phase-level run record too. Build deferred to Session 3. **Session-2b correction 2026-05-30:** the target table **already exists** — `infrastructure/create_bronze_tables.sql` defines `BRONZE.extraction_log` (`log_id AUTOINCREMENT, source_system, batch_id, records_loaded, started_at, completed_at, status, error_message`). So `AUTO-03` needs **no DDL** — only the Python write path. Build-ready. |
 
 ### AUTH — authentication / service-identity
 
@@ -662,6 +662,6 @@ restart-resumption contract in `session-3-progress-log.md`). **Still open / Sect
 
 - Patterns behind these decisions: `engineering-playbook.md` (Track 2 ingestion,
   Track 3 Bronze/Silver/Gold, medallion delete-propagation).
-- Existing pipeline mechanics & gaps: `extraction.md`.
+- Current pipeline mechanics: `extraction/met/README.md`; historical extraction notes are archived under `docs/bin/repo-cleanup-20260702/stale-context/extraction.md`.
 - IaC objects these decisions touch (do NOT edit under current gating):
   `ddl-infrastructure.md`.

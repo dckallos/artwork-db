@@ -8,9 +8,9 @@
 - `infrastructure/create_*.sql` — databases & schemas, roles, warehouses, stages,
   file formats, bronze tables, tasks, service user.
 - `infrastructure/drop_*.sql` — paired rollback scripts.
-- `infrastructure/grant_privileges.sql`, `infrastructure/refresh_grants.sql`,
+- `infrastructure/create_grants.sql`, `infrastructure/refresh_grants.sql`,
   `infrastructure/drop_grants.sql`.
-- `$(TOOLKIT_DIR)/bootstrap.py`, `scripts/orchestrate.sh` (legacy, local),
+- `$(TOOLKIT_DIR)/orchestrate_modern.sh`, `$(TOOLKIT_DIR)/bootstrap.py`,
   `$(TOOLKIT_DIR)/apply_sql.sh`, `$(TOOLKIT_DIR)/rollback_sql.sh`,
   `scripts/manifest.txt` (artwork deploy ordering, stays local).
 - `Makefile` (already read — see notes below).
@@ -26,7 +26,7 @@
   pattern. Pairing is **by matching base name** (`create_roles` ↔ `drop_roles`),
   NOT by any number.
 - **Apply / teardown order is NOT encoded in filenames.** It is defined only in
-  `scripts/manifest.txt` and `scripts/orchestrate.sh`. Never infer order from a
+  `scripts/manifest.txt` and the sibling toolkit orchestrator. Never infer order from a
   filename.
 - Idempotency: `CREATE OR REPLACE` for objects; every create has a paired
   `drop_*.sql` for rollback.
@@ -51,11 +51,11 @@ treat it as **stale** and flag it for cleanup.
   `down [FROM=…]` / `setup` / `pipeline`. Every IaC target depends on `chmod`
   (via `$(TOOLKIT_DIR)/bootstrap_chmod.sh`) so missing +x bits can't break a run.
   NOTE: the `down FROM=` value refers to a manifest entry, not a filename prefix
-  — verify its exact form against `orchestrate.sh` when reviewed.
+  — verify its exact form against `scripts/manifest.txt` and the toolkit help when reviewed.
 
 ## Apply order — AUTHORITATIVE (from `scripts/manifest.txt`, NOT filenames)
 
-Forward order is exactly the manifest line order. `orchestrate.sh` reads the
+Forward order is exactly the manifest line order. The sibling toolkit orchestrator reads the
 manifest as the single source of truth; filenames carry no order.
 
 Phase 1 — `infrastructure/` (entries whose dir is `infrastructure`):
@@ -86,7 +86,7 @@ later-created Bronze tables are still covered; `create_bronze_views` follows
 `MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT`); `create_tasks` follows the control
 table it reclaims; service_user follows its grants.
 
-## `orchestrate.sh` phase → file-set mapping
+## Toolkit phase → file-set mapping
 
 - `--phase infra` — manifest entries under `infrastructure/`, in order.
 - `--phase bootstrap` — manifest entries under `git-setup/`, in order.
@@ -381,8 +381,7 @@ cascade from dropped parents) but means its only use is manual.
 ## Stale `V***` / `R***` / `B***` references to clean up (flagged, not fixed)
 
 - `scripts/manifest.txt` header: "V then R", "(V)", optional "(B)", "repeatable
-  R### entries", "skips repeatable R###" (lines ~6–8, 13); also still says it is
-  read by `bootstrap.py` though `orchestrate.sh` is now the entry point.
+  R### entries", "skips repeatable R###" (lines ~6–8, 13); also contained stale pre-split entry-point wording.
 - `infrastructure/drop_grants.sql`: "other V### drop scripts" (line ~11) and
   "grants on the ARTWORK_OPS database from B002" (line ~24).
 - `infrastructure/drop_roles.sql`: "applies V### drops in REVERSE order" (line ~9).
@@ -424,7 +423,7 @@ still PENDING: item 4's V/R/B rewords were done for `infrastructure/*` only — 
    `bronze_load_stage` (`create_stages.sql` / `drop_stages.sql`), and grant targets
    in `grant_privileges.sql` / `refresh_grants.sql`, plus `DEFAULT_NAMESPACE` in
    `create_service_user.sql`. Cosmetic (unquoted = case-insensitive) but uniform.
-3. **Wire `drop_grants.sql` into teardown.** `orchestrate.sh teardown()` derives
+3. **Wire `drop_grants.sql` into teardown.** The toolkit teardown path derives
    drops only from `create_*` basenames (`create_ → drop_`), so a non-`create_`
    entry is never torn down. Do NOT just add `drop_grants.sql` to the manifest
    (that would *apply* a drop on forward runs). Instead **rename
@@ -538,7 +537,7 @@ DATA-06 guard, AUTO-03 writes) = NEXT session. (AUTH-01 key-pair CLOSED + verifi
 ## When to escalate to full source
 
 - Changing apply/teardown order → edit `scripts/manifest.txt` (only source of order).
-- Changing phase routing, preflight, or secret suppression → `scripts/orchestrate.sh`.
+- Changing phase routing, preflight, or secret suppression → sibling `snowflake-toolkit` orchestration code.
 - Adding/altering grants → `create_grants.sql` (renamed from `grant_privileges.sql`;
   + mirror current-grants in `refresh_grants.sql`); rollback stays no-op unless granting
   on persistent non-dropped objects.

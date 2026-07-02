@@ -91,15 +91,11 @@ rename makes grants an auto-paired `create_`).
 
 | File | Lines | Purpose | Verified | Open source only if… |
 |---|---|---|---|---|
-| `orchestrate.sh` | — | bash IaC entry point (legacy); reads `manifest.txt`, maps `--phase {bootstrap\|infra\|all\|down}` by directory, pairs `create_→drop_`, runs preflight after `create_roles.sql` | prior | changing phase routing / preflight / secret suppression |
-| `manifest.txt` | — | **single source of apply order** (forward) + teardown reversal; header has stale V/R/B + `bootstrap.py` refs | prior | changing apply order |
-| `secret_bearing.txt` | — | scripts whose stdout is suppressed (fail-closed on PAT marker) | prior | adding secret-bearing scripts |
+| `manifest.txt` | — | single source of apply order for the sibling toolkit IaC orchestrator | 2026-07-02 | changing apply order |
+| `secret_bearing.txt` | — | project scripts whose stdout must be suppressed by the toolkit apply path | 2026-07-02 | adding secret-bearing scripts |
 | `dbt_orchestrate.sh` | — | artwork-specific dbt orchestration (stays local) | prior | changing dbt run logic |
-| `dbt_orchestrate_modern.sh` | — | artwork-specific dbt orchestration (modern variant, stays local) | prior | changing dbt run logic |
 | `sql/show_pipeline_status.sql` | — | artwork-specific: pipeline object+task status | 2026-05-31 | — |
 | `sql/show_run_control.sql` | — | artwork-specific: run-control trail + dual-instance smell test | 2026-05-31 | — |
-| `extract_repos.sh` | — | archival: the `git filter-repo` extraction script (served its purpose) | prior | — |
-| `post_extraction_fixup.sh` | — | archival: post-extraction companion (served its purpose) | prior | — |
 
 ## Root / other
 
@@ -107,12 +103,11 @@ rename makes grants an auto-paired `create_`).
 |---|---|---|---|---|
 | `Makefile` | — | task runner; `CONN=` passthrough; 2026-06-04: `loader` + `transformer` targets wrap `setup.sh --profile $(CONN) --phase loader\|transformer`; **2026-06-05: `extract-met` rewritten to real subcommands (snapshot/seed-control/enrich-met) + generic `AWS_NO_SSO` prefix on PUT steps + `MET_DEPT`/`MET_SEED_LIMIT`/`MET_ENRICH_LIMIT` knobs; `extract` aliases it; aic/cma/smithsonian commented placeholders** | 2026-06-05 | changing make targets |
 | `.env.example` | 39 | runtime env template; **2026-06-04 re-pointed to new account: example acct `OBANOYY-MK07348`, namespaced loader key `<conn>_loader_rsa_key.p8`, dbt identity `DBT_SNOWFLAKE_USER=ARTWORK_TRANSFORMER_SVC` + `<conn>_transformer_rsa_key.p8`**; `SMITHSONIAN_API_KEY` still no consumer | 2026-06-04 | — |
-| `profiles.yml.example` | 39 | dbt-core profile (env_var + key-pair, dev→SILVER/prod→GOLD); **gap for Snowflake-native dbt** (extraction.md) | 2026-05-30 | — |
+| `profiles.yml.example` | 39 | dbt-core profile example using env vars + key-pair auth | 2026-07-02 | dbt profile setup |
 | `requirements.txt` | — | root pin set (mirrors extraction deps) | 2026-05-30 | bumping pins |
-| `rename_and_update.py` | 91 | **spent one-shot** V###/R### → prefix-free `git mv` + ref-rewrite migration; historical/dead, candidate for removal | 2026-05-30 | auditing the prefix-retirement history |
 | `.gitignore`, `LICENSE` | — | trivial; not row-mapped | prior | — |
 
-## extraction/met/ (Workflow 3 — reviewed; see `extraction.md`)
+## extraction/met/ (Workflow 3 — current runbook in `extraction/met/README.md`)
 
 Standalone Met OpenAccess → Bronze ETL. SQL externalized in `sql/*.sql`; SQLite
 is intermediate, `ARTWORK_DB.BRONZE.raw_met_objects` is the destination.
