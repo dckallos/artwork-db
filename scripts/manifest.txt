@@ -1,6 +1,6 @@
 # scripts/manifest.txt -- ordered forward apply list for the IaC layer.
 # One repo-relative path per line; blank lines and #-comments are ignored.
-# Read by scripts/orchestrate.sh as the single source of truth for apply order
+# Read by the sibling snowflake-toolkit orchestrator as the single source of truth for apply order
 # AND teardown reversal, replacing sorted(glob(...)). Teardown reverses this
 # list and applies only the paired drop of each create_* entry (create_ ->
 # drop_); non-create_ entries (e.g. refresh_grants.sql) have no paired drop and
@@ -11,7 +11,7 @@
 # Decouples apply order from filenames entirely (H2). Filenames no longer carry
 # numeric prefixes; this manifest is the sole source of apply order. The only
 # behavioral delta from the original prefix-glob is create_grants.sql (formerly
-# grant_privileges.sql), which the old V*__create_*.sql glob silently skipped
+# create_grants.sql), which a naive create_*.sql glob could order incorrectly
 # and which now applies in place.
 
 # --- Phase 1: core infrastructure (ACCOUNTADMIN bootstrap, then ARTWORK_ADMIN) ---

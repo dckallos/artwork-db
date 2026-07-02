@@ -10,7 +10,7 @@
 #   3. Exports DBT_* and SNOWFLAKE_* vars so dbt's env_var() can read them
 #   4. Invokes the appropriate dbt command
 #
-# Designed to run on the Mac alongside the existing IaC orchestrate.sh.
+# Designed to run on the Mac alongside the sibling snowflake-toolkit IaC path.
 # Does NOT run inside the Snowflake workspace sandbox.
 # =============================================================================
 
@@ -22,8 +22,8 @@ DBT_PROJECT_DIR="$REPO_ROOT/artwork_pipeline"
 PROFILES_DIR="$DBT_PROJECT_DIR"
 
 # snow CLI connection used by the teardown phase's `snow sql` calls. Defaults to
-# $SNOW_CONNECTION else "admin" (same convention as scripts/orchestrate.sh +
-# apply_sql.sh), and is overridable via --connection NAME so teardown can target
+# $SNOW_CONNECTION else "admin" (same convention as the Makefile +
+# sibling snowflake-toolkit apply path), and is overridable via --connection NAME so teardown can target
 # a second account set up via `setup.sh --profile <label>`.
 ADMIN_CONN="${SNOW_CONNECTION:-admin}"
 
