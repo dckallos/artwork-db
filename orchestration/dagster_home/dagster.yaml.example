@@ -1,23 +1,5 @@
-# =============================================================================
-# dagster.yaml.example -- local DAGSTER_HOME instance config
-# =============================================================================
-# Copy to dagster.yaml in your DAGSTER_HOME (see run_dagster_dev.sh, which sets
-# DAGSTER_HOME to orchestration/dagster_home by default). Local dev uses SQLite
-# run/event storage on the filesystem -- no Postgres required. Move to Postgres
-# only when local metadata durability actually matters (Stage 2+).
-# =============================================================================
-
-# Local filesystem + SQLite storage (the default). Listed explicitly for clarity.
-storage:
-  sqlite:
-    base_dir: null   # defaults to $DAGSTER_HOME
-
-# Keep concurrent runs modest on a laptop.
-run_coordinator:
-  module: dagster.core.run_coordinator
-  class: QueuedRunCoordinator
-  config:
-    max_concurrent_runs: 1
+# Minimal Dagster instance config for local development.
+# SQLite storage in $DAGSTER_HOME (the default when no storage: block is present).
 
 telemetry:
   enabled: false

@@ -14,13 +14,13 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from dagster import AssetExecutionContext, MaterializeResult, asset, multi_asset, AssetOut
+from dagster import OpExecutionContext, MaterializeResult, asset, multi_asset, AssetOut
 
 from .resources import REPO_ROOT
 from .translator import dbt_source_asset_key
 
 
-def _run_module(context: AssetExecutionContext, module_args: list[str]) -> None:
+def _run_module(context: OpExecutionContext, module_args: list[str]) -> None:
     """Run `python -m <module> <args...>` from the repo root, streaming output."""
     cmd = [sys.executable, "-m", *module_args]
     context.log.info("Running: %s", " ".join(cmd))
@@ -35,7 +35,7 @@ def _run_module(context: AssetExecutionContext, module_args: list[str]) -> None:
 # Met pipeline: snapshot -> seed control -> enrich (assemble RAW_MET_OBJECTS)
 # ---------------------------------------------------------------------------
 @asset(group_name="extraction_met", key=["met", "csv_snapshot"], compute_kind="python")
-def met_csv_snapshot(context: AssetExecutionContext) -> MaterializeResult:
+def met_csv_snapshot(context: OpExecutionContext) -> MaterializeResult:
     """Phase 1: load the Met OpenAccess CSV into BRONZE.MET_CSV_SNAPSHOT."""
     _run_module(context, ["extraction.met.run", "snapshot"])
     return MaterializeResult(metadata={"phase": "snapshot"})
@@ -47,7 +47,7 @@ def met_csv_snapshot(context: AssetExecutionContext) -> MaterializeResult:
     deps=[met_csv_snapshot],
     compute_kind="python",
 )
-def met_enrichment_control(context: AssetExecutionContext) -> MaterializeResult:
+def met_enrichment_control(context: OpExecutionContext) -> MaterializeResult:
     """Phase 2: seed MET_ENRICHMENT_CONTROL from the snapshot (dbt source)."""
     _run_module(context, ["extraction.met.run", "seed-control"])
     return MaterializeResult(metadata={"phase": "seed-control"})
@@ -59,7 +59,7 @@ def met_enrichment_control(context: AssetExecutionContext) -> MaterializeResult:
     deps=[met_enrichment_control],
     compute_kind="python",
 )
-def raw_met_objects(context: AssetExecutionContext) -> MaterializeResult:
+def raw_met_objects(context: OpExecutionContext) -> MaterializeResult:
     """Phase 3: enrich the worklist and assemble BRONZE.RAW_MET_OBJECTS (dbt source)."""
     _run_module(context, ["extraction.met.run", "enrich-met"])
     return MaterializeResult(metadata={"phase": "enrich-met"})
@@ -76,7 +76,7 @@ def raw_met_objects(context: AssetExecutionContext) -> MaterializeResult:
     },
     compute_kind="python",
 )
-def aic_snapshot(context: AssetExecutionContext):
+def aic_snapshot(context: OpExecutionContext):
     """Collect + ingest AIC in one run: download the S3 tar.bz2 dump, extract
     artworks + agents, transform to NDJSON, PUT to the Bronze stage, COPY into a
     temp table, and MERGE into BRONZE.RAW_AIC_ARTWORKS + RAW_AIC_AGENTS (with
