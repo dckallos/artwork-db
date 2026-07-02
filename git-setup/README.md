@@ -3,8 +3,7 @@
 ACCOUNTADMIN-only, one-time setup of the **optional** in-Snowflake Git mirror
 (a `GIT REPOSITORY` object for `EXECUTE IMMEDIATE FROM '@...'`). These are the
 only scripts that depend on something outside Snowflake's view of the repo (you,
-with ACCOUNTADMIN creds + a local clone). Applied via `snow sql` through the same
-`scripts/apply_sql.sh` wrapper as everything else, driven by `make bootstrap`.
+with ACCOUNTADMIN creds + a local clone). Applied via `make bootstrap`, which delegates to the sibling `snowflake-toolkit` SQL apply path.
 
 > **Naming note (flag, not yet fixed):** this doc still uses `B###__`/`V###__`/
 > `R###__` prefixes, but the on-disk files are unprefixed (`create_*.sql` /
@@ -88,8 +87,8 @@ chain is split across the three forward scripts: the SECRET (`create_git_ops_db`
   Only `git-setup/.env.example` (blank `GITHUB_PAT=`) is committed.
 - **Rotate:** edit `git-setup/.env`, re-run `make iac` (no `ALTER SECRET` step).
 - **Echo suppression:** the rendered `CREATE OR REPLACE SECRET` would print the
-  PAT to stdout, so `scripts/bootstrap.py` flags secret-bearing scripts and
-  `scripts/apply_sql.sh` discards their stdout (`SNOW_SUPPRESS_STDOUT=1`) while
+  PAT to stdout, so the toolkit apply path flags secret-bearing scripts and
+  discards their stdout (`SNOW_SUPPRESS_STDOUT=1`) while
   keeping stderr. **If a PAT was ever printed, treat it as compromised:** revoke
   + reissue on GitHub, update `git-setup/.env`, re-run `make iac`.
 - For a public repo you could drop the SECRET wiring; the default assumes private.
