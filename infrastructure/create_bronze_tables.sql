@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS MET_ENRICHMENT_CONTROL (
 )
 COMMENT = 'Thin Snowflake-authoritative enrichment control/lease table for the Met worklist. State only, not data.';
 
--- P-D1 (code-review-met-pipeline.md): on accounts where MET_ENRICHMENT_CONTROL
+-- P-D1 historical review finding: on accounts where MET_ENRICHMENT_CONTROL
 -- already exists from a prior apply, the CREATE TABLE IF NOT EXISTS above is a
 -- no-op. The idempotent ALTER below adds enrichment_error to those installations
 -- without disturbing rows. Snowflake silently no-ops ADD COLUMN IF NOT EXISTS

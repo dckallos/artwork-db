@@ -1,7 +1,7 @@
 -- =============================================================================
 -- create_grants.sql: Grant privileges to functional roles
 -- (Renamed from grant_privileges.sql so teardown's create_->drop_ pairing rule
---  auto-maps it to drop_grants.sql; see scripts/manifest.txt + orchestrate.sh.)
+--  auto-maps it to drop_grants.sql; see scripts/manifest.txt + sibling toolkit orchestration.)
 -- Paired rollback: infrastructure/drop_grants.sql
 -- =============================================================================
 
