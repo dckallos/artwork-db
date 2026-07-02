@@ -139,7 +139,7 @@ rollback: chmod
 		echo "usage: make rollback FILE=infrastructure/create_stages.sql"; \
 		exit 64; \
 	fi
-  @PREFIX=$(FILE); \
+	@PREFIX=$(FILE); \
     echo "==> Rolling back $$PREFIX via paired drop script..."; \
     bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --file $$PREFIX --connection $(CONN)
 
