@@ -9,7 +9,12 @@ from dagster import Definitions
 
 from . import assets_extraction
 from .assets_dbt import artwork_dbt_assets
-from .jobs import dbt_build_job, full_pipeline_job, met_ingest_job
+from .jobs import (
+    dbt_build_job,
+    full_pipeline_job,
+    ingest_all_job,
+    met_ingest_job,
+)
 from .resources import dbt_resource
 from .schedules import daily_dbt_schedule, weekly_full_pipeline_schedule
 
@@ -23,7 +28,7 @@ extraction_assets = [
 
 defs = Definitions(
     assets=[*extraction_assets, artwork_dbt_assets],
-    jobs=[met_ingest_job, dbt_build_job, full_pipeline_job],
+    jobs=[met_ingest_job, ingest_all_job, dbt_build_job, full_pipeline_job],
     schedules=[daily_dbt_schedule, weekly_full_pipeline_schedule],
     resources={"dbt": dbt_resource},
 )

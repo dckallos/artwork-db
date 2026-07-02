@@ -77,11 +77,12 @@ def raw_met_objects(context: AssetExecutionContext) -> MaterializeResult:
     compute_kind="python",
 )
 def aic_snapshot(context: AssetExecutionContext):
-    """Load the AIC data dump into BRONZE.RAW_AIC_ARTWORKS + RAW_AIC_AGENTS.
-
-    NOTE: the AIC extractor is still being built (see extraction/aic). Until it
-    is complete this asset will fail on run -- that is expected and does not
-    block the Met path or dbt runs against Met-only data.
+    """Collect + ingest AIC in one run: download the S3 tar.bz2 dump, extract
+    artworks + agents, transform to NDJSON, PUT to the Bronze stage, COPY into a
+    temp table, and MERGE into BRONZE.RAW_AIC_ARTWORKS + RAW_AIC_AGENTS (with
+    deaccession soft-delete). This is the fully-implemented `snapshot` path in
+    extraction/aic/loader.py -- it needs outbound HTTPS to the AIC S3 bucket and
+    ~2 GB local disk for the dump/extract.
     """
     _run_module(context, ["extraction.aic.run", "snapshot"])
     return (

@@ -17,10 +17,20 @@ dbt_selection = AssetSelection.assets(artwork_dbt_assets)
 # Everything under the Met extraction group.
 met_selection = AssetSelection.groups("extraction_met")
 
+# Both extraction groups (Met chain + AIC snapshot), NO dbt. This is "task 1":
+# collect + ingest all sources into Snowflake Bronze. Run dbt_build_job after.
+ingest_selection = AssetSelection.groups("extraction_met", "extraction_aic")
+
 met_ingest_job = define_asset_job(
     name="met_ingest_job",
     selection=met_selection,
     description="Run the Met extraction chain (snapshot -> seed -> enrich).",
+)
+
+ingest_all_job = define_asset_job(
+    name="ingest_all_job",
+    selection=ingest_selection,
+    description="Collect + ingest ALL sources (Met + AIC) into Snowflake Bronze. No dbt.",
 )
 
 dbt_build_job = define_asset_job(
