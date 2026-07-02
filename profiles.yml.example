@@ -2,7 +2,7 @@
 # dbt-snowflake profile for the OpenAccess Artwork Medallion Pipeline.
 # All values resolve from the environment via env_var() -- no secrets live here,
 # so this example installs verbatim to ~/.dbt/profiles.yml.
-# Auth = key-pair (private_key_path); see scripts/snowflake_cli/ keypair setup.
+# Auth = key-pair (private_key_path); see sibling snowflake-toolkit/snowflake_cli/setup.sh.
 #
 # NOTE: The canonical profiles.yml now lives INSIDE artwork_pipeline/ and is
 # passed via --profiles-dir by dbt_orchestrate.sh. This root example is kept
