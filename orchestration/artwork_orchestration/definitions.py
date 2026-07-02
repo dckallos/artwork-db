@@ -16,7 +16,7 @@ Two ways to obtain the code location:
 """
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional
 
 from dagster import Definitions
 
@@ -31,10 +31,10 @@ from .loader import load_source_specs
 from .model import FrameworkConfig
 from .resources import dbt_resource
 from .sources import REGISTRY
-from .spec import SourceSpec
+from .spec import SourceRegistry
 
 
-def _assemble(framework: FrameworkConfig, registry: Sequence[SourceSpec]):
+def _assemble(framework: FrameworkConfig, registry: SourceRegistry):
     """Build the extraction assets, checks, jobs and schedules from a registry.
 
     Pure: depends only on its arguments, so it is safe to call repeatedly (tooling,
@@ -78,8 +78,8 @@ def build_definitions(
             ``dbt_resource``. Tests may pass a stub.
     """
     fw = framework or FRAMEWORK
-    registry: Sequence[SourceSpec] = (
-        tuple(load_source_specs(sources_dir)) if sources_dir is not None else REGISTRY
+    registry: SourceRegistry = (
+        SourceRegistry(load_source_specs(sources_dir)) if sources_dir is not None else REGISTRY
     )
     extraction_assets, asset_checks, jobs, schedules = _assemble(fw, registry)
 

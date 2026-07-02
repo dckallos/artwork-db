@@ -8,7 +8,9 @@ Python. Keeping them here (a dependency-free leaf module) lets both ``config.py`
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Mapping
+from typing import Any, List, Mapping, Optional, Union
+
+from .enums import BackoffStrategy, JitterStrategy, StepKind
 
 
 @dataclass(frozen=True)
@@ -40,8 +42,45 @@ class BronzeCfg:
 class RetryCfg:
     max_retries: int
     delay_seconds: int
-    backoff: str            # "exponential" | "linear"
-    jitter: str             # "plus_minus" | "none"
+    backoff: BackoffStrategy       # exponential | linear
+    jitter: JitterStrategy         # plus_minus | none
+
+
+@dataclass(frozen=True)
+class ProfileConfig:
+    """The resolved dbt profile output block (``profiles.yml`` -> profile -> target).
+
+    Replaces the ad-hoc dict previously passed around in ``_connection.py``. Every field
+    is optional because a profile only sets the keys it needs (e.g. key-pair auth omits
+    ``password``); ``connect()`` builds connector kwargs from the fields that are set.
+    """
+
+    account: Optional[str] = None
+    user: Optional[str] = None
+    role: Optional[str] = None
+    warehouse: Optional[str] = None
+    database: Optional[str] = None
+    schema: Optional[str] = None
+    private_key_path: Optional[str] = None
+    private_key_passphrase: Optional[str] = None
+    password: Optional[str] = None
+    authenticator: Optional[str] = None
+
+    @classmethod
+    def from_mapping(cls, m: Mapping[str, Any]) -> "ProfileConfig":
+        """Build from a rendered profile mapping, ignoring keys we do not model."""
+        return cls(
+            account=m.get("account"),
+            user=m.get("user"),
+            role=m.get("role"),
+            warehouse=m.get("warehouse"),
+            database=m.get("database"),
+            schema=m.get("schema"),
+            private_key_path=m.get("private_key_path"),
+            private_key_passphrase=m.get("private_key_passphrase"),
+            password=m.get("password"),
+            authenticator=m.get("authenticator"),
+        )
 
 
 @dataclass(frozen=True)
@@ -51,8 +90,11 @@ class TimeoutsCfg:
     default: int
     by_kind: Mapping[str, int] = field(default_factory=dict)
 
-    def for_kind(self, kind: str) -> int:
-        return int(self.by_kind.get(kind, self.default))
+    def for_kind(self, kind: Union[StepKind, str]) -> int:
+        """Timeout for a step ``kind``. Accepts a :class:`StepKind` or a raw string;
+        both resolve against the ``by_kind`` map (keyed by the YAML kind tokens)."""
+        key = kind.value if isinstance(kind, StepKind) else str(kind)
+        return int(self.by_kind.get(key, self.default))
 
 
 @dataclass(frozen=True)

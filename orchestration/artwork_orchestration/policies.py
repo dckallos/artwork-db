@@ -12,11 +12,18 @@ from typing import Any, Dict
 from dagster import Backoff, Jitter, RetryPolicy
 
 from .config import FRAMEWORK
+from .enums import BackoffStrategy, JitterStrategy
 
 _defaults = FRAMEWORK.defaults
 
-_BACKOFF = {"exponential": Backoff.EXPONENTIAL, "linear": Backoff.LINEAR}
-_JITTER = {"plus_minus": Jitter.PLUS_MINUS, "none": None}
+_BACKOFF = {
+    BackoffStrategy.EXPONENTIAL: Backoff.EXPONENTIAL,
+    BackoffStrategy.LINEAR: Backoff.LINEAR,
+}
+_JITTER = {
+    JitterStrategy.PLUS_MINUS: Jitter.PLUS_MINUS,
+    JitterStrategy.NONE: None,
+}
 
 # Transient failures (API 5xx/timeouts, S3 hiccups) should not fail the whole run.
 # Backoff with jitter avoids a retry thundering herd.

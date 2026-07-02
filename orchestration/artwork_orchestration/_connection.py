@@ -21,6 +21,7 @@ from typing import Any, Dict
 import yaml
 
 from .config import FRAMEWORK, REPO_ROOT
+from .model import ProfileConfig
 
 # Matches dbt's {{ env_var('NAME') }} and {{ env_var('NAME', 'default') }}.
 _ENV_VAR_RE = re.compile(
@@ -46,8 +47,8 @@ def _render_env_var(value: Any) -> Any:
     return _ENV_VAR_RE.sub(repl, value)
 
 
-def _resolve_profile() -> Dict[str, Any]:
-    """Return the rendered output block for the configured profile + target."""
+def _resolve_profile() -> ProfileConfig:
+    """Return the rendered profile output block as a typed :class:`ProfileConfig`."""
     conn = FRAMEWORK.connection
     profiles_path = (REPO_ROOT / conn.profiles_dir / "profiles.yml").resolve()
     if not profiles_path.exists():
@@ -60,7 +61,8 @@ def _resolve_profile() -> Dict[str, Any]:
         raise RuntimeError(
             f"profile/target {conn.profile!r}/{conn.target!r} not found in {profiles_path}"
         ) from exc
-    return {k: _render_env_var(v) for k, v in target.items()}
+    rendered = {k: _render_env_var(v) for k, v in target.items()}
+    return ProfileConfig.from_mapping(rendered)
 
 
 def connect():
@@ -74,22 +76,20 @@ def connect():
 
     p = _resolve_profile()
     kwargs: Dict[str, Any] = {
-        "account": p.get("account"),
-        "user": p.get("user"),
-        "role": p.get("role"),
-        "warehouse": p.get("warehouse"),
-        "database": p.get("database"),
-        "schema": p.get("schema"),
+        "account": p.account,
+        "user": p.user,
+        "role": p.role,
+        "warehouse": p.warehouse,
+        "database": p.database,
+        "schema": p.schema,
     }
-    key_path = p.get("private_key_path")
-    if key_path:
-        kwargs["private_key_file"] = str(Path(str(key_path)).expanduser())
-        passphrase = p.get("private_key_passphrase")
-        if passphrase:
-            kwargs["private_key_file_pwd"] = passphrase
-    elif p.get("password"):
-        kwargs["password"] = p["password"]
-    if p.get("authenticator"):
-        kwargs["authenticator"] = p["authenticator"]
+    if p.private_key_path:
+        kwargs["private_key_file"] = str(Path(p.private_key_path).expanduser())
+        if p.private_key_passphrase:
+            kwargs["private_key_file_pwd"] = p.private_key_passphrase
+    elif p.password:
+        kwargs["password"] = p.password
+    if p.authenticator:
+        kwargs["authenticator"] = p.authenticator
 
     return snowflake.connector.connect(**{k: v for k, v in kwargs.items() if v is not None})

@@ -19,11 +19,13 @@ import functools
 import json
 import os
 import re
+from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, TypeVar
 
 import yaml
 
+from .enums import BackoffStrategy, JitterStrategy, Severity, StepKind, StepMode
 from .model import (
     BatchingCfg,
     BronzeCfg,
@@ -101,6 +103,25 @@ def _as_float(v: Any, where: str) -> float:
         raise ConfigError(f"{where}: expected a number, got {v!r}.")
 
 
+_E = TypeVar("_E", bound=Enum)
+
+
+def _as_enum(v: Any, enum_cls: Type[_E], where: str) -> _E:
+    """Coerce a YAML scalar into ``enum_cls`` (case-insensitively), or raise ConfigError.
+
+    Tries the value as-is, then lower- and upper-cased, so authors can write ``error`` or
+    ``ERROR`` and ``Exponential`` or ``exponential``. The error lists the allowed tokens.
+    """
+    raw = str(v).strip()
+    for candidate in (raw, raw.lower(), raw.upper()):
+        try:
+            return enum_cls(candidate)
+        except ValueError:
+            continue
+    allowed = [e.value for e in enum_cls]
+    raise ConfigError(f"{where}: must be one of {allowed}, got {v!r}.")
+
+
 def _reject_unknown(d: Mapping, allowed: set, where: str) -> None:
     extra = set(d) - allowed
     if extra:
@@ -173,8 +194,8 @@ def load_framework_config(path: Optional[str] = None) -> FrameworkConfig:
     retry = RetryCfg(
         max_retries=_as_int(_require(rt, "max_retries", f"{where}.defaults.retry"), f"{where}.defaults.retry.max_retries"),
         delay_seconds=_as_int(_require(rt, "delay_seconds", f"{where}.defaults.retry"), f"{where}.defaults.retry.delay_seconds"),
-        backoff=str(rt.get("backoff", "exponential")),
-        jitter=str(rt.get("jitter", "plus_minus")),
+        backoff=_as_enum(rt.get("backoff", "exponential"), BackoffStrategy, f"{where}.defaults.retry.backoff"),
+        jitter=_as_enum(rt.get("jitter", "plus_minus"), JitterStrategy, f"{where}.defaults.retry.jitter"),
     )
 
     to = _require(dfl, "timeouts_seconds", f"{where}.defaults")
@@ -284,9 +305,7 @@ def _parse_produce(raw: Any, where: str) -> Produces:
     dbt_source = bool(raw.get("dbt_source", not internal))
     if internal and raw.get("dbt_source", False):
         raise ConfigError(f"{where}: a table cannot be both 'internal: true' and 'dbt_source: true'.")
-    severity = str(raw.get("severity", "ERROR")).upper()
-    if severity not in ("ERROR", "WARN"):
-        raise ConfigError(f"{where}.severity: must be ERROR or WARN, got {severity!r}.")
+    severity = _as_enum(raw.get("severity", "ERROR"), Severity, f"{where}.severity")
     fresh = raw.get("fresh_within_days")
     return Produces(
         table=table,
@@ -318,11 +337,9 @@ def _parse_step(raw: Mapping, timeouts: TimeoutsCfg, where: str) -> ExtractionSt
         raise ConfigError(f"{where}.produces: expected a non-empty list.")
     produces = tuple(_parse_produce(p, f"{where}.produces[{i}]") for i, p in enumerate(produces_raw))
 
-    kind = str(raw.get("kind", "snapshot"))
+    kind = _as_enum(raw.get("kind", "snapshot"), StepKind, f"{where}.kind")
     timeout_s = _as_int(raw["timeout_seconds"], f"{where}.timeout_seconds") if "timeout_seconds" in raw else timeouts.for_kind(kind)
-    mode = str(raw.get("mode", "simple"))
-    if mode not in ("simple", "batched"):
-        raise ConfigError(f"{where}.mode: must be 'simple' or 'batched', got {mode!r}.")
+    mode = _as_enum(raw.get("mode", "simple"), StepMode, f"{where}.mode")
     partition = _parse_partition(raw["partition_by"], f"{where}.partition_by") if raw.get("partition_by") else None
     static_args = tuple(str(a) for a in raw.get("static_args", ()))
     md = raw.get("metadata_sql", {}) or {}
@@ -335,10 +352,12 @@ def _parse_step(raw: Mapping, timeouts: TimeoutsCfg, where: str) -> ExtractionSt
         subcommand=(str(raw["run"]) if raw.get("run") is not None else None),
         static_args=static_args,
         partition=partition,
-        uses_batch_flags=(mode == "batched"),
+        uses_batch_flags=(mode == StepMode.BATCHED),
         rate_limited=bool(raw.get("rate_limited", False)),
         api_bound=bool(raw.get("api_bound", True)),
         timeout_s=timeout_s,
+        kind=kind,
+        mode=mode,
         extra_metadata_sql={str(k): str(v) for k, v in md.items()},
     )
 
@@ -350,7 +369,7 @@ def _parse_check(raw: Mapping, where: str) -> HealthCheck:
         attach_table=str(_require(raw, "attach_table", where)),
         sql=str(_require(raw, "sql", where)),
         passes=_compile_expect(_require(raw, "expect", where), f"{where}.expect"),
-        severity=str(raw.get("severity", "WARN")).upper(),
+        severity=_as_enum(raw.get("severity", "WARN"), Severity, f"{where}.severity"),
         description=str(raw.get("description", "")),
     )
 

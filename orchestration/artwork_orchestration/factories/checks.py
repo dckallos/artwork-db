@@ -19,9 +19,13 @@ from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey, asset_check
 
 from .._snowflake import render, sf_scalars
 from ..config import BRONZE
+from ..enums import Severity
 from ..spec import HealthCheck, Produces, SourceSpec
 
-_SEVERITY = {"ERROR": AssetCheckSeverity.ERROR, "WARN": AssetCheckSeverity.WARN}
+_SEVERITY = {
+    Severity.ERROR: AssetCheckSeverity.ERROR,
+    Severity.WARN: AssetCheckSeverity.WARN,
+}
 
 
 def _unverified() -> AssetCheckResult:

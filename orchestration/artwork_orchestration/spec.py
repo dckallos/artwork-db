@@ -13,10 +13,11 @@ nothing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Iterator, Mapping, Optional, Tuple
+from typing import Callable, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 from dagster import AssetKey, StaticPartitionsDefinition
 
+from .enums import Severity, StepKind, StepMode
 from .translator import dbt_source_asset_key
 
 # Fallback per-step wall-clock ceiling. The loader ALWAYS sets ``timeout_s`` explicitly
@@ -61,7 +62,7 @@ class Produces:
     dbt_source: bool = False            # True -> keyed via translator (dbt lineage terminal)
     physical: Optional[str] = None      # physical Bronze table; default UPPER(table)
     nonempty: bool = False              # emit a COUNT(*) > 0 asset check on this table
-    nonempty_severity: str = "ERROR"
+    nonempty_severity: Severity = Severity.ERROR
     freshness_days: Optional[float] = None  # emit a last-update freshness check if set
 
     def physical_table(self) -> str:
@@ -90,6 +91,8 @@ class ExtractionStep:
     api_bound: bool = True                      # attach the retry policy
     timeout_s: int = _DEFAULT_TIMEOUT_S
     compute_kind: str = "python"
+    kind: StepKind = StepKind.SNAPSHOT          # selects the framework timeout (loader-set)
+    mode: StepMode = StepMode.SIMPLE            # BATCHED drives uses_batch_flags (loader-set)
     # Optional richer metadata: label -> scalar SQL template. Placeholders filled by
     # the factory: {db}, {schema}, {partition_value} (single-quote-escaped).
     extra_metadata_sql: Mapping[str, str] = field(default_factory=dict)
@@ -112,7 +115,7 @@ class HealthCheck:
     attach_table: str                     # logical table whose asset this check hangs off
     sql: str                              # scalar query; {db}/{schema} placeholders allowed
     passes: Callable[[int], bool]         # verdict from the scalar value (synthesized from `expect:`)
-    severity: str = "WARN"
+    severity: Severity = Severity.WARN
     description: str = ""
 
 
@@ -160,3 +163,40 @@ class SourceSpec:
             if produced.table == table:
                 return produced
         return None
+
+
+class SourceRegistry:
+    """Typed, read-only view over the loaded :class:`SourceSpec` set.
+
+    Replaces the bare tuple/list that used to be passed around and is the proper home for
+    the lookup helper removed from ``sources/__init__.py``. Preserves the loader's
+    deterministic (key-sorted) order. Iterating yields :class:`SourceSpec` objects, so it
+    is a drop-in for every ``for spec in registry`` / comprehension in the factories.
+    """
+
+    __slots__ = ("_by_key",)
+
+    def __init__(self, specs: Iterable[SourceSpec]) -> None:
+        # dict preserves insertion order; the loader already sorts by key.
+        self._by_key: "dict[str, SourceSpec]" = {s.key: s for s in specs}
+
+    def keys(self) -> List[str]:
+        return list(self._by_key.keys())
+
+    def get(self, key: str, default: Optional[SourceSpec] = None) -> Optional[SourceSpec]:
+        return self._by_key.get(key, default)
+
+    def __iter__(self) -> Iterator[SourceSpec]:
+        return iter(self._by_key.values())
+
+    def __len__(self) -> int:
+        return len(self._by_key)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._by_key
+
+    def __getitem__(self, key: str) -> SourceSpec:
+        return self._by_key[key]
+
+    def __repr__(self) -> str:  # pragma: no cover - cosmetic
+        return f"SourceRegistry({self.keys()!r})"
