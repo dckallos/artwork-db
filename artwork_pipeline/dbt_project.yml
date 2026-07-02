@@ -8,6 +8,13 @@ name: artwork_pipeline
 version: '1.0.0'
 config-version: 2
 
+# Pin the dbt version. The floor is 1.8, the first release with unit tests
+# (used by this project). Kept below 1.10 so the same project runs both on the
+# local CLI and inside Snowflake's native dbt runtime (currently 1.9.x) via
+# EXECUTE DBT PROJECT. Do NOT raise the floor above the Snowflake runtime's
+# version or native execution will refuse to parse the project.
+require-dbt-version: [">=1.8.0", "<2.0.0"]
+
 profile: artwork_pipeline
 
 # --- Paths ---

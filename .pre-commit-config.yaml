@@ -1,0 +1,36 @@
+# =============================================================================
+# .pre-commit-config.yaml -- local commit-time guardrails
+# =============================================================================
+# Install once:  pip install pre-commit && pre-commit install
+# Run manually:  pre-commit run --all-files
+# =============================================================================
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 3.1.0
+    hooks:
+      - id: sqlfluff-lint
+        # The dbt templater needs the adapter installed alongside sqlfluff.
+        additional_dependencies:
+          - dbt-snowflake
+          - sqlfluff-templater-dbt
+
+  # dbt parse as a fast structural check (no warehouse writes).
+  - repo: local
+    hooks:
+      - id: dbt-parse
+        name: dbt parse
+        entry: bash -c 'dbt parse --project-dir artwork_pipeline --profiles-dir artwork_pipeline'
+        language: system
+        pass_filenames: false
+        files: ^artwork_pipeline/.*\.(sql|yml|yaml)$

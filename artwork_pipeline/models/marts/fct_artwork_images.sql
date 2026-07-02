@@ -11,7 +11,11 @@
 --
 -- Materialization: incremental (merge strategy on image_id).
 -- First run: CREATE TABLE AS SELECT (full dataset).
--- Subsequent runs: MERGE -- only rows where _extracted_at > MAX(_loaded_at).
+-- Subsequent runs: MERGE -- only source rows whose _extracted_at is newer than
+--   the newest _extracted_at already persisted in this table. The watermark
+--   compares source extraction time to source extraction time (NOT to _loaded_at,
+--   the dbt wall-clock write time). Comparing to _loaded_at silently dropped new
+--   rows, because _loaded_at is always >= any source _extracted_at.
 -- Cluster key: [source_system] (learning exercise, P3-4; no-op at <1M rows).
 -- =============================================================================
 
@@ -39,7 +43,7 @@ WITH met_images AS (
         _extracted_at
     FROM {{ ref('stg_met__images') }}
     {% if is_incremental() %}
-    WHERE _extracted_at > (SELECT MAX(_loaded_at) FROM {{ this }})
+    WHERE _extracted_at > (SELECT COALESCE(MAX(_extracted_at), '1900-01-01'::TIMESTAMP_NTZ) FROM {{ this }})
     {% endif %}
 
 ),
@@ -58,7 +62,7 @@ aic_images AS (
         _extracted_at
     FROM {{ ref('stg_aic__images') }}
     {% if is_incremental() %}
-    WHERE _extracted_at > (SELECT MAX(_loaded_at) FROM {{ this }})
+    WHERE _extracted_at > (SELECT COALESCE(MAX(_extracted_at), '1900-01-01'::TIMESTAMP_NTZ) FROM {{ this }})
     {% endif %}
 
 ),
@@ -91,6 +95,7 @@ SELECT
     all_images.image_type,
     all_images.ordinal_position,
     all_images.source_system,
+    all_images._extracted_at,
     CURRENT_TIMESTAMP()::TIMESTAMP_NTZ AS _loaded_at
 FROM all_images
 INNER JOIN artworks

@@ -273,6 +273,11 @@ models:
           - accepted_values:
               arguments:
                 values: ['met_museum', 'art_institute_chicago']
+      - name: _extracted_at
+        data_type: timestamp_ntz(9)
+        description: "Source extraction timestamp; the incremental merge watermark column"
+        tests:
+          - not_null
       - name: _loaded_at
         data_type: timestamp_ntz(9)
         description: "Timestamp when this row was last loaded/refreshed by dbt"

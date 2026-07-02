@@ -1,0 +1,6 @@
+# Do not lint compiled/generated SQL or vendored packages.
+artwork_pipeline/target/
+artwork_pipeline/dbt_packages/
+artwork_pipeline/logs/
+# Analyses are ad-hoc / exploratory SQL, not production models.
+analysis/

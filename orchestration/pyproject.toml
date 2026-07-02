@@ -1,0 +1,36 @@
+# =============================================================================
+# orchestration/pyproject.toml -- Dagster OSS control plane (local dev)
+# =============================================================================
+# Install (editable) into a venv:
+#   pip install -e orchestration
+# Then launch the local UI + daemon:
+#   scripts/orchestration/run_dagster_dev.sh
+#
+# These deps are intentionally kept OUT of the repo-root requirements.txt so the
+# extraction/dbt runtime stays lean; only the orchestration host needs Dagster.
+# =============================================================================
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "artwork_orchestration"
+version = "0.1.0"
+description = "Dagster OSS orchestration for the artwork-db data lifecycle (local dev)."
+requires-python = ">=3.9"
+dependencies = [
+    "dagster>=1.8,<2",
+    "dagster-webserver>=1.8,<2",
+    "dagster-dbt>=0.24,<0.30",
+    "dbt-snowflake>=1.10,<2",
+]
+
+[project.optional-dependencies]
+dev = ["dagster-webserver>=1.8,<2"]
+
+[tool.setuptools.packages.find]
+include = ["artwork_orchestration*"]
+
+[tool.dagster]
+module_name = "artwork_orchestration.definitions"
+code_location_name = "artwork_db"

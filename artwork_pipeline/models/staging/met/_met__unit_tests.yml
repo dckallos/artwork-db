@@ -1,0 +1,80 @@
+# =============================================================================
+# _met__unit_tests.yml -- dbt unit tests for Met staging logic
+# =============================================================================
+# Unit tests run against MOCK inputs (no Bronze data required), so they are
+# safe to run in CI even on an account where extraction has never run. They
+# validate transformation LOGIC, not live data.
+#
+# Run:  dbt test --select stg_met__artists
+# (Parents are mocked here, so no warehouse data is needed. If dbt asks for the
+#  source relation to exist, build empties first: `dbt run --empty --select ...`.)
+# =============================================================================
+
+unit_tests:
+
+  # ---------------------------------------------------------------------------
+  # The positional pipe-split + dedup in stg_met__artists is the most fragile
+  # SQL in the project (SPLIT_TO_TABLE on display_name, GET(SPLIT(...), idx-1)
+  # for every other field, then QUALIFY dedup on latest _extracted_at).
+  # This test locks all three behaviours down.
+  # ---------------------------------------------------------------------------
+  - name: test_stg_met_artists_splits_and_dedups
+    model: stg_met__artists
+    description: >
+      Given one object with two pipe-delimited artists and a second object that
+      repeats the first artist with a newer _extracted_at and an updated bio,
+      the model should (1) split the multi-artist row positionally into two
+      distinct artists, (2) deduplicate the repeated artist to a single row, and
+      (3) keep the fields from the most recently extracted source row.
+    given:
+      - input: source('met', 'raw_met_objects')
+        # format: sql lets us build the RAW_PAYLOAD VARIANT with PARSE_JSON,
+        # which dict/csv fixtures cannot express.
+        format: sql
+        rows: |
+          SELECT
+            1 AS object_id,
+            PARSE_JSON('{"csv": {
+              "artist_display_name": "Vincent van Gogh|Paul Gauguin",
+              "artist_alpha_sort":    "van Gogh, Vincent|Gauguin, Paul",
+              "artist_display_bio":   "Dutch painter|French painter",
+              "artist_nationality":   "Dutch|French",
+              "artist_begin_date":    "1853|1848",
+              "artist_end_date":      "1890|1903",
+              "artist_gender":        "Male|Male",
+              "artist_role":          "Artist|Artist",
+              "artist_ulan_url":      "ulan/1|ulan/2",
+              "artist_wikidata_url":  "wd/1|wd/2"
+            }}') AS raw_payload,
+            '2026-01-01 00:00:00'::TIMESTAMP_NTZ AS _extracted_at
+          UNION ALL
+          SELECT
+            2 AS object_id,
+            PARSE_JSON('{"csv": {
+              "artist_display_name": "Vincent van Gogh",
+              "artist_alpha_sort":    "van Gogh, Vincent",
+              "artist_display_bio":   "Dutch painter (updated bio)",
+              "artist_nationality":   "Dutch",
+              "artist_begin_date":    "1853",
+              "artist_end_date":      "1890",
+              "artist_gender":        "Male",
+              "artist_role":          "Artist",
+              "artist_ulan_url":      "ulan/1",
+              "artist_wikidata_url":  "wd/1"
+            }}') AS raw_payload,
+            '2026-02-01 00:00:00'::TIMESTAMP_NTZ AS _extracted_at
+    expect:
+      # dict format: only the columns exercised by the logic are compared.
+      # The surrogate key (artist_id) is intentionally omitted -- it is a
+      # deterministic hash of the fields below, so if the split logic is correct
+      # the key is correct too.
+      format: dict
+      rows:
+        - artist_display_name: "Vincent van Gogh"
+          artist_alpha_sort: "van Gogh, Vincent"
+          artist_ulan_url: "ulan/1"
+          artist_display_bio: "Dutch painter (updated bio)"   # latest _extracted_at wins
+        - artist_display_name: "Paul Gauguin"
+          artist_alpha_sort: "Gauguin, Paul"
+          artist_ulan_url: "ulan/2"
+          artist_display_bio: "French painter"

@@ -1,0 +1,11 @@
+# =============================================================================
+# workspace.yaml.example -- tells Dagster where to find the code location
+# =============================================================================
+# Copy to workspace.yaml. run_dagster_dev.sh loads the code via the installed
+# package (pip install -e orchestration), so this file is only needed if you
+# prefer to launch `dagster dev -w workspace.yaml` explicitly.
+# =============================================================================
+load_from:
+  - python_module:
+      module_name: artwork_orchestration.definitions
+      location_name: artwork_db

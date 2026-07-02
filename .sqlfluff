@@ -1,0 +1,35 @@
+# =============================================================================
+# .sqlfluff -- SQL linter config for the artwork dbt project
+# =============================================================================
+# Local-runnable via `sqlfluff lint artwork_pipeline/models` (see scripts/ci).
+# Uses the dbt templater so ref()/source()/macros are resolved before linting.
+[sqlfluff]
+templater = dbt
+dialect = snowflake
+# Keep the rule set pragmatic for an existing codebase; expand over time.
+exclude_rules = RF04, ST06, ST07, AM03, RF01, LT05
+max_line_length = 120
+
+[sqlfluff:templater:dbt]
+project_dir = artwork_pipeline
+profiles_dir = artwork_pipeline
+
+[sqlfluff:indentation]
+indent_unit = space
+tab_space_size = 4
+
+[sqlfluff:layout:type:comma]
+line_position = trailing
+
+# Keywords/identifiers: the project writes SQL functions upper, columns lower.
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = upper

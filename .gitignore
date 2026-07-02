@@ -26,6 +26,16 @@ artwork_pipeline/dbt_packages/
 artwork_pipeline/logs/
 artwork_pipeline/dbt_modules/
 
+# --- Orchestration (Dagster) ---
+orchestration/dagster_home/dagster.yaml
+orchestration/dagster_home/storage/
+orchestration/dagster_home/history/
+orchestration/dagster_home/schedules/
+orchestration/dagster_home/logs/
+orchestration/dagster_home/.logs_queue/
+orchestration/dagster_home/.telemetry/
+.dagster/
+
 # --- OS / IDE ---
 .DS_Store
 Thumbs.db
