@@ -50,7 +50,10 @@ tags:
   rate_limit_key: artwork/rate_limited_api   # QueuedRunCoordinator gates on this run tag
   max_runtime_key: dagster/max_runtime       # run_monitoring enforces per-run timeout
 
-# dbt Gold marts get a daily-cadence freshness check (observability wiring).
+# dbt Gold marts get a daily-cadence freshness check. The mart list is DERIVED from the
+# dbt manifest (models tagged 'marts' -- see dbt_manifest.py), so you never maintain it by
+# hand as the project grows. `gold_marts` here is only a fallback used before the manifest
+# is built; leave it empty to rely entirely on the manifest.
 freshness:
-  gold_marts: [dim_artists, dim_artworks, fct_artwork_images, openaccess_catalog]
+  gold_marts: []            # auto-derived from the dbt manifest; list names here only to override
   gold_lag_hours: 30

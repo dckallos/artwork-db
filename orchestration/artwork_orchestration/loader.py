@@ -208,9 +208,9 @@ def load_framework_config(path: Optional[str] = None) -> FrameworkConfig:
 
     fr = _require(raw, "freshness", where)
     _reject_unknown(fr, {"gold_marts", "gold_lag_hours"}, f"{where}.freshness")
-    gold_marts = _require(fr, "gold_marts", f"{where}.freshness")
+    gold_marts = fr.get("gold_marts", []) or []
     if not isinstance(gold_marts, list):
-        raise ConfigError(f"{where}.freshness.gold_marts: expected a list.")
+        raise ConfigError(f"{where}.freshness.gold_marts: expected a list (or omit to auto-derive).")
     freshness = FreshnessCfg(
         gold_marts=[str(m) for m in gold_marts],
         gold_lag_hours=_as_float(fr.get("gold_lag_hours", 30), f"{where}.freshness.gold_lag_hours"),

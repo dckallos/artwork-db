@@ -60,7 +60,7 @@ batching and rate-limiting are generic and opt-in per step.
 ### `freshness` (required)
 | key | req | technical | plain |
 |---|---|---|---|
-| `gold_marts` | yes | list of dbt Gold model names to freshness-check | "The finished tables we want a 'is this stale?' alarm on." |
+| `gold_marts` | no (auto) | list of dbt Gold model names to freshness-check | "Usually leave empty — auto-derived from the dbt manifest (models tagged `marts`). List names only to override." |
 | `gold_lag_hours` | no (default 30) | allowed staleness in hours | "How old is too old." |
 
 ---

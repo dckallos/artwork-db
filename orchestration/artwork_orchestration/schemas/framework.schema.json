@@ -80,9 +80,8 @@
     "freshness": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["gold_marts"],
       "properties": {
-        "gold_marts": {"type": "array", "items": {"type": "string"}},
+        "gold_marts": {"type": "array", "items": {"type": "string"}, "description": "Optional fallback; auto-derived from the dbt manifest (models tagged 'marts')."},
         "gold_lag_hours": {"type": ["number", "string"]}
       }
     }

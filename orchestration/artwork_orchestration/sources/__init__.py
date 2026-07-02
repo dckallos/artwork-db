@@ -15,9 +15,4 @@ from ..spec import SourceSpec
 # The registry IS the directory listing (deterministically sorted by source key).
 REGISTRY: Tuple[SourceSpec, ...] = tuple(load_source_specs())
 
-
-def source_keys() -> list[str]:
-    return [spec.key for spec in REGISTRY]
-
-
-__all__ = ["REGISTRY", "SourceSpec", "source_keys"]
+__all__ = ["REGISTRY", "SourceSpec"]
