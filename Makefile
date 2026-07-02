@@ -1,10 +1,10 @@
 # =============================================================================
 # Artwork Medallion Pipeline - task runner
 # =============================================================================
-# IaC runs bash -> bash -> snow sql. Apply order: infra (V + R) then git-setup (B).
-#   iac / infra / bootstrap     apply all / infra only / git-setup only (B runs last)
+# IaC runs bash -> sibling snowflake-toolkit -> snow sql.
+#   iac / infra / bootstrap     apply all / infra only / git-setup only
 #   rollback FILE=path.sql      roll back one forward script via its paired drop
-#   down [FROM=V005]            full teardown / from a point, paired drops in reverse
+#   down [FROM=create_*.sql]    full teardown / from a point, paired drops in reverse
 #   extract[-met|-aic|-cma|-smithsonian]   run extractors
 #   dbt-init|build|test|full-refresh|docs|teardown   dbt lifecycle (via orchestrator)
 #   all / pipeline / setup      full apply / extract+build / infra+init
@@ -31,8 +31,8 @@ endif
 # single-account behavior). Override to apply infra to a second account whose
 # admin connection was set up via `setup.sh --profile <label> --phase all`:
 #   make iac CONN=clientb
-# Threaded into every orchestrate.sh invocation; orchestrate.sh forwards it to
-# apply_sql.sh / bootstrap.py (which already accept --connection).
+# Threaded into every sibling toolkit orchestration invocation; the toolkit
+# apply path forwards it to snow/sql validation helpers.
 CONN ?= admin
 
 # Template variables for DDL substitution (e.g., secrets, tokens)
@@ -86,13 +86,13 @@ chmod:
 # before Python shells out.
 
 iac: chmod
-	@echo "==> Applying ALL IaC (B + V + R) via bash orchestrator -> snow sql --filename..."
+	@echo "==> Applying ALL IaC via sibling snowflake-toolkit -> snow sql --filename..."
 	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
 	$(call run_bootstrap,$(CONN),$(BOOTSTRAP_VARS))
 
 # git-setup (B) is the optional trailing Git-mirror layer; per the 2026-05-29
 # design decision it runs LAST in `make iac` (after V/R). Standalone run needs
-# ARTWORK_ADMIN to exist (B003 grants it READ on the repo), so run `make infra`
+# ARTWORK_ADMIN to exist with READ on the repo, so run `make infra`
 # first on a fresh account. No infra prereq here, to keep this target composable.
 bootstrap: chmod
 	@echo "==> Applying git-setup (B) via bash orchestrator -> snow sql --filename..."
@@ -102,7 +102,7 @@ bootstrap: chmod
 	$(call run_bootstrap,$(CONN),$(BOOTSTRAP_VARS))
 
 infra: chmod
-	@echo "==> Applying infrastructure (V + R) via bash orchestrator -> snow sql --filename..."
+	@echo "==> Applying infrastructure via sibling snowflake-toolkit -> snow sql --filename..."
 	bash $(TOOLKIT_DIR)/orchestrate_modern.sh --ddl-dir infrastructure/ --manifest scripts/manifest.txt --phase infra --connection $(CONN)
 
 # ---------- Loader credential (key-pair) ----------
