@@ -161,11 +161,41 @@ class ProduceSpec:
 - **Docstrings** on modules and public functions explain *why* and note coupling/side
   effects; skip narrating obvious lines. One-line inline comments only where logic isn't
   self-evident.
+- **Triple quotes get their own lines.** Every triple-quoted docstring (and any standalone
+  triple-quoted string statement) opens with `"""` alone on its line and closes with `"""`
+  alone on its line — even one-line docstrings. Never glue the first line of prose to the
+  opening quotes, and never leave the whole docstring on a single line. `scripts/normalize_docstrings.py`
+  enforces and auto-fixes this (`--check` in CI, `--write` to apply); it is AST-based, so it
+  only rewrites docstrings/statement strings and never touches triple-quoted string *values*.
 - **Imports:** stdlib, third-party, local — grouped and ordered. Lazy-import heavy/optional
   deps at first use.
 - **No dead code, no speculative abstractions, no backwards-compat shims.** Delete unused
   code; don't design for hypothetical sources that don't exist yet.
 - **Small, focused PRs** sliced along the issue #6 phases; each independently green in CI.
+
+```python
+# Canonical: opening and closing triple quotes each on their own line.
+def f():
+    """
+    One-line summaries still get their own opening/closing quote lines.
+    """
+
+def g():
+    """
+    Summary line.
+
+    Longer explanation across multiple lines. The closing quotes sit alone
+    on the final line.
+    """
+
+# Malformed (auto-fixed by scripts/normalize_docstrings.py):
+def bad_one():
+    """First line glued to the opening quotes.
+    """
+
+def bad_two():
+    """Whole docstring squeezed onto a single line."""
+```
 
 ---
 
