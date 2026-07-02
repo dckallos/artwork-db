@@ -1,17 +1,19 @@
-"""Best-effort Snowflake scalar queries for asset metadata and checks.
+"""Best-effort Snowflake scalar queries for asset attributes and checks.
 
-Moved out of ``assets_extraction`` so both the asset factory and the check factory
-share it without importing each other (breaks the old observability -> assets
-coupling). Any failure (missing driver in a dev shell, no connectivity) is logged
-and swallowed for metadata, and surfaced as a WARN for checks -- it never crashes a
-materialization.
+Shared by both the asset factory and the check factory without importing each other.
+Any failure (missing driver in a dev shell, no connectivity) is logged and swallowed for
+display data, and surfaced as a WARN for checks -- it never crashes a materialization.
+
+The connection comes from :mod:`artwork_orchestration._connection` (the shared dbt
+profile), so this module is fully source-agnostic -- it does not import any museum's
+extraction package.
 """
 from __future__ import annotations
 
-import sys
 from typing import Any, Dict, Mapping, Optional
 
-from .config import BRONZE, REPO_ROOT
+from ._connection import connect
+from .config import BRONZE
 
 
 def render(sql: str, partition_value: str = "") -> str:
@@ -31,18 +33,11 @@ def render(sql: str, partition_value: str = "") -> str:
 def sf_scalars(context, queries: Mapping[str, str]) -> Dict[str, Any]:
     """Run ``label -> SQL`` scalar queries; return ``{label: int_value}``.
 
-    Lazily imports the extraction package (importable because assets already shell
-    ``python -m extraction...`` from REPO_ROOT). Best-effort: returns whatever
-    succeeded, ``{}`` on connection/import failure.
+    Best-effort: returns whatever succeeded, ``{}`` on connection/driver failure.
     """
     results: Dict[str, Any] = {}
     try:
-        if str(REPO_ROOT) not in sys.path:
-            sys.path.insert(0, str(REPO_ROOT))
-        from extraction.met.config import Config  # type: ignore
-        from extraction.met.snowflake_uploader import _snowflake_connect  # type: ignore
-
-        conn = _snowflake_connect(Config())
+        conn = connect()
         try:
             cur = conn.cursor()
             for label, sql in queries.items():
@@ -51,12 +46,12 @@ def sf_scalars(context, queries: Mapping[str, str]) -> Dict[str, Any]:
                     row = cur.fetchone()
                     results[label] = int(row[0]) if row and row[0] is not None else 0
                 except Exception as exc:  # per-query best-effort
-                    context.log.warning("metadata query %r failed: %s", label, exc)
+                    context.log.warning("attribute query %r failed: %s", label, exc)
             cur.close()
         finally:
             conn.close()
-    except Exception as exc:  # connection / import best-effort
-        context.log.warning("metadata collection skipped: %s", exc)
+    except Exception as exc:  # connection / driver best-effort
+        context.log.warning("attribute collection skipped: %s", exc)
     return results
 
 

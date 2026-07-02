@@ -14,8 +14,8 @@ aic_snapshot ─► (raw_aic_artworks, raw_aic_agents) ────────�
 
 Key change: the Met enrichment is no longer one unbounded 24h+ step. It is a
 **department-partitioned, bounded** asset (`met_enrichment_batch`) that processes
-`MET_ENRICH_BATCH_SIZE * MET_ENRICH_MAX_BATCHES` objects per materialization and is
-fully resumable. `raw_met_objects` is now a lightweight **checkpoint** (the Bronze
+`batching.size * batching.max_batches` rows (from `framework.yaml`) per materialization
+and is fully resumable. `raw_met_objects` is now a lightweight **checkpoint** (the Bronze
 table is assembled server-side inside each batch) that keeps the dbt source key.
 
 ## Jobs
@@ -42,23 +42,25 @@ per-source ingest) job for a rate-limited source therefore carries exactly one v
 
 ## Adding a new museum (the whole point)
 
-Adding source #3..N is **data, not code**:
+Adding source #3..N is **one YAML file, no code**. Full instructions live in
+`artwork_orchestration/ADDING_A_SOURCE.md`; the field reference is `SCHEMA.md`. In brief:
 
-1. Write `sources/<key>.py` with a `SourceSpec`: declare its `cli_module` and the
-   ordered `ExtractionStep`s. Each step lists the Bronze tables it `Produces`
-   (mark dbt-source terminals with `dbt_source=True`, `nonempty=True` for a
-   row-count check, `freshness_days=N` for a freshness check), plus its timeout and —
-   if it hits a rate-limited API — a `PartitionDim`, `uses_batch_flags=True`, and
-   `rate_limited=True`. Add any source-specific `HealthCheck`s.
-2. Register it in `sources/__init__.py`: `REGISTRY = (MET_SPEC, AIC_SPEC, <NEW>_SPEC)`.
+1. Create the museum's Bronze tables (DDL) and its extraction CLI so that
+   `python -m <cli_module> <subcommand>` runs one phase and exits 0.
+2. Drop a `sources/<key>.yaml` declaring `source`, `cli_module`, and the ordered
+   `steps` (each: a `name`, the CLI subcommand under `run`, and the Bronze tables it
+   `produces`). Optional per-table `check_nonempty`/`fresh_within_days`; optional
+   `partition_by` + `mode: batched` + `rate_limited: true` for a rate-limited API.
 
-That's it. The factories generate its assets (chained by declaration order), checks,
-per-source jobs, and enrichment schedule; `definitions.py` and every factory stay
-untouched. The extraction CLI must honor the contract in `_runner.py`:
-`python -m <cli_module> <subcommand> [flags]`, exit 0 on success; a rate-limited
-enrichment step reads its per-worker request rate from `rps_env_var` (default
-`MET_API_RPS`). Give each rate-limited museum its own `dagster.yaml`
-`tag_concurrency_limits` entry keyed on its `artwork/rate_limited_api` value.
+That's it — there is **no registry to edit**. `sources/__init__.py` scans the directory,
+`loader.py` validates the YAML, and the factories generate the assets (chained by
+declaration order), checks, per-source jobs, and schedule. `definitions.py` and every
+factory stay untouched. See `sources/cma.yaml` for a complete worked example added this
+way. The extraction CLI must honor the contract in `_runner.py`:
+`python -m <cli_module> <subcommand> [flags]`, exit 0 on success; a rate-limited step
+reads its per-worker request rate from the source's `rps_env_var` (default `API_RPS`).
+Give each rate-limited museum its own `dagster.yaml` `tag_concurrency_limits` entry keyed
+on its `artwork/rate_limited_api` value.
 
 ## Draining the Met collection
 
@@ -70,13 +72,14 @@ bounded slice, picks up where the last left off):
 # or launch met_enrich_next_batch_job for that partition on a schedule.
 ```
 
-Tune per-run throughput without code changes:
+Tune per-run throughput in `framework.yaml` (no code changes; env-overridable via the
+`${ENV:default}` tokens shown):
 
-- `MET_ENRICH_BATCH_SIZE`  (default 2000) — rows leased+fetched per batch
-- `MET_ENRICH_MAX_BATCHES` (default 1)    — batches per materialization
-- `MET_ENRICH_CONCURRENCY` (default 3)    — max concurrent dept workers assumed when
-  dividing the rps budget (keep in sync with `dagster.yaml` tag limit)
-- `MET_API_RPS_BUDGET`     (default 30)   — aggregate rps across ALL workers
+- `defaults.batching.size`      (`${BATCH_SIZE:2000}`)   — rows leased+fetched per batch
+- `defaults.batching.max_batches` (`${MAX_BATCHES:1}`)   — batches per materialization
+- `defaults.rate_limit.concurrency` (`${API_CONCURRENCY:3}`) — max concurrent workers assumed
+  when dividing the rps budget (keep in sync with `dagster.yaml` tag limit)
+- `defaults.rate_limit.rps_budget` (`${API_RPS_BUDGET:30}`) — aggregate rps across ALL workers
 
 ## Concurrency and the rate-limit caveat (IMPORTANT)
 
@@ -91,10 +94,11 @@ Two guards are in place:
    concurrent, so at most 2 Met workers ever run at once. The enrichment-bearing jobs
    set this run tag (see the Jobs section) — without it the coordinator cannot see the
    run and the cap would not apply.
-2. The per-worker rps is derived automatically: the asset factory sets each
-   enrichment subprocess's `MET_API_RPS = MET_API_RPS_BUDGET / MET_ENRICH_CONCURRENCY`
-   (`policies.per_worker_rps()`), so the summed request rate stays under the ceiling.
-   Tune the *budget* and *concurrency*, not `MET_API_RPS` directly.
+2. The per-worker rps is derived automatically: the asset factory sets each enrichment
+   subprocess's rps env var (the source's `rps_env_var`, e.g. `MET_API_RPS`) to
+   `rate_limit.rps_budget / rate_limit.concurrency` (`policies.per_worker_rps()`), so the
+   summed request rate stays under the ceiling. Tune the *budget* and *concurrency* in
+   `framework.yaml`, not the rps env var directly.
 
 **Recommendation:** start with 2 concurrent departments, measure done-rate and the
 per-batch throttle counters (already logged), and only raise concurrency if you are
@@ -115,8 +119,9 @@ demonstrably latency-bound rather than rate-capped.
 
 - Rich `MaterializeResult` metadata (row counts, worklist remaining, control status,
   per-department slice) pulled from Snowflake on each run.
-- Asset checks (`observability.py`): `raw_met_objects_has_rows` (ERROR),
-  `met_no_orphaned_leases` (WARN), `raw_aic_artworks_has_rows` (ERROR).
+- Asset checks (generated by `factories/checks.py` from each source's YAML):
+  `raw_met_objects_has_rows` (ERROR), `met_no_orphaned_leases` (WARN),
+  `raw_aic_artworks_has_rows` (ERROR).
 - Freshness checks on the Gold marts (expect daily build) and Bronze terminals
   (weekly). They surface in the UI; auto-evaluation needs a freshness sensor (Stage 2).
 

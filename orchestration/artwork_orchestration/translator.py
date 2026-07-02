@@ -3,11 +3,11 @@
 The default translator would give dbt sources their own asset keys that don't
 line up with our Python extraction assets. By mapping every dbt source to
 ``AssetKey([source_name, table_name])`` -- and keying the extraction assets the
-same way (see assets_extraction.py) -- the dbt models that ``source()`` these
+same way (see factories/assets.py) -- the dbt models that ``source()`` these
 tables automatically gain an upstream dependency on the extraction that
 produces them. That gives you end-to-end lineage:
 
-    met_snapshot -> met_enrichment_control -> raw_met_objects -> dbt models
+    <source>_snapshot -> <source>_control -> raw_<source>_objects -> dbt models
 """
 from __future__ import annotations
 

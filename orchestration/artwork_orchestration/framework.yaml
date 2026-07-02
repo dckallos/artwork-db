@@ -1,0 +1,56 @@
+# =============================================================================
+# framework.yaml -- INTERNAL engine configuration (Layer A). Source-agnostic.
+# =============================================================================
+# This is the richer, framework-facing config the orchestration engine reads. It
+# replaces the Python constants that used to live in config.py / policies.py. You do
+# NOT normally edit this when adding a museum -- see sources/<key>.yaml + SCHEMA.md.
+#
+# ${ENV_VAR:default} tokens are resolved from the environment by loader.py, so env-var
+# NAMES live here (in YAML) and never in framework .py. A token with no default and no
+# env value is left as an empty string (see connection notes below).
+# =============================================================================
+
+# The orchestration layer's ad-hoc metadata/check queries reuse the dbt PROFILE as the
+# single Snowflake connection identity (no second credential store, and it transparently
+# supports in-Snowflake session auth via target: snowflake). profiles_dir is relative to
+# the repo root. This is what replaces the old extraction.met.* connection import.
+connection:
+  profile: artwork_pipeline            # matches profiles.yml top key + dbt_project.yml `profile:`
+  target: "${DBT_TARGET:dev}"          # dev = key-pair via env_var; snowflake = session-inherited
+  profiles_dir: artwork_pipeline       # relative to REPO_ROOT
+
+# Where the raw (Bronze) landing tables live; used for auto row-count metadata + checks.
+bronze:
+  database: "${SNOWFLAKE_DATABASE:ARTWORK_DB}"
+  schema: "${ARTWORK_BRONZE_SCHEMA:BRONZE}"
+
+# Generic step capabilities. A step opts into a capability (mode: batched / rate_limited:
+# true); these are the fallback knobs. NOTE: there is deliberately no "enrichment" phase
+# here -- enrichment is a Met-specific step, not a universal concept.
+defaults:
+  retry:
+    max_retries: 2
+    delay_seconds: 30
+    backoff: exponential               # exponential | linear
+    jitter: plus_minus                 # plus_minus | none
+  timeouts_seconds:                    # per-run wall-clock ceilings, chosen by step `kind`
+    default: 1800
+    snapshot: 1800                     # CSV/S3 download + COPY/MERGE
+    seed: 900                          # one MERGE / a verification query
+    batch: 5400                        # a bounded per-partition slice
+  batching:                            # steps with `mode: batched`
+    size: "${BATCH_SIZE:2000}"
+    max_batches: "${MAX_BATCHES:1}"
+  rate_limit:                          # steps with `rate_limited: true`
+    rps_budget: "${API_RPS_BUDGET:30}" # aggregate rps across all concurrent workers
+    concurrency: "${API_CONCURRENCY:3}"# max concurrent rate-limited workers (mirror in dagster.yaml)
+
+# Dagster tag keys (framework-level constants).
+tags:
+  rate_limit_key: artwork/rate_limited_api   # QueuedRunCoordinator gates on this run tag
+  max_runtime_key: dagster/max_runtime       # run_monitoring enforces per-run timeout
+
+# dbt Gold marts get a daily-cadence freshness check (observability wiring).
+freshness:
+  gold_marts: [dim_artists, dim_artworks, fct_artwork_images, openaccess_catalog]
+  gold_lag_hours: 30

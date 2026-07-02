@@ -1,21 +1,23 @@
-"""The source registry: the single list the factories iterate over.
+"""The source registry: built by SCANNING ``sources/*.yaml`` -- never a hardcoded list.
 
-Register a new museum by importing its ``SourceSpec`` and adding it to ``REGISTRY``.
-Nothing else in the orchestration layer needs to change.
+Adding a source means dropping a new ``<key>.yaml`` in this directory (see
+``../SCHEMA.md`` and ``../ADDING_A_SOURCE.md``). Nothing in the orchestration layer's
+Python changes: :func:`~artwork_orchestration.loader.load_source_specs` discovers the
+file, validates it, and turns it into a :class:`~artwork_orchestration.spec.SourceSpec`.
 """
 from __future__ import annotations
 
 from typing import Tuple
 
-from .aic import AIC_SPEC
-from .met import MET_SPEC
-from .spec import SourceSpec
+from ..loader import load_source_specs
+from ..spec import SourceSpec
 
-REGISTRY: Tuple[SourceSpec, ...] = (MET_SPEC, AIC_SPEC)
+# The registry IS the directory listing (deterministically sorted by source key).
+REGISTRY: Tuple[SourceSpec, ...] = tuple(load_source_specs())
 
 
 def source_keys() -> list[str]:
     return [spec.key for spec in REGISTRY]
 
 
-__all__ = ["REGISTRY", "SourceSpec", "MET_SPEC", "AIC_SPEC", "source_keys"]
+__all__ = ["REGISTRY", "SourceSpec", "source_keys"]

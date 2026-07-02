@@ -1,7 +1,7 @@
 """Asset factory: turn a :class:`SourceSpec` into Dagster asset definitions.
 
 One :class:`ExtractionStep` becomes one ``@asset`` -- or a ``@multi_asset`` when the
-step produces more than one dbt-source table (the AIC snapshot case). Steps are
+step produces more than one dbt-source table (the multi-table snapshot case). Steps are
 chained: each depends on the asset(s) produced by the previous step, reproducing the
 ``snapshot -> control -> enrich -> verify`` lineage without any per-museum code.
 """
@@ -22,13 +22,13 @@ from .._snowflake import render, sf_scalars
 from ..config import BRONZE
 from ..policies import (
     EXTRACTION_RETRY_POLICY,
-    MET_ENRICH_BATCH_SIZE,
-    MET_ENRICH_MAX_BATCHES,
+    BATCH_SIZE,
+    MAX_BATCHES,
     RATE_LIMIT_TAG_KEY,
     per_worker_rps,
     timeout_tags,
 )
-from ..sources.spec import ExtractionStep, SourceSpec
+from ..spec import ExtractionStep, SourceSpec
 
 
 def _op_tags(spec: SourceSpec, step: ExtractionStep) -> dict:
@@ -54,8 +54,8 @@ def _make_compute(spec: SourceSpec, step: ExtractionStep):
                 argv += [step.partition.cli_flag, partition_value]
             if step.uses_batch_flags:
                 argv += [
-                    "--batch-size", str(MET_ENRICH_BATCH_SIZE),
-                    "--max-batches", str(MET_ENRICH_MAX_BATCHES),
+                    "--batch-size", str(BATCH_SIZE),
+                    "--max-batches", str(MAX_BATCHES),
                 ]
             extra_env = None
             if step.rate_limited:
@@ -78,8 +78,8 @@ def _make_compute(spec: SourceSpec, step: ExtractionStep):
         if step.partition is not None:
             base[step.partition.name] = partition_value
         if step.uses_batch_flags:
-            base["batch_size"] = MET_ENRICH_BATCH_SIZE
-            base["max_batches"] = MET_ENRICH_MAX_BATCHES
+            base["batch_size"] = BATCH_SIZE
+            base["max_batches"] = MAX_BATCHES
 
         # 3) Emit result(s). Multi-table steps yield one result per output.
         if step.is_multi:

@@ -1,0 +1,17 @@
+# =============================================================================
+# sources/aic.yaml -- Art Institute of Chicago source declaration.
+# =============================================================================
+# The SIMPLE shape: a single `snapshot` run downloads the S3 data dump and populates
+# TWO Bronze tables in one shot. Because the step produces two dbt-source tables, the
+# asset factory emits a multi_asset automatically. Full field docs: ../SCHEMA.md.
+# =============================================================================
+source: aic
+cli_module: extraction.aic.run
+
+steps:
+  - name: snapshot
+    run: snapshot
+    kind: snapshot
+    produces:
+      - {table: raw_aic_artworks, check_nonempty: true, severity: ERROR, fresh_within_days: 8}
+      - raw_aic_agents            # bare name = dbt-source terminal, no checks

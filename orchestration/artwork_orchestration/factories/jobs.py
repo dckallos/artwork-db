@@ -26,7 +26,7 @@ from typing import List
 from dagster import AssetKey, AssetSelection, define_asset_job
 
 from ..policies import MAX_RUNTIME_TAG_KEY, RATE_LIMIT_TAG_KEY, TIMEOUT_SNAPSHOT
-from ..sources.spec import SourceSpec
+from ..spec import SourceSpec
 
 
 def _source_runtime(spec: SourceSpec) -> int:

@@ -19,7 +19,7 @@ from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey, asset_check
 
 from .._snowflake import render, sf_scalars
 from ..config import BRONZE
-from ..sources.spec import HealthCheck, Produces, SourceSpec
+from ..spec import HealthCheck, Produces, SourceSpec
 
 _SEVERITY = {"ERROR": AssetCheckSeverity.ERROR, "WARN": AssetCheckSeverity.WARN}
 

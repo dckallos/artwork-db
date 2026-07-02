@@ -1,14 +1,14 @@
-"""Declarative description of a museum source pipeline.
+"""Declarative description of a source pipeline -- the internal model.
 
-These dataclasses are the ONE abstraction the whole orchestration layer is built
-from. A source (museum) is described as *data* -- a list of :class:`ExtractionStep`
-that each produce one or more Bronze tables -- and the factories in
-``artwork_orchestration.factories`` turn that data into Dagster assets, checks,
-jobs, and schedules. Adding a museum means writing one more ``SourceSpec``; no
-factory, job, check, or definitions code changes.
+These dataclasses are the ONE abstraction the whole orchestration layer is built from.
+A source is described as *data* -- a list of :class:`ExtractionStep` that each produce
+one or more Bronze tables -- and the factories in ``artwork_orchestration.factories``
+turn that data into Dagster assets, checks, jobs, and schedules.
 
-Nothing here talks to Snowflake or runs anything; it is pure structure plus a few
-key/partition helpers so the factories stay small.
+Nothing here is authored by hand: instances are LOADED from ``sources/<key>.yaml`` by
+:mod:`artwork_orchestration.loader`. This module only defines the typed shape plus a
+few key/partition helpers so the factories stay small. It talks to nothing and runs
+nothing.
 """
 from __future__ import annotations
 
@@ -17,16 +17,20 @@ from typing import Callable, Iterator, Mapping, Optional, Tuple
 
 from dagster import AssetKey, StaticPartitionsDefinition
 
-from ..policies import TIMEOUT_SNAPSHOT
-from ..translator import dbt_source_asset_key
+from .translator import dbt_source_asset_key
+
+# Fallback per-step wall-clock ceiling. The loader ALWAYS sets ``timeout_s`` explicitly
+# (from framework.yaml ``defaults.timeouts_seconds`` keyed by step ``kind``), so this
+# literal is only a safety net and keeps this module dependency-free (no policies import).
+_DEFAULT_TIMEOUT_S = 1800
 
 
 @dataclass(frozen=True)
 class PartitionDim:
-    """A static partition dimension for a step (e.g. Met curatorial departments).
+    """A static partition dimension for a step (e.g. a set of curatorial departments).
 
-    ``values`` maps a slug-safe partition KEY (Dagster forbids commas/brackets in
-    keys) to the exact value the CLI expects behind ``cli_flag``.
+    ``values`` maps a slug-safe partition KEY (Dagster forbids commas/brackets in keys)
+    to the exact value the CLI expects behind ``cli_flag``.
     """
 
     name: str                     # human name, e.g. "department"
@@ -53,7 +57,7 @@ class PartitionDim:
 class Produces:
     """A Bronze table a step writes (or, for a verify step, reads and reports)."""
 
-    table: str                          # logical name, e.g. "raw_met_objects" / "csv_snapshot"
+    table: str                          # logical name, e.g. "raw_x_objects" / "csv_snapshot"
     dbt_source: bool = False            # True -> keyed via translator (dbt lineage terminal)
     physical: Optional[str] = None      # physical Bronze table; default UPPER(table)
     nonempty: bool = False              # emit a COUNT(*) > 0 asset check on this table
@@ -76,15 +80,15 @@ class ExtractionStep:
     """One phase of a source pipeline -> becomes one Dagster asset (or a multi_asset
     when it produces more than one dbt-source table)."""
 
-    name: str                                   # "snapshot","seed_control","enrich","verify"
+    name: str                                   # step/asset name, e.g. "snapshot"
     produces: Tuple[Produces, ...]
     subcommand: Optional[str] = None            # CLI subcommand; None => verify-only (no CLI call)
     static_args: Tuple[str, ...] = ()           # extra CLI args appended verbatim
     partition: Optional[PartitionDim] = None    # static-partition this step
-    uses_batch_flags: bool = False              # append --batch-size/--max-batches from policies
+    uses_batch_flags: bool = False              # append --batch-size/--max-batches from framework defaults
     rate_limited: bool = False                  # per-worker rps env + rate-limit run tag on jobs
-    api_bound: bool = True                      # attach EXTRACTION_RETRY_POLICY
-    timeout_s: int = TIMEOUT_SNAPSHOT
+    api_bound: bool = True                      # attach the retry policy
+    timeout_s: int = _DEFAULT_TIMEOUT_S
     compute_kind: str = "python"
     # Optional richer metadata: label -> scalar SQL template. Placeholders filled by
     # the factory: {db}, {schema}, {partition_value} (single-quote-escaped).
@@ -100,28 +104,28 @@ class ExtractionStep:
 
 @dataclass(frozen=True)
 class HealthCheck:
-    """A custom data-quality check beyond the auto-generated non-empty checks
-    (e.g. 'no worklist leases older than the TTL'). Attaches to the asset that
-    produces ``attach_table``."""
+    """A custom data-quality/operational check beyond the auto-generated non-empty
+    checks (e.g. 'no worklist leases older than the reclaim TTL'). Attaches to the asset
+    that produces ``attach_table``."""
 
     name: str
     attach_table: str                     # logical table whose asset this check hangs off
     sql: str                              # scalar query; {db}/{schema} placeholders allowed
-    passes: Callable[[int], bool]         # verdict from the scalar value
+    passes: Callable[[int], bool]         # verdict from the scalar value (synthesized from `expect:`)
     severity: str = "WARN"
     description: str = ""
 
 
 @dataclass(frozen=True)
 class SourceSpec:
-    """Everything the factories need to build a museum's Dagster objects."""
+    """Everything the factories need to build a source's Dagster objects."""
 
-    key: str                              # "met","aic" -- also the dbt source name
-    cli_module: str                       # "extraction.met.run"
+    key: str                              # source key -- also the dbt source name
+    cli_module: str                       # e.g. "extraction.<key>.run"
     steps: Tuple[ExtractionStep, ...]
     checks: Tuple[HealthCheck, ...] = ()
     rate_limit_value: Optional[str] = None  # tag value; defaults to key when a step is rate_limited
-    rps_env_var: str = "MET_API_RPS"        # env var the CLI reads for per-worker rps
+    rps_env_var: str = "API_RPS"            # env var the CLI reads for per-worker rps
 
     @property
     def group_name(self) -> str:
@@ -133,8 +137,7 @@ class SourceSpec:
 
     @property
     def rate_tag_value(self) -> Optional[str]:
-        """The value for the ``artwork/rate_limited_api`` tag, or None if this source
-        has no rate-limited step."""
+        """The value for the rate-limit tag, or None if this source has no rate-limited step."""
         if not self.has_rate_limited_step:
             return None
         return self.rate_limit_value or self.key

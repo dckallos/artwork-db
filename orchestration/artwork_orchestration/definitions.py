@@ -9,6 +9,7 @@ from __future__ import annotations
 from dagster import Definitions
 
 from .assets_dbt import artwork_dbt_assets
+from .config import FRAMEWORK
 from .factories.assets import build_source_assets
 from .factories.checks import build_freshness_checks, build_source_checks
 from .factories.jobs import build_jobs
@@ -16,12 +17,15 @@ from .factories.schedules import build_schedules
 from .resources import dbt_resource
 from .sources import REGISTRY
 
-# dbt Gold marts get a daily-cadence freshness check (not source-specific).
-_GOLD_MARTS = ["dim_artists", "dim_artworks", "fct_artwork_images", "openaccess_catalog"]
-
+# dbt Gold marts get a daily-cadence freshness check (not source-specific). The list and
+# lag come from framework.yaml (freshness:), not hardcoded here.
 extraction_assets = [a for spec in REGISTRY for a in build_source_assets(spec)]
 asset_checks = [c for spec in REGISTRY for c in build_source_checks(spec)]
-asset_checks += build_freshness_checks(REGISTRY, gold_assets=_GOLD_MARTS)
+asset_checks += build_freshness_checks(
+    REGISTRY,
+    gold_assets=FRAMEWORK.freshness.gold_marts,
+    gold_lag_hours=FRAMEWORK.freshness.gold_lag_hours,
+)
 
 jobs = build_jobs(REGISTRY)
 jobs_by_name = {j.name: j for j in jobs}

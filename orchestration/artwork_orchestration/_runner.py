@@ -7,8 +7,8 @@ factory never constructs subprocess commands itself.
 
 CLI CONTRACT (every source's ``run.py`` must honor):
   * ``python -m <cli_module> <subcommand> [flags]`` runs one phase and exits 0 on success.
-  * Rate-limited enrichment reads its per-worker request rate from an env var
-    (default ``MET_API_RPS``) so the orchestrator can divide a global budget.
+  * A rate-limited step reads its per-worker request rate from an env var (the source's
+    ``rps_env_var``) so the orchestrator can divide a global budget across workers.
 """
 from __future__ import annotations
 
