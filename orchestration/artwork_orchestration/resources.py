@@ -6,6 +6,8 @@ env vars documented in the repo's .env.example.
 """
 from __future__ import annotations
 
+import os
+
 from dagster_dbt import DbtCliResource, DbtProject
 
 from .config import REPO_ROOT
@@ -33,7 +35,16 @@ artwork_dbt_project = DbtProject(
 #
 # To pick up dbt *model* changes, rebuild the manifest (``run_dagster_dev.sh`` runs
 # ``dbt parse`` on launch, or delete target/manifest.json) and restart.
-if not artwork_dbt_project.manifest_path.exists():
+#
+# Tests set ``ARTWORK_SKIP_DBT_PREPARE=1`` so that importing this package never shells
+# out to dbt: the parent launcher (or a fixture manifest) is responsible for the manifest
+# in that mode. Any truthy value ("1"/"true"/"yes") disables the on-import prepare.
+_SKIP_DBT_PREPARE = os.environ.get("ARTWORK_SKIP_DBT_PREPARE", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+if not _SKIP_DBT_PREPARE and not artwork_dbt_project.manifest_path.exists():
     artwork_dbt_project.prepare_if_dev()
 
 dbt_resource = DbtCliResource(project_dir=artwork_dbt_project)

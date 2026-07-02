@@ -225,6 +225,16 @@ def load_framework_config(path: Optional[str] = None) -> FrameworkConfig:
     )
 
 
+def reset_framework_cache() -> None:
+    """Clear the :func:`load_framework_config` cache.
+
+    ``load_framework_config`` is memoized (one framework.yaml per process), which is
+    correct at runtime but awkward in tests that load alternate fixture configs. Call
+    this in a fixture/teardown to force a fresh parse.
+    """
+    load_framework_config.cache_clear()
+
+
 # ===========================================================================
 # Layer B -- sources/<key>.yaml
 # ===========================================================================
