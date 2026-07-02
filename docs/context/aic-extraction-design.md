@@ -1,7 +1,7 @@
 # AIC Extraction Layer -- Design Document
 
 > **Status:** Design FINALIZED (all open questions resolved 2026-06-07).
-> Not yet implemented.
+> Snapshot extraction is implemented in `extraction/aic/`; the delta path remains future work. Current operator runbook: `extraction/aic/README.md`.
 > **Branch:** `donkey-kong-sandbox`
 > **Audience:** Owner + next-window Cortex sessions.
 > **Companion:** `docs/prompts/AIC_EXTRACTION_DESIGN_PROMPT.md` (the brief that

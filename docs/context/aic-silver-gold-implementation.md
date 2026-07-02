@@ -1,7 +1,7 @@
 # AIC Silver/Gold Implementation Design
 
-> **Status: ACTIVE -- Code-ready.**
-> Supersedes `docs/context/aic-dbt-silver-gold-design.md` (now LEGACY).
+> **Status: ACTIVE -- implemented architecture reference.**
+> Supersedes the legacy AIC design archived under `docs/bin/repo-cleanup-20260702/stale-context/aic-dbt-silver-gold-design.md`.
 >
 > Decisions are LOCKED unless explicitly marked OPEN. Each swim lane is
 > independently implementable. File creation order at the bottom.
