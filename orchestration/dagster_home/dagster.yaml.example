@@ -1,5 +1,23 @@
-# Minimal Dagster instance config for local development.
+# Dagster instance config for local development.
 # SQLite storage in $DAGSTER_HOME (the default when no storage: block is present).
+
+# Concurrency: how many JOBS can execute simultaneously.
+# Within a single job, independent steps already run in parallel (multiprocess).
+# Set to 2 if you want to launch ingest + dbt at the same time.
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 2
+
+# Concurrency: how many STEPS can run in parallel within a single job.
+# Default multiprocess executor uses CPU count. For I/O-bound extraction,
+# 4 parallel steps is a good laptop balance without thrashing disk/network.
+execution:
+  default:
+    config:
+      multiprocess:
+        max_concurrent: 4
 
 telemetry:
   enabled: false

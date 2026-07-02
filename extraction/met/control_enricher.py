@@ -124,13 +124,30 @@ def _claim_batch(
     config: Config,
     batch_id: str,
     batch_size: int,
+    department: Optional[str] = None,
 ) -> List[int]:
-    """Lease up to batch_size prioritized rows; return the claimed object_ids."""
+    """Lease up to batch_size prioritized rows; return the claimed object_ids.
+
+    When `department` is given, the claim is narrowed to that department slice so
+    that concurrent workers (one per department partition) lease DISJOINT rows and
+    never collide -- the lease already guarantees safety, the filter just partitions
+    the worklist so throughput can be spread across departments.
+    """
     control = f"{config.snowflake_database}.{config.snowflake_schema}.MET_ENRICHMENT_CONTROL"
     worklist = f"{config.snowflake_database}.{config.snowflake_schema}.MET_WORKLIST"
+    # batch_id ALWAYS binds first (SET clause); department binds second when present
+    # (subquery WHERE). Order matches the %s appearance order in claim_worklist.sql.
+    if department is not None:
+        dept_filter = "WHERE department = %s"
+        params: Tuple[Any, ...] = (batch_id, department)
+    else:
+        dept_filter = ""
+        params = (batch_id,)
     cur.execute(
-        CLAIM_WORKLIST_SQL.format(control=control, worklist=worklist, limit=int(batch_size)),
-        (batch_id,),
+        CLAIM_WORKLIST_SQL.format(
+            control=control, worklist=worklist, limit=int(batch_size), dept_filter=dept_filter,
+        ),
+        params,
     )
     cur.execute(
         f"SELECT object_id FROM {control} WHERE claimed_by_batch = %s ORDER BY object_id",
@@ -296,12 +313,14 @@ def _release_unfinished(
 def _process_one_batch(
     sf_conn: snowflake.connector.SnowflakeConnection, config: Config, batch_size: int,
     progress_every: int = 100, processed_offset: int = 0, total_label: str = "?",
+    department: Optional[str] = None,
 ) -> Tuple[int, Dict[str, int]]:
     """Claim, fetch, assemble, and callback one batch.
 
     Returns (claimed_count, status_counts). claimed_count == 0 means the worklist is
     drained (caller stops). `processed_offset`/`total_label` thread through to the
-    live per-fetch progress line emitted inside `_fetch_blocks`.
+    live per-fetch progress line emitted inside `_fetch_blocks`. `department`, when
+    given, narrows the claim to a single department partition.
     """
     batch_id = (
         f"met_enrich_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -309,7 +328,7 @@ def _process_one_batch(
     )
     cur = sf_conn.cursor()
     try:
-        claimed = _claim_batch(cur, config, batch_id, batch_size)
+        claimed = _claim_batch(cur, config, batch_id, batch_size, department)
         if not claimed:
             sf_conn.commit()
             return 0, {}
@@ -382,6 +401,7 @@ def enrich_from_control(
     max_batches: Optional[int] = None,
     progress_every: int = 100,
     total_expected: Optional[int] = None,
+    department: Optional[str] = None,
 ) -> Dict[str, int]:
     """Drain MET_WORKLIST in bounded batches. Returns aggregate status counts.
 
@@ -390,6 +410,8 @@ def enrich_from_control(
         max_batches:  stop after this many batches (None = drain the whole worklist).
         progress_every: emit one INFO progress line every N items processed.
         total_expected: if known, show "X/total" in progress lines; otherwise "X/?".
+        department:   restrict claiming to a single department slice (partition). When
+                      set, concurrent per-department workers process DISJOINT rows.
     """
     totals: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0, "claimed": 0}
     total_label = f"{total_expected:,}" if total_expected else "?"
@@ -402,7 +424,13 @@ def enrich_from_control(
             cur = sf_conn.cursor()
             try:
                 worklist = f"{config.snowflake_database}.{config.snowflake_schema}.MET_WORKLIST"
-                cur.execute(f"SELECT COUNT(*) FROM {worklist}")
+                if department is not None:
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM {worklist} WHERE department = %s",
+                        (department,),
+                    )
+                else:
+                    cur.execute(f"SELECT COUNT(*) FROM {worklist}")
                 row = cur.fetchone()
                 total_label = f"{int(row[0]):,}" if row else "?"
             finally:
@@ -418,6 +446,7 @@ def enrich_from_control(
                 progress_every=progress_every,
                 processed_offset=totals["claimed"],
                 total_label=total_label,
+                department=department,
             )
             if claimed == 0:
                 break
@@ -429,7 +458,8 @@ def enrich_from_control(
         sf_conn.close()
 
     logger.info(
-        "Enrichment complete. claimed=%s done=%s no_image=%s error=%s",
+        "Enrichment complete%s. claimed=%s done=%s no_image=%s error=%s",
+        f" (department={department!r})" if department else "",
         f"{totals['claimed']:,}", totals["done"], totals["no_image"], totals["error"],
     )
     return totals

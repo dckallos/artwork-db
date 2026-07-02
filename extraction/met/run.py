@@ -144,7 +144,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     p_enrich_met.add_argument(
         "--limit", type=int, default=None,
-        help="Max objects to claim+enrich this run (batch bound). Default: whole worklist.",
+        help="Legacy smoke bound: claim+enrich exactly ONE batch of N objects, then "
+             "stop (equivalent to --batch-size N --max-batches 1). Default: unset.",
+    )
+    p_enrich_met.add_argument(
+        "--batch-size", type=int, default=2000,
+        help="Rows leased + fetched per batch. Default: 2000.",
+    )
+    p_enrich_met.add_argument(
+        "--max-batches", type=int, default=None,
+        help="Stop after this many batches (bounds a single invocation so it is "
+             "resumable). Default: drain the whole (department) worklist.",
+    )
+    p_enrich_met.add_argument(
+        "--department", default=None,
+        help="Restrict claiming to one department slice (partition). Concurrent "
+             "per-department workers then process DISJOINT rows. Default: all.",
     )
     p_enrich_met.add_argument(
         "--progress-every", type=int, default=100,
@@ -174,14 +189,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     elif args.command == "enrich-met":
         if args.limit is not None:
-            # Bounded smoke: claim+enrich ONE batch of --limit objects, then stop.
+            # Legacy smoke bound: claim+enrich ONE batch of --limit objects, then stop.
             enrich_from_control(
                 config, batch_size=args.limit, max_batches=1,
-                progress_every=args.progress_every,
+                progress_every=args.progress_every, department=args.department,
             )
         else:
-            # Drain the whole worklist in default-size batches.
-            enrich_from_control(config, progress_every=args.progress_every)
+            # Drain in --batch-size batches, bounded by --max-batches (None = whole
+            # worklist). --department narrows to one partition for concurrent workers.
+            enrich_from_control(
+                config, batch_size=args.batch_size, max_batches=args.max_batches,
+                progress_every=args.progress_every, department=args.department,
+            )
     elif args.command == "enrich":
         enrich_sqlite_legacy(config)
     elif args.command == "upload":

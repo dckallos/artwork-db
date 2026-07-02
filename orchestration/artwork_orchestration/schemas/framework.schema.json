@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artwork_orchestration/schemas/framework.schema.json",
+  "title": "Framework engine config (Layer A)",
+  "description": "Internal, source-agnostic engine configuration read from framework.yaml. Values may use ${ENV_VAR:default} interpolation, so string fields also accept the raw token form.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["connection", "bronze", "defaults", "tags", "freshness"],
+  "properties": {
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "target", "profiles_dir"],
+      "properties": {
+        "profile": {"type": "string", "description": "dbt profile name (matches profiles.yml top key)."},
+        "target": {"type": "string", "description": "dbt target within the profile (e.g. dev | snowflake)."},
+        "profiles_dir": {"type": "string", "description": "Dir containing profiles.yml, relative to repo root."}
+      }
+    },
+    "bronze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["database", "schema"],
+      "properties": {
+        "database": {"type": "string"},
+        "schema": {"type": "string"}
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retry", "timeouts_seconds", "batching", "rate_limit"],
+      "properties": {
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_retries", "delay_seconds"],
+          "properties": {
+            "max_retries": {"type": ["integer", "string"]},
+            "delay_seconds": {"type": ["integer", "string"]},
+            "backoff": {"type": "string", "enum": ["exponential", "linear"]},
+            "jitter": {"type": "string", "enum": ["plus_minus", "none"]}
+          }
+        },
+        "timeouts_seconds": {
+          "type": "object",
+          "required": ["default"],
+          "additionalProperties": {"type": ["integer", "string"]},
+          "properties": {"default": {"type": ["integer", "string"]}}
+        },
+        "batching": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["size", "max_batches"],
+          "properties": {
+            "size": {"type": ["integer", "string"]},
+            "max_batches": {"type": ["integer", "string"]}
+          }
+        },
+        "rate_limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rps_budget", "concurrency"],
+          "properties": {
+            "rps_budget": {"type": ["number", "string"]},
+            "concurrency": {"type": ["integer", "string"]}
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rate_limit_key", "max_runtime_key"],
+      "properties": {
+        "rate_limit_key": {"type": "string"},
+        "max_runtime_key": {"type": "string"}
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gold_marts": {"type": "array", "items": {"type": "string"}, "description": "Optional fallback; auto-derived from the dbt manifest (models tagged 'marts')."},
+        "gold_lag_hours": {"type": ["number", "string"]}
+      }
+    }
+  }
+}

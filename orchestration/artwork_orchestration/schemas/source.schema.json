@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artwork_orchestration/schemas/source.schema.json",
+  "title": "Source declaration (Layer B, user-facing)",
+  "description": "One museum source declared as data. Minimal for simple sources; richer keys are all optional. See ../SCHEMA.md for plain-language docs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "cli_module", "steps"],
+  "properties": {
+    "source": {"type": "string", "description": "Source key; also the dbt source name and asset-key namespace."},
+    "cli_module": {"type": "string", "description": "python -m <cli_module> <step.run> (subprocess contract)."},
+    "rps_env_var": {"type": "string", "description": "Env var the CLI reads for per-worker rps (default API_RPS)."},
+    "rate_limit_value": {"type": "string", "description": "Concurrency-tag value; defaults to the source key."},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/step"}
+    },
+    "checks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/check"}
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "produces"],
+      "properties": {
+        "name": {"type": "string", "description": "Step/asset name."},
+        "run": {"type": "string", "description": "CLI subcommand. Omit for a verify-only step (no subprocess)."},
+        "kind": {"type": "string", "description": "Selects a timeout default (snapshot | seed | batch | ...)."},
+        "timeout_seconds": {"type": "integer", "description": "Overrides the kind-derived timeout."},
+        "mode": {"type": "string", "enum": ["simple", "batched"], "description": "batched appends --batch-size/--max-batches."},
+        "rate_limited": {"type": "boolean", "description": "Job carries the rate-limit run tag; per-worker rps derived."},
+        "api_bound": {"type": "boolean", "description": "false => no retry policy (e.g. a read-only verify step)."},
+        "static_args": {"type": "array", "items": {"type": "string"}, "description": "Extra CLI args appended verbatim."},
+        "partition_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "cli_flag", "values"],
+          "properties": {
+            "name": {"type": "string"},
+            "cli_flag": {"type": "string"},
+            "values": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}}
+          }
+        },
+        "produces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/produce"}
+        },
+        "metadata_sql": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "produce": {
+      "oneOf": [
+        {"type": "string", "description": "Shorthand: a bare table name = dbt-source terminal."},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["table"],
+          "properties": {
+            "table": {"type": "string"},
+            "dbt_source": {"type": "boolean", "description": "Keyed via translator (dbt lineage terminal). Default true unless internal."},
+            "internal": {"type": "boolean", "description": "Intermediate table, not a dbt source."},
+            "physical": {"type": "string", "description": "Physical Bronze table; default UPPER(table)."},
+            "check_nonempty": {"type": "boolean", "description": "OPTIONAL pre-dbt row-count gate. Prefer dbt."},
+            "severity": {"type": "string", "enum": ["ERROR", "WARN"]},
+            "fresh_within_days": {"type": "number", "description": "OPTIONAL freshness check. Prefer dbt freshness:."}
+          }
+        }
+      ]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "attach_table", "sql", "expect"],
+      "properties": {
+        "name": {"type": "string"},
+        "attach_table": {"type": "string", "description": "Logical table (must be produced by some step)."},
+        "sql": {"type": "string", "description": "Scalar query; {db}/{schema} placeholders allowed."},
+        "expect": {"type": "string", "pattern": "^\\s*(==|!=|>=|<=|>|<)\\s*-?\\d+\\s*$", "description": "Verdict, e.g. \"== 0\", \"> 0\"."},
+        "severity": {"type": "string", "enum": ["ERROR", "WARN"]},
+        "description": {"type": "string"}
+      }
+    }
+  }
+}

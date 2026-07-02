@@ -1,0 +1,95 @@
+# =============================================================================
+# sources/met.yaml -- Met (Metropolitan Museum of Art) source declaration.
+# =============================================================================
+# This is the COMPLEX example: a CSV snapshot, a seeded control table, a bounded +
+# department-partitioned + rate-limited enrichment step, and a terminal verify asset.
+# A simple source (see aic.yaml / the CMA example in ADDING_A_SOURCE.md) needs only a
+# handful of lines. Full field docs: ../SCHEMA.md.
+# =============================================================================
+source: met
+cli_module: extraction.met.run
+rps_env_var: MET_API_RPS          # the enrich CLI reads its per-worker rps from this env var
+
+steps:
+  # Phase 1: load the Met OpenAccess CSV into BRONZE.MET_CSV_SNAPSHOT.
+  - name: csv_snapshot
+    run: snapshot
+    kind: snapshot
+    produces:
+      - {table: csv_snapshot, internal: true, physical: MET_CSV_SNAPSHOT}
+
+  # Phase 2: seed MET_ENRICHMENT_CONTROL from the snapshot (a dbt source terminal).
+  - name: enrichment_control
+    run: seed-control
+    kind: seed
+    produces: [met_enrichment_control]
+    metadata_sql:
+      pending: >-
+        SELECT COUNT(*) FROM {db}.{schema}.MET_ENRICHMENT_CONTROL
+        WHERE enrichment_status = 'pending'
+
+  # Phase 3: bounded, department-partitioned, rate-limited enrichment. Claims a slice of
+  # ONE department's worklist and assembles rows into RAW_MET_OBJECTS.
+  - name: enrichment_batch
+    run: enrich-met
+    kind: batch
+    mode: batched                 # appends --batch-size/--max-batches from framework defaults
+    rate_limited: true            # per-worker rps env + rate-limit run tag on its jobs
+    partition_by:
+      name: department
+      cli_flag: --department
+      values:                     # partition KEY (slug) -> exact --department value (19 depts)
+        ancient_near_eastern_art: "Ancient Near Eastern Art"
+        arms_and_armor: "Arms and Armor"
+        arts_of_africa_oceania_americas: "Arts of Africa, Oceania, and the Americas"
+        asian_art: "Asian Art"
+        costume_institute: "Costume Institute"
+        drawings_and_prints: "Drawings and Prints"
+        egyptian_art: "Egyptian Art"
+        european_paintings: "European Paintings"
+        european_sculpture_decorative_arts: "European Sculpture and Decorative Arts"
+        greek_and_roman_art: "Greek and Roman Art"
+        islamic_art: "Islamic Art"
+        medieval_art: "Medieval Art"
+        modern_contemporary_art: "Modern and Contemporary Art"
+        musical_instruments: "Musical Instruments"
+        photographs: "Photographs"
+        robert_lehman_collection: "Robert Lehman Collection"
+        the_american_wing: "The American Wing"
+        the_cloisters: "The Cloisters"
+        the_libraries: "The Libraries"
+    produces:
+      - {table: enrichment_batch, internal: true}   # step asset; no table of its own
+    metadata_sql:
+      department_worklist_remaining: >-
+        SELECT COUNT(*) FROM {db}.{schema}.MET_WORKLIST
+        WHERE department = '{partition_value}'
+      department_done: >-
+        SELECT COUNT(*) FROM {db}.{schema}.MET_ENRICHMENT_CONTROL c
+        JOIN {db}.{schema}.MET_CSV_SNAPSHOT s ON s.object_id = c.object_id
+        WHERE c.enrichment_status = 'done'
+        AND s.raw_payload:department::STRING = '{partition_value}'
+
+  # Phase 4: terminal dbt source. Verify-only (no `run`) -- rows are assembled
+  # server-side inside each enrichment batch; this reports the current state.
+  - name: raw_met_objects
+    kind: seed                    # fast verification query, no CLI
+    api_bound: false              # no retry policy (nothing to retry -- it only reads)
+    produces:
+      - {table: raw_met_objects, check_nonempty: true, severity: ERROR, fresh_within_days: 8}
+    metadata_sql:
+      with_primary_image: "SELECT COUNT(*) FROM {db}.{schema}.RAW_MET_OBJECTS WHERE has_primary_image = TRUE"
+      worklist_remaining: "SELECT COUNT(*) FROM {db}.{schema}.MET_WORKLIST"
+
+# Operational check on the extraction toolkit's own bookkeeping (NOT a dbt concern):
+# no worklist leases older than the 30-min reclaim TTL.
+checks:
+  - name: met_no_orphaned_leases
+    attach_table: met_enrichment_control
+    expect: "== 0"
+    severity: WARN
+    description: No worklist leases older than the 30-min reclaim TTL.
+    sql: >-
+      SELECT COUNT(*) FROM {db}.{schema}.MET_ENRICHMENT_CONTROL
+      WHERE claimed_at IS NOT NULL
+      AND claimed_at < DATEADD('minute', -30, CURRENT_TIMESTAMP())

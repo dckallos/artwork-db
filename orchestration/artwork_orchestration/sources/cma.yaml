@@ -1,0 +1,19 @@
+# =============================================================================
+# sources/cma.yaml -- Cleveland Museum of Art. WORKED EXAMPLE of "add a museum".
+# =============================================================================
+# This entire source was added with ONE YAML file and a stub extraction CLI
+# (extraction/cma/) -- ZERO framework .py changes. It is the simple shape: one snapshot
+# run that fills two Bronze tables. See ../ADDING_A_SOURCE.md and ../SCHEMA.md.
+#
+# NOTE: the extraction/cma CLI is a placeholder; wire up the real Cleveland OpenAccess
+# loader and create the Bronze DDL before running cma_ingest_job for real. Its Dagster
+# objects load fine today; only an actual RUN needs the extraction + tables.
+# =============================================================================
+source: cma
+cli_module: extraction.cma.run
+steps:
+  - name: snapshot
+    run: snapshot
+    produces:
+      - {table: raw_cma_artworks, check_nonempty: true}
+      - raw_cma_agents

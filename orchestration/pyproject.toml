@@ -23,6 +23,8 @@ dependencies = [
     "dagster-webserver>=1.8,<2",
     "dagster-dbt>=0.24,<0.30",
     "dbt-snowflake>=1.10,<2",
+    "PyYAML>=6",          # parse framework.yaml + sources/*.yaml + profiles.yml
+    "jsonschema>=4",      # optional-at-runtime schema validation (loader degrades if absent)
 ]
 
 [project.optional-dependencies]
