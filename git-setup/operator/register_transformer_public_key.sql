@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Register the transformer RSA public key on the ARTWORK_TRANSFORMER_SVC service
+-- user so the snow CLI 'transformer' connection and dbt (artwork_pipeline) can
+-- authenticate with SNOWFLAKE_JWT against the configured private_key_file.
+--
+-- Applied automatically by scripts/snowflake_cli/09_setup_transformer_keypair.sh
+-- over the ADMIN JWT connection (no chicken-and-egg: a working admin connection
+-- already exists, so no password one-shot is needed):
+--
+--   PUBKEY=$(awk 'NR>1 && !/-----END/ {printf "%s", $0}' \
+--       ~/.snowflake/keys/transformer_rsa_key.pub)
+--   snow sql -c <admin-conn> \
+--       --filename git-setup/operator/register_transformer_public_key.sql \
+--       --variable transformer_user=ARTWORK_TRANSFORMER_SVC \
+--       --variable rsa_public_key="$PUBKEY" \
+--       --enhanced-exit-codes
+--
+-- The 'transformer_user' and 'rsa_public_key' variables are substituted at
+-- runtime by the snow CLI. Proof that it works is the JWT handshake in
+-- 10_test_transformer_connection.sh ('snow connection test -c transformer' + a
+-- CURRENT_USER round-trip), a stronger check than echoing DESCRIBE USER.
+--
+-- Prerequisite: `make iac` must have already created ARTWORK_TRANSFORMER_SVC via
+-- infrastructure/create_service_user.sql (TYPE = SERVICE).
+--
+-- Idempotent: re-running with the same key value is a no-op; re-running with a
+-- new key rotates the credential.
+-- =============================================================================
+
+ALTER USER <% transformer_user %>
+    SET RSA_PUBLIC_KEY = '<% rsa_public_key %>';

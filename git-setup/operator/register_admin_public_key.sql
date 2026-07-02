@@ -1,0 +1,24 @@
+-- =============================================================================
+-- register_admin_public_key.sql -- RSA key registration (single-statement)
+--
+-- Registers the admin RSA public key on the target user.
+-- Uses RSA_PUBLIC_KEY (slot 1). For dual-device setups, manually register the
+-- second device into RSA_PUBLIC_KEY_2 or re-run this script from the other
+-- device (it will overwrite slot 1 -- last writer wins).
+--
+-- NOTE: This file must remain a SINGLE SQL statement (no internal semicolons)
+-- because snow sql splits all input on ';' regardless of delivery method
+-- (--filename, --stdin, --query). Snowflake Scripting blocks (DECLARE...
+-- BEGIN...END) are incompatible with snow sql as of v3.18.
+--
+-- Variables (substituted by sed in 04_register_admin_public_key.sh):
+--   admin_user       - the Snowflake user name to ALTER
+--   rsa_public_key   - the PEM-stripped base64 public key body
+--
+-- Run context: ACCOUNTADMIN (required for ALTER USER ... SET RSA_PUBLIC_KEY).
+--
+-- Idempotent: ALTER USER ... SET RSA_PUBLIC_KEY with the same value is a no-op;
+-- re-running with a new key value rotates the credential.
+-- =============================================================================
+
+ALTER USER <% admin_user %> SET RSA_PUBLIC_KEY = '<% rsa_public_key %>'

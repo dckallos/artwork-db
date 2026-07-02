@@ -1,0 +1,167 @@
+# Tier 2 — File map
+
+One line per file: purpose + line count + "open full source only if…" trigger.
+Consult this before opening any source.
+
+**Coverage:** every substantive file is row-mapped below. Total file/dir counts are
+intentionally NOT hardcoded here (they rot) — reconcile against `ls -R` when needed.
+The `Verified` column records provenance: a date = read end-to-end that window;
+`prior` = trusted from an earlier window, not re-read. Trivial files (`.gitignore`,
+`LICENSE`) and the `docs/context/*.md` docs themselves are intentionally not row-mapped.
+
+**Session-3 (2026-05-31) — APPLIED + connection-resilience research.** Live IaC
+additions: `create_bronze_views.sql`/`drop_bronze_views.sql` (`MET_WORKLIST`);
+`create_run_control.sql`/`drop_run_control.sql` (`RUN_CONTROL` checkpoint table);
+`MET_ENRICHMENT_CONTROL` + `MET_CSV_SNAPSHOT` in `create_bronze_tables.sql`; real
+`MET_LEASE_RECLAIM_TASK` in `create_tasks.sql`; and the `grant_privileges.sql →
+create_grants.sql` rename. Plus a standalone read-only ops suite — `$(TOOLKIT_DIR)/check.sh`,
+`$(TOOLKIT_DIR)/checkpoint.sh`, `scripts/sql/show_{run_control,pipeline_status}.sql`
+— and two append-only docs: `docs/context/session-3-progress-log.md` (restart trail)
++ `docs/context/connection-resilience.md` (research + advisory-lease design).
+
+## snowflake_cli/ (NOW in sibling `snowflake-toolkit` repo — Workflow 1 reviewed)
+
+| File | Lines | Purpose | Verified | Open source only if… |
+|---|---|---|---|---|
+| `setup.sh` | ~ | Entry point; `--phase` dispatcher (prereq/init-profile/admin/loader/**transformer**/promote/all/list/switch), `--profile`/`--admin-conn`/`--loader-conn`/**`--transformer-conn`** selectors, chmods + runs 00–10 | 2026-06-06 | changing phase routing |
+| `_lib.sh` | ~ | Shared helpers (TOML parse/rewrite incl. top-level keys + **`remove_toml_section`**, JWT verify, **connections.toml-aware** resolvers, key-path derivation, `list_connections`/`set_default_connection`, `prune_backups`) | 2026-06-06 | need exact awk/TOML logic |
+| `init_profile.sh` | ~200 | Local-only: seed `[<admin>]` in **connections.toml** non-destructively (prompts/env) + set `default_connection_name` (config.toml); runs inside `prereq` between 02 and 03 | 2026-06-06 | changing connections.toml seeding |
+| `00_install_snowflake_cli.sh` | 29 | brew/pipx install, idempotent | prior | changing install path |
+| `01_init_snowflake_home.sh` | 25 | mkdir ~/.snowflake/{keys,logs}, chmod 700 | prior | changing perms/layout |
+| `02_generate_admin_keypair.sh` | 40 | PKCS#8 keypair, overwrite-guarded | prior | changing key type/encryption |
+| `03_lock_config_permissions.sh` | 41 | chmod 600 config.toml + connections.toml + key | 2026-06-06 | — |
+| `04_register_admin_public_key.sh` | 117 | ONLY password-auth call; registers RSA pubkey; preflights **connections.toml** | 2026-06-06 | changing bootstrap auth |
+| `05_verify_admin_jwt.sh` | 54 | JWT verify vs current warehouse (read from **connections.toml**) | 2026-06-06 | — |
+| `06_setup_loader_keypair.sh` | 107 | loader key-pair: lazy keygen → register pubkey via admin JWT → upsert `[loader]` in connections.toml (`private_key_path`) | 2026-06-06 | changing loader auth |
+| `07_test_loader_connection.sh` | 24 | `snow connection test -c loader` (key-pair; no `.env`) | 2026-05-31 | — |
+| `08_promote_admin_warehouse.sh` | 156 | promote admin warehouse → ARTWORK_WH, rewrite connections.toml | 2026-06-06 | changing promotion logic |
+| `09_setup_transformer_keypair.sh` *(NEW, 2026-06-04)* | ~120 | transformer key-pair (mirrors 06): lazy keygen → register pubkey via admin JWT → upsert `[<conn>_transformer]` in connections.toml (`private_key_path`) | 2026-06-06 | changing transformer auth |
+| `10_test_transformer_connection.sh` *(NEW, 2026-06-04)* | 26 | `snow connection test -c <conn>_transformer` (key-pair; no `.env`) | 2026-06-04 | — |
+
+## git-setup/ (reviewed 2026-05-30 — see `ddl-infrastructure.md` "Git bind chain")
+
+| File | Lines | Purpose | Verified | Open source only if… |
+|---|---|---|---|---|
+| `create_git_ops_db.sql` | 51 | `ARTWORK_OPS` DB + `GIT` schema + `github_pat_artwork_db` SECRET (templated PAT) | 2026-05-30 | changing the secret/DB host |
+| `create_api_integration.sql` | 38 | API INTEGRATION `GITHUB_ARTWORK_DB_INTEGRATION`; whitelists the PAT secret | 2026-05-30 | debugging Git bind chain |
+| `create_git_repository.sql` | 67 | GIT REPOSITORY `artwork_db` (binds integration+creds), FETCH, GRANT READ to ADMIN | 2026-05-30 | changing origin/creds/grant |
+| `drop_git_repository.sql` | 38 | rollback step 1: `DROP GIT REPOSITORY IF EXISTS` (FQ) | 2026-05-30 | rolling back |
+| `drop_api_integration.sql` | 39 | rollback step 2: `DROP API INTEGRATION IF EXISTS` | 2026-05-30 | rolling back |
+| `drop_git_ops_db.sql` | 60 | rollback step 3: FQ `DROP SECRET`+`SCHEMA`+`DATABASE` | 2026-05-30 | rolling back |
+| `operator/register_admin_public_key.sql` | 33 | `ALTER USER … SET RSA_PUBLIC_KEY` (+ DESCRIBE) | prior | — |
+| `operator/register_loader_public_key.sql` | 33 | `ALTER USER … SET RSA_PUBLIC_KEY` for the loader (+ DESCRIBE); applied by `06_setup_loader_keypair.sh` | 2026-05-31 | — |
+| `operator/register_transformer_public_key.sql` *(NEW, 2026-06-04)* | 34 | `ALTER USER … SET RSA_PUBLIC_KEY` for `ARTWORK_TRANSFORMER_SVC`; applied by `09_setup_transformer_keypair.sh` | 2026-06-04 | — |
+| `.env.example` | 6 | gitignored `git-setup/.env` template; ships blank `GITHUB_PAT=` | 2026-05-30 | — |
+| `README.md` | 112 | git-setup runbook; **written in retired B###/V###/R### scheme (stale)** | 2026-05-30 | need narrative context |
+
+## infrastructure/ (Workflow 2 — reviewed)
+
+Prefix-free `create_*` / `drop_*` pairs, matched **by base name** (no V/R/B
+prefixes — retired; see `ddl-infrastructure.md`). Apply order lives in
+`scripts/manifest.txt`, not the names. **11 create/drop pairs present** (Session-3
+added the `bronze_views` and `run_control` pairs; the `grant_privileges → create_grants`
+rename makes grants an auto-paired `create_`).
+
+| File | Lines | Purpose | Verified | Open source only if… |
+|---|---|---|---|---|
+| `create_roles.sql` | 46 | 3 roles (LOADER/TRANSFORMER/ADMIN) + hierarchy + account grants (CREATE WH/DB; EXECUTE TASK; EXECUTE ALERT; MONITOR EXECUTION) | 2026-06-04 | changing role model / account grants |
+| `create_warehouses.sql` | 15 | `ARTWORK_WH` X-Small, auto-suspend 60 (`IF NOT EXISTS`) | prior | resizing/adding WH |
+| `create_resource_monitors.sql` *(NEW)* | 47 | MVG-3: `ARTWORK_WH_MONITOR` (20 credits/month, suspend 95%, kill 100%) + `STATEMENT_TIMEOUT=900s` + `QUEUED_TIMEOUT=120s` on ARTWORK_WH | 2026-06-05 | adjusting cost controls / quotas |
+| `create_databases_and_schemas.sql` | 21 | `ARTWORK_DB` + BRONZE/SILVER/GOLD schemas (`IF NOT EXISTS`) | prior | adding schemas |
+| `create_file_formats.sql` | 22 | `JSON_RAW`, `PARQUET_RAW` in BRONZE (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding formats |
+| `create_stages.sql` | 14 | `BRONZE_LOAD_STAGE` internal stage (`OR REPLACE`, UPPERCASE) | 2026-05-31 | adding stages |
+| `create_bronze_tables.sql` | 145 | 6 `RAW_*` VARIANT tables + `EXTRACTION_LOG` + **Session-3: `MET_ENRICHMENT_CONTROL` (lease/state) + `MET_CSV_SNAPSHOT` (VARIANT raw CSV)** (`IF NOT EXISTS`); 2026-06-05 added canonical-ref header comment | 2026-06-05 | schema changes |
+| `create_bronze_views.sql` *(NEW, Session-3)* | 60 | `MET_WORKLIST` view (control × CSV-snapshot, IMG-02 priority, lease-aware; `OR REPLACE`); 2026-06-05 added canonical-ref header comment | 2026-06-05 | changing worklist priority/filters |
+| `create_run_control.sql` *(NEW, Session-3)* | 46 | `RUN_CONTROL` durable checkpoint table — PK (run_id, step), VARIANT checkpoint, session_id/query_tag provenance; resume work across connection drops (`IF NOT EXISTS`) | 2026-05-31 | changing checkpoint schema |
+| `create_service_user.sql` | ~110 | **TWO** SERVICE users: `ARTWORK_LOADER_SVC` (->ARTWORK_LOADER) + **2026-06-04: `ARTWORK_TRANSFORMER_SVC` (->ARTWORK_TRANSFORMER, dbt identity)**; each `CREATE … IF NOT EXISTS` + idempotent `ALTER` converge to `TYPE=SERVICE`/`UNSET PASSWORD` (key-pair only) | 2026-06-04 | auth/identity changes |
+| `create_tasks.sql` | 53 | **Session-3: real `MET_LEASE_RECLAIM_TASK`** (hourly CRON, 30-min TTL lease reclaim, ARTWORK_WH; `OR REPLACE` + `RESUME`); 2026-06-05 added canonical-ref header comment | 2026-06-05 | defining/altering tasks |
+| `drop_*.sql` (11) | — | paired rollbacks; `DROP … IF EXISTS`; incl. `drop_bronze_views` (drops view before bases), `drop_run_control`, + real `drop_tasks` | 2026-05-31 | rolling back |
+| `create_grants.sql` *(renamed from grant_privileges.sql, Session-3)* | 51 | ALL+FUTURE grants to functional roles + **LOADER SELECT on ALL+FUTURE VIEWS in BRONZE** (runs as ARTWORK_ADMIN) | 2026-05-31 | changing grants |
+| `refresh_grants.sql` | 24 | repeatable: re-grant ALL (current) incl. **VIEWS**; no drop | 2026-05-31 | after new objects land |
+| `drop_grants.sql` | 41 | no-op SELECT (grants cascade); reworded to reference `create_grants.sql` | 2026-05-31 | implementing real REVOKEs |
+
+## scripts/ (orchestration — Workflow 2)
+
+> **Post-Phase-3 note:** `orchestrate_modern.sh`, `apply_sql.sh`, `rollback_sql.sh`,
+> `bootstrap.py`, `bootstrap_chmod.sh`, `check.sh`, `checkpoint.sh`, `lib/`,
+> `snowflake_cli/`, and framework tests have moved to the sibling `snowflake-toolkit`
+> repo. What remains here is artwork-specific: manifest, legacy orchestrate.sh,
+> dbt orchestration, secret_bearing.txt, artwork-specific SQL checks, and archival
+> extraction scripts.
+
+| File | Lines | Purpose | Verified | Open source only if… |
+|---|---|---|---|---|
+| `manifest.txt` | — | single source of apply order for the sibling toolkit IaC orchestrator | 2026-07-02 | changing apply order |
+| `secret_bearing.txt` | — | project scripts whose stdout must be suppressed by the toolkit apply path | 2026-07-02 | adding secret-bearing scripts |
+| `dbt_orchestrate.sh` | — | artwork-specific dbt orchestration (stays local) | prior | changing dbt run logic |
+| `sql/show_pipeline_status.sql` | — | artwork-specific: pipeline object+task status | 2026-05-31 | — |
+| `sql/show_run_control.sql` | — | artwork-specific: run-control trail + dual-instance smell test | 2026-05-31 | — |
+
+## Root / other
+
+| File | Lines | Purpose | Verified | Open source only if… |
+|---|---|---|---|---|
+| `Makefile` | — | task runner; `CONN=` passthrough; 2026-06-04: `loader` + `transformer` targets wrap `setup.sh --profile $(CONN) --phase loader\|transformer`; **2026-06-05: `extract-met` rewritten to real subcommands (snapshot/seed-control/enrich-met) + generic `AWS_NO_SSO` prefix on PUT steps + `MET_DEPT`/`MET_SEED_LIMIT`/`MET_ENRICH_LIMIT` knobs; `extract` aliases it; aic/cma/smithsonian commented placeholders** | 2026-06-05 | changing make targets |
+| `.env.example` | 39 | runtime env template; **2026-06-04 re-pointed to new account: example acct `OBANOYY-MK07348`, namespaced loader key `<conn>_loader_rsa_key.p8`, dbt identity `DBT_SNOWFLAKE_USER=ARTWORK_TRANSFORMER_SVC` + `<conn>_transformer_rsa_key.p8`**; `SMITHSONIAN_API_KEY` still no consumer | 2026-06-04 | — |
+| `profiles.yml.example` | 39 | dbt-core profile example using env vars + key-pair auth | 2026-07-02 | dbt profile setup |
+| `requirements.txt` | — | root pin set (mirrors extraction deps) | 2026-05-30 | bumping pins |
+| `.gitignore`, `LICENSE` | — | trivial; not row-mapped | prior | — |
+
+## extraction/met/ (Workflow 3 — current runbook in `extraction/met/README.md`)
+
+Standalone Met OpenAccess → Bronze ETL. SQL externalized in `sql/*.sql`; SQLite
+is intermediate, `ARTWORK_DB.BRONZE.raw_met_objects` is the destination.
+Note: `extraction/__init__.py` (added 2026-05-31) makes `extraction` a **regular**
+package (was a PEP 420 namespace package); all 3 packages resolve + resources load (verified).
+
+| File | Lines | Purpose | Verified | Open full source only if… |
+|---|---|---|---|---|
+| `run.py` | 199 | argparse CLI (SUBCOMMANDS, not --phase): current **snapshot/seed-control/enrich-met** (Option B) + legacy bootstrap/enrich/upload/all/status; `-v` is a global flag (before the subcommand) | 2026-06-05 | changing CLI/subcommand wiring |
+| `config.py` | 71 | `Config` dataclass; `MET_*`+`SNOWFLAKE_*` env w/ defaults | 2026-05-30 | changing settings/defaults; **stale V001-V007 ref (l.53-54)** |
+| `db.py` | 43 | `load_sql()`, `initialize_database()`, `connect()` | 2026-05-30 | changing SQL-load or SQLite conn |
+| `csv_bootstrap.py` | 268 | download CSV + `_map_row` + batched UPSERT + **`assert_real_met_csv` DATA-06 guard** | 2026-05-31 | adding/removing a CSV column; CSV-integrity rules |
+| `snapshot_loader.py` | 302 | **Section C Phase 1:** full CSV → VARIANT NDJSON → PUT → COPY (session STG) → MERGE `MET_CSV_SNAPSHOT` (keyed `object_id`); AUTO-03 log; Option B | 2026-05-31 | changing snapshot load/MERGE/AUTO-03 |
+| `control_seeder.py` | 160 | **Option B Phase 2:** seed `pending` rows into `MET_ENRICHMENT_CONTROL` from a bounded `MET_CSV_SNAPSHOT` slice (`--department`/`--limit`/PD gate) | 2026-06-05 | changing seed slice/gate logic |
+| `control_enricher.py` | 438 | **Option B Phase 3:** lease-claim a `MET_WORKLIST` batch → async Met API fetch → stage+COPY → assemble `RAW_MET_OBJECTS` server-side → batch callback. **2026-06-05: progress now streams live per-N completed fetches (was post-batch)** | 2026-06-05 | changing claim/fetch/assemble/progress logic |
+| `image_enricher.py` | 280 | async API fetch; rate limiter + backoff (Snowflake-free today; Phase 3 will add lease-claim) | 2026-05-30 | changing retry/limiter/state logic |
+| `snowflake_uploader.py` | 289 | NDJSON + PUT + COPY INTO Bronze; marks upload state; `_snowflake_connect` (key-pair) | 2026-05-31 | changing Bronze JSON shape / COPY mapping / connect |
+| `sql/schema.sql` | 97 | SQLite DDL: `met_artworks` + `extraction_runs` + indexes | 2026-05-30 | schema changes |
+| `sql/upsert_artwork.sql` | 79 | `INSERT … ON CONFLICT DO UPDATE` (image/bronze cols excluded) | 2026-05-30 | column changes |
+| `sql/update_enrichment_done.sql` | 9 | mark row `done` w/ image URLs | 2026-05-30 | — |
+| `sql/copy_into_bronze.sql` | 18 | templated COPY INTO raw_met_objects; `PURGE=TRUE` | 2026-05-30 | changing load target/format |
+| `sql/copy_into_snapshot_stg.sql` | 20 | templated COPY of CSV JSON into the session `MET_CSV_SNAPSHOT_STG` (compiled clean 2026-05-31) | 2026-05-31 | changing snapshot stage/format |
+| `sql/merge_csv_snapshot.sql` | 24 | templated MERGE STG → `MET_CSV_SNAPSHOT` on `object_id` (QUALIFY de-dup; compiled clean 2026-05-31) | 2026-05-31 | changing snapshot MERGE/keys |
+| `sql/__init__.py` | 3 | package marker for `importlib.resources` | 2026-05-30 | — |
+| `__init__.py` | 5 | package docstring | 2026-05-30 | — |
+| `requirements.txt` | 5 | connector/requests/aiohttp/dotenv | 2026-05-30 | bumping pins |
+| `.env.example` | 25 | Met-specific env template; **hardcoded sample account (l.14)** | 2026-05-30 | — |
+| `README.md` | 251 | operator runbook; **2026-06-05: reframed to Option B (snapshot/seed-control/enrich-met) as current, SQLite path relabeled legacy; V001-V007 ref removed** | 2026-06-05 | need narrative/recovery context |
+
+## artwork_pipeline/ (dbt project -- see `dbt-plan.md` + `dbt-curriculum.md`)
+
+| File | Lines | Purpose | Verified | Open full source only if... |
+|---|---|---|---|---|
+| `dbt_project.yml` | 39 | project config: profile link, path defaults, global `copy_grants`, schema routing (staging->SILVER, marts->GOLD) | 2026-06-05 | changing materialization defaults / schema routing |
+| `profiles.yml` | 77 | dual-mode connection profile: `dev` target (Mac key-pair via env_var) + `snowflake` target (native session auth, no credentials) | 2026-06-05 | changing auth / adding targets |
+| `packages.yml` | 11 | `dbt_utils >=1.3,<2.0` + `codegen >=0.14,<0.15` | 2026-06-05 | adding/bumping packages |
+| `models/staging/met/stg_met__artworks.sql` | 107 | staging view: flattens `RAW_PAYLOAD` VARIANT into typed columns (csv + api_images paths) | 2026-06-05 | changing column extract paths |
+| `models/staging/met/stg_met__enrichment_status.sql` | 61 | staging view (Unit 3): typed passthrough of `BRONZE.MET_ENRICHMENT_CONTROL` (enrichment lifecycle, image gate, lease, errors) | 2026-06-05 | changing column set / materialization |
+| `models/staging/met/_met__sources.yml` | 59 | source declaration: `met` -> `RAW_MET_OBJECTS` + `MET_ENRICHMENT_CONTROL` (Unit 3), both with PK tests + `identifier:` | 2026-06-05 | adding source tables |
+| `models/staging/met/_met__models.yml` | 44 | model schema: column descriptions + `unique`/`not_null` tests for `stg_met__artworks`; incl. `object_date` not_null at `severity: warn` + `store_failures: true` (Unit 2) | 2026-06-05 | adding/changing tests |
+| `macros/override_create_schema.sql` | 26 | MVG-1: no-op `create_schema` + `drop_schema` (suppresses dbt's default schema DDL; developer UX, not enforcement) | 2026-06-05 | understanding why dbt doesn't create schemas |
+| `macros/generate_schema_name.sql` | 77 | MVG-2: verbatim schema routing with compile-time allowlist guard (`SILVER`, `GOLD`, `DBT_TEST__AUDIT`); extensive design considerations in header | 2026-06-05 | adding approved schemas or multi-dev branching |
+| `.gitignore` | — | ignores target/, dbt_packages/, logs/ | prior | — |
+
+## docs/context/dbt-curriculum.md + dbt-journal/ (dbt learning arc)
+
+| File | Lines | Purpose | Verified | Open full source only if... |
+|---|---|---|---|---|
+| `dbt-curriculum.md` | 275 | master syllabus: 6-unit curriculum, new-window protocol, status tracking, journal template (U1-U2 complete, U3 active) | 2026-06-05 | resuming dbt work in a new window |
+| `dbt-governance-plan.md` | 446 | PROPOSAL: 5-layer dbt governance framework (RBAC, cost, object proliferation, multi-dev, observability); problem statement, damage scenarios, considerations for reviewers, MVG subset | 2026-06-05 | planning governance controls or reviewing the proposal |
+| `dbt-journal/unit-N-*.md` | — | per-unit journal files (created as each unit starts): commands, decisions, errors, takeaways | — | reviewing a specific unit's learnings |
+
+## analysis/ (Section C — read-only profiling, not IaC, not operational ETL)
+
+| File | Lines | Purpose | Verified | Open full source only if… |
+|---|---|---|---|---|
+| `met_snapshot_profile.sql` | 84 | **Section C Phase 1.5:** read-only profile of `MET_CSV_SNAPSHOT` (counts by department / classification / culture×period / century / public-domain×highlight + a worklist-priority candidate-slice query) so the owner picks the first enrichment slice. Most complex query compiled clean (`only_compile`, 2026-05-31) | 2026-05-31 | adding a slice axis |

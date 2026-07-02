@@ -1,0 +1,38 @@
+# scripts/manifest.txt -- ordered forward apply list for the IaC layer.
+# One repo-relative path per line; blank lines and #-comments are ignored.
+# Read by the sibling snowflake-toolkit orchestrator as the single source of truth for apply order
+# AND teardown reversal, replacing sorted(glob(...)). Teardown reverses this
+# list and applies only the paired drop of each create_* entry (create_ ->
+# drop_); non-create_ entries (e.g. refresh_grants.sql) have no paired drop and
+# are skipped. Order follows the 2026-05-29 design decision
+# "IaC Phase Ordering + Role Model: Git mirror runs last": core infrastructure
+# first, then the optional git-setup Git mirror last.
+#
+# Decouples apply order from filenames entirely (H2). Filenames no longer carry
+# numeric prefixes; this manifest is the sole source of apply order. The only
+# behavioral delta from the original prefix-glob is create_grants.sql (formerly
+# create_grants.sql), which a naive create_*.sql glob could order incorrectly
+# and which now applies in place.
+
+# --- Phase 1: core infrastructure (ACCOUNTADMIN bootstrap, then ARTWORK_ADMIN) ---
+infrastructure/create_account_parameters.sql
+infrastructure/create_roles.sql
+infrastructure/create_warehouses.sql
+infrastructure/create_resource_monitors.sql
+infrastructure/create_databases_and_schemas.sql
+infrastructure/create_file_formats.sql
+infrastructure/create_stages.sql
+infrastructure/create_grants.sql
+infrastructure/create_bronze_tables.sql
+infrastructure/create_run_control.sql
+infrastructure/create_bronze_views.sql
+infrastructure/create_service_user.sql
+infrastructure/create_tasks.sql
+infrastructure/create_alerts.sql
+infrastructure/refresh_grants.sql
+
+# --- Phase 2: optional in-Snowflake Git mirror (ACCOUNTADMIN; runs LAST) ---
+git-setup/create_git_ops_db.sql
+git-setup/create_api_integration.sql
+git-setup/create_git_repository.sql
+git-setup/create_mcp_integration.sql

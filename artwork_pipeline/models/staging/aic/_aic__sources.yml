@@ -1,0 +1,67 @@
+# =============================================================================
+# _aic__sources.yml -- Bronze source declaration for Art Institute of Chicago
+# =============================================================================
+# The source() macro maps dbt to the physical BRONZE tables so models can
+# reference {{ source('aic', 'raw_aic_artworks') }} without hardcoding schema.
+#
+# AIC data is loaded via bulk dump extraction (not real-time API), so freshness
+# threshold is 30 days (vs Met's 7-day live API cadence).
+
+version: 2
+
+sources:
+  - name: aic
+    description: "Art Institute of Chicago open-access data loaded by the extraction pipeline"
+    database: ARTWORK_DB
+    schema: BRONZE
+    config:
+      freshness:
+        warn_after: {count: 30, period: day}
+        # No error_after until extraction is scheduled (manual today).
+        # AIC data dump refreshes periodically -- 30-day warning is appropriate.
+      loaded_at_field: _EXTRACTED_AT
+    tables:
+      - name: raw_aic_artworks
+        description: >
+          Raw artwork records from the Art Institute of Chicago. Each row has a
+          VARIANT column (RAW_PAYLOAD) containing the full JSON payload from the
+          AIC data dump. Includes soft-delete columns (_is_deleted, _deleted_at,
+          _deletion_reason) for tracking deaccessioned works.
+        identifier: RAW_AIC_ARTWORKS
+        columns:
+          - name: ARTWORK_ID
+            description: "AIC artwork identifier (integer PK)"
+            tests:
+              - unique
+              - not_null
+          - name: RAW_PAYLOAD
+            description: "Full VARIANT payload from AIC JSON data dump"
+          - name: _EXTRACTED_AT
+            description: "UTC timestamp when the row was extracted"
+          - name: _SOURCE_SYSTEM
+            description: "Source system identifier (always 'art_institute_chicago')"
+          - name: _BATCH_ID
+            description: "Identifier of the extraction batch"
+          - name: _IS_DELETED
+            description: "Soft-delete flag for deaccessioned works"
+
+      - name: raw_aic_agents
+        description: >
+          Raw agent records (artists, curators, donors, organizations) from AIC.
+          Each row has a VARIANT payload with agent metadata. No soft-delete
+          columns on this table (agents are not deaccessioned).
+        identifier: RAW_AIC_AGENTS
+        columns:
+          - name: AGENT_ID
+            description: "AIC agent identifier (integer PK)"
+            tests:
+              - unique
+              - not_null
+          - name: RAW_PAYLOAD
+            description: "Full VARIANT payload from AIC JSON data dump"
+          - name: _EXTRACTED_AT
+            description: "UTC timestamp when the row was extracted"
+          - name: _SOURCE_SYSTEM
+            description: "Source system identifier (always 'art_institute_chicago')"
+          - name: _BATCH_ID
+            description: "Identifier of the extraction batch"

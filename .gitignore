@@ -1,0 +1,56 @@
+# --- Secrets ---
+.env
+*.pem
+*.p8
+config.toml
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+*.egg
+dist/
+build/
+
+# --- Extraction ---
+.checkpoints/
+data/
+*.json.gz
+
+# --- dbt ---
+artwork_pipeline/target/
+artwork_pipeline/dbt_packages/
+artwork_pipeline/logs/
+artwork_pipeline/dbt_modules/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+uv.lock
+output/code-snapshot.md
+output/extension-map.md
+
+*.folder
+.envrc
+artwork_pipeline/.user.yml
+artwork_pipeline/models/staging/met/sample.csv
+
+.pytest_cache/
+
+.folder
+
+logs/dbt.log
+artwork_pipeline/package-lock.yml
+
+output/
+
+# --- Local scratch / diagnostics ---
+tmp/
+*.log

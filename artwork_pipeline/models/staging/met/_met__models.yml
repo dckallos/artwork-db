@@ -1,0 +1,200 @@
+# =============================================================================
+# _met__models.yml -- Schema tests and docs for Met staging models
+# =============================================================================
+
+version: 2
+
+models:
+  - name: stg_met__artworks
+    description: >
+      Typed artwork attributes from the Met Museum, flattened from the Bronze
+      VARIANT payload. One row per artwork (object_id is the natural key from
+      the Met API). Materialized as a view over BRONZE.RAW_MET_OBJECTS.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # Guard against catastrophic data loss. Current seed = 503; full Met = ~480k.
+          # Lower bound catches empty/truncated loads; upper bound catches accidental cross-joins.
+          arguments:
+            min_value: 100
+            max_value: 1000000
+          config:
+            severity: error
+    columns:
+      - name: object_id
+        description: "Met Museum object identifier (natural PK)"
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: "Artwork title as recorded by the Met"
+        tests:
+          - not_null
+      - name: is_public_domain
+        description: "Whether the artwork is in the public domain (CC0 eligible)"
+      - name: primary_image_url
+        description: "URL to the full-resolution primary image on images.metmuseum.org"
+      - name: object_date
+        description: "Display date string for the artwork (e.g. '1st century A.D.')"
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                store_failures: true
+      - name: artist_display_name
+        description: "Primary artist display name (pipe-delimited if multiple)"
+      - name: classification
+        description: "Object classification (e.g., Paintings, Sculpture)"
+      - name: department
+        description: "Met curatorial department"
+      - name: _extracted_at
+        description: "UTC timestamp of extraction (lineage pass-through)"
+      - name: _source_system
+        description: "Source system identifier (lineage pass-through)"
+
+  - name: stg_met__enrichment_status
+    description: >
+      Typed passthrough of the Bronze enrichment control table. One row per Met
+      objectID tracking enrichment lifecycle (status, image gate, lease, errors).
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # Must be >= artworks row count (every seeded object gets a control row).
+          # Current: 2327; full Met slice could be much larger.
+          arguments:
+            min_value: 100
+            max_value: 1000000
+          config:
+            severity: error
+    columns:
+      - name: object_id
+        description: "Met objectID (PK, FK to stg_met__artworks)"
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_met__artworks')
+                field: object_id
+              config:
+                severity: warn
+      - name: enrichment_status
+        description: "Outcome enum: pending | done | no_image | error"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['pending', 'done', 'no_image', 'error']
+      - name: has_primary_image
+        description: "Monetization gate result (from Met API isPublicDomain + primaryImage)"
+      - name: image_status
+        description: "Liveness enum: unknown | live | dead"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['unknown', 'live', 'dead']
+              config:
+                severity: warn
+
+  - name: stg_met__artists
+    description: >
+      Deduplicated artist entities extracted from the Met CSV. Pipe-delimited
+      multi-artist fields are split positionally; deduplication across objects
+      yields one row per distinct artist (keyed on alpha_sort + ULAN URL).
+      Surrogate key via dbt_utils.generate_surrogate_key.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # Deduplication should produce fewer rows than source (503 objects -> ~262 artists).
+          # Upper bound guards against dedup failure (if it equals source count, something broke).
+          arguments:
+            min_value: 50
+            max_value: 500
+          config:
+            severity: error
+    columns:
+      - name: artist_id
+        description: "Surrogate PK (hash of artist_alpha_sort + artist_ulan_url)"
+        tests:
+          - unique
+          - not_null
+      - name: artist_display_name
+        description: "Artist display name (e.g. 'Edgar Degas')"
+        tests:
+          - not_null
+      - name: artist_alpha_sort
+        description: "Sort-friendly name (e.g. 'Degas, Edgar')"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_proportion_of_unique_values_to_be_between:
+              # After dedup, alpha_sort should be 100% unique (it's part of the key grain).
+              # If this drops below 0.99, the dedup logic has a bug.
+              arguments:
+                min_value: 0.99
+                max_value: 1.0
+      - name: artist_display_bio
+        description: "Biographical summary (nationality + dates)"
+      - name: artist_nationality
+        description: "Artist nationality as recorded by the Met"
+      - name: artist_begin_date
+        description: "Artist birth/active-start year (string, may be approximate)"
+      - name: artist_end_date
+        description: "Artist death/active-end year (string, may be approximate)"
+      - name: artist_gender
+        description: "Artist gender (may be empty for anonymous/unknown artists)"
+      - name: artist_role
+        description: "Role on the artwork (e.g. 'Artist', 'Maker', 'Printer')"
+      - name: artist_ulan_url
+        description: "Getty ULAN URL (NULL for ~46 objects with unresolved artists)"
+      - name: artist_wikidata_url
+        description: "Wikidata entity URL for the artist"
+      - name: _extracted_at
+        description: "Latest extraction timestamp for this artist's source row"
+
+  - name: stg_met__images
+    description: >
+      All image URLs from the Met API in long format. One row per image per
+      object (primary + additional). LATERAL FLATTEN on the additional_images
+      array. Grain: (object_id, image_type, ordinal_position).
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # Must be >= source row count (every object has at least 1 primary image).
+          # Current: 910 (503 primary + 407 additional). Upper bound guards cross-join bugs.
+          arguments:
+            min_value: 100
+            max_value: 5000000
+          config:
+            severity: error
+    columns:
+      - name: object_id
+        description: "Met object identifier (FK to stg_met__artworks)"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_met__artworks')
+                field: object_id
+      - name: image_url
+        description: "Full-resolution image URL on images.metmuseum.org"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_match_regex:
+              # All Met image URLs should be HTTPS on their CDN domain.
+              arguments:
+                regex: "^https://images\\.metmuseum\\.org/"
+              config:
+                severity: warn
+      - name: image_url_small
+        description: "Web-sized image URL (NULL for additional images)"
+      - name: image_type
+        description: "Image category: 'primary' or 'additional'"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['primary', 'additional']
+      - name: ordinal_position
+        description: "Display order: 1 = primary, 2+ = additional images"
+        tests:
+          - not_null
+      - name: _extracted_at
+        description: "Extraction timestamp (lineage pass-through)"
+      - name: _source_system
+        description: "Source system identifier (lineage pass-through)"

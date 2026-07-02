@@ -1,0 +1,227 @@
+# =============================================================================
+# _aic__models.yml -- Schema tests and docs for AIC staging models
+# =============================================================================
+# Data audit results (2026-06-07) used to set thresholds:
+#   - 134,078 artworks (non-deleted)
+#   - 16,051 agents (14,105 artists + 1,946 non-artists)
+#   - 119,903 artworks with image_id
+#   - 17,480 alt images across 9,343 artworks
+#   - Total expected image rows: ~137,383 (119,903 primary + 17,480 alt)
+#   - image_id format: 36-char hyphenated UUID (e.g. 00002aee-2a9d-c60c-e867-bb729afde9cb)
+#   - ULAN coverage: effectively 0% (1/16,051 agents)
+#   - sort_title "Last, First" format: 83.6% (remainder: orgs + East Asian names)
+
+version: 2
+
+models:
+  - name: stg_aic__artworks
+    description: >
+      Typed artwork attributes from the Art Institute of Chicago, flattened from
+      the Bronze VARIANT payload. One row per non-deleted artwork. Includes
+      thumbnail metadata (D7) and artist FK for Gold-level join resolution.
+      Soft-delete filter applied: WHERE _is_deleted = FALSE.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # 134,078 non-deleted as of 2026-06-07.
+          # Lower bound catches empty/truncated loads; upper bound catches cross-joins.
+          arguments:
+            min_value: 100000
+            max_value: 200000
+          config:
+            severity: error
+    columns:
+      - name: artwork_id
+        description: "AIC artwork identifier (natural PK from the API)"
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: "Artwork title as recorded by AIC"
+        tests:
+          - not_null
+      - name: date_display
+        description: "Display date string (e.g. 'c. 1503-1519', '1st century AD')"
+      - name: date_start
+        description: "Earliest year for the artwork (integer)"
+      - name: date_end
+        description: "Latest year for the artwork (integer)"
+      - name: medium_display
+        description: "Materials and technique description"
+      - name: dimensions
+        description: "Physical dimensions string"
+      - name: artwork_type_title
+        description: "Object type classification (maps to Met's 'classification')"
+      - name: department_title
+        description: "Curatorial department at AIC"
+      - name: place_of_origin
+        description: "Geographic origin (maps to Met's 'country')"
+      - name: credit_line
+        description: "Acquisition credit line"
+      - name: main_reference_number
+        description: "AIC accession number (maps to Met's 'accession_number')"
+      - name: fiscal_year
+        description: "Year of acquisition (integer; cast to STRING in Gold for contract)"
+      - name: is_public_domain
+        description: "Whether the artwork is in the public domain"
+      - name: is_boosted
+        description: "AIC's highlight/boost flag (maps to Met's 'is_highlight')"
+      - name: api_link
+        description: "URL to this artwork on the AIC API"
+      - name: artist_id
+        description: "FK to RAW_AIC_AGENTS.agent_id (used in Gold join to dim_artists)"
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_aic__artists')
+                field: agent_id
+              config:
+                severity: warn
+                # ~5% of artworks have NULL artist_id (anonymous works).
+                # The relationship test only checks non-NULL values.
+      - name: artist_title
+        description: "Denormalized artist display name (fallback when FK is NULL)"
+      - name: thumbnail_width
+        description: "Primary image thumbnail width in pixels (D7: on artworks, not images)"
+      - name: thumbnail_height
+        description: "Primary image thumbnail height in pixels"
+      - name: thumbnail_alt_text
+        description: "Alt text for the primary image thumbnail"
+      - name: _extracted_at
+        description: "UTC timestamp of extraction (lineage pass-through)"
+      - name: _source_system
+        description: "Source system identifier (lineage pass-through)"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['art_institute_chicago']
+
+  - name: stg_aic__artists
+    description: >
+      All agent entities from AIC, flattened from the Bronze VARIANT payload.
+      Includes artists AND non-artists (curators, donors, organizations).
+      Gold applies WHERE is_artist = TRUE for dim_artists (D5).
+      No deduplication needed -- AIC agents are one-per-row (unlike Met's
+      pipe-delimited multi-artist format). ULAN pre-positioned for entity
+      resolution upgrade but coverage is effectively 0%.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # 16,051 agents as of 2026-06-07.
+          arguments:
+            min_value: 10000
+            max_value: 50000
+          config:
+            severity: error
+    columns:
+      - name: agent_id
+        description: "AIC agent identifier (natural PK from the API)"
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: "Agent display name (e.g. 'Edgar Degas', 'Tiffany & Co.')"
+        tests:
+          - not_null
+      - name: sort_title
+        description: >
+          Sort-friendly name, typically 'Last, First' format (83.6% have comma).
+          Remainder: corporate entities and East Asian names (family-first, no comma).
+          Maps to Met's artist_alpha_sort for entity resolution.
+        tests:
+          - not_null
+      - name: alt_titles
+        description: "ARRAY of alternate names (kept as VARIANT for future resolution)"
+      - name: is_artist
+        description: "Whether this agent is an artist (vs curator/donor/org). Gold filters on this."
+        tests:
+          - not_null
+      - name: birth_date
+        description: "Birth year (integer, nullable)"
+      - name: death_date
+        description: "Death year (integer, nullable)"
+      - name: description
+        description: "Biographical text"
+      - name: ulan_id
+        description: "Getty ULAN numeric ID (effectively always NULL -- 1/16,051 coverage)"
+      - name: _ulan_url
+        description: >
+          Computed ULAN URL when ulan_id is a valid positive number.
+          Pre-positioned for entity resolution upgrade (D2). Currently NULL
+          for all but 1 agent (Van Gogh).
+      - name: _extracted_at
+        description: "UTC timestamp of extraction (lineage pass-through)"
+      - name: _source_system
+        description: "Source system identifier (lineage pass-through)"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['art_institute_chicago']
+
+  - name: stg_aic__images
+    description: >
+      All image references from AIC in long format. One row per image per
+      artwork (primary + additional). LATERAL FLATTEN on alt_image_ids array.
+      Grain: (artwork_id, image_type, ordinal_position). Structural parity
+      with stg_met__images for downstream UNION in fct_artwork_images.
+      IIIF URLs computed inline (standard 843px + small 200px).
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          # 119,903 primary + 17,480 alt = ~137,383 expected.
+          # Lower bound allows for minor source changes; upper guards cross-joins.
+          arguments:
+            min_value: 100000
+            max_value: 500000
+          config:
+            severity: error
+    columns:
+      - name: artwork_id
+        description: "AIC artwork identifier (FK to stg_aic__artworks)"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_aic__artworks')
+                field: artwork_id
+      - name: source_image_id
+        description: >
+          Raw IIIF UUID from AIC (36-char hyphenated format). Carried through
+          to Gold per D6 for downstream IIIF variant construction.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_match_regex:
+              # All AIC image IDs are 36-char hyphenated UUIDs (verified 2026-06-07).
+              arguments:
+                regex: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              config:
+                severity: warn
+      - name: image_url
+        description: "Computed IIIF URL at standard resolution (843px width)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_match_regex:
+              arguments:
+                regex: "^https://www\\.artic\\.edu/iiif/2/"
+              config:
+                severity: warn
+      - name: image_url_small
+        description: "Computed IIIF URL at small resolution (200px width)"
+        tests:
+          - not_null
+      - name: image_type
+        description: "Image category: 'primary' or 'additional'"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['primary', 'additional']
+      - name: ordinal_position
+        description: "Display order: 1 = primary, 2+ = additional images"
+        tests:
+          - not_null
+      - name: _extracted_at
+        description: "Extraction timestamp (lineage pass-through)"
+      - name: _source_system
+        description: "Source system identifier (lineage pass-through)"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['art_institute_chicago']
