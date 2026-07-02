@@ -50,3 +50,7 @@ logs/dbt.log
 artwork_pipeline/package-lock.yml
 
 output/
+
+# --- Local scratch / diagnostics ---
+tmp/
+*.log
