@@ -1,0 +1,5 @@
+# Fixture dbt_project.yml for testing profile-name derivation (connection.profile omitted).
+name: fixture_pipeline
+version: '1.0.0'
+config-version: 2
+profile: artwork_test

@@ -172,11 +172,28 @@ def load_framework_config(path: Optional[str] = None) -> FrameworkConfig:
     _reject_unknown(raw, {"connection", "bronze", "defaults", "tags", "freshness"}, where)
 
     conn = _require(raw, "connection", where)
-    _reject_unknown(conn, {"profile", "target", "profiles_dir"}, f"{where}.connection")
+    _reject_unknown(
+        conn, {"profile", "target", "profiles_dir", "project_dir"}, f"{where}.connection"
+    )
+    # profiles_dir (profiles.yml) and project_dir (dbt_project.yml) are usually the same
+    # directory; require at least one and default the missing one to the other so neither
+    # is silently inferred from a hardcoded literal elsewhere.
+    profiles_dir = conn.get("profiles_dir")
+    project_dir = conn.get("project_dir")
+    if not profiles_dir and not project_dir:
+        raise ConfigError(
+            f"{where}.connection: set 'profiles_dir' and/or 'project_dir' "
+            "(the dbt project location, relative to the repo root)."
+        )
+    profiles_dir = str(profiles_dir or project_dir)
+    project_dir = str(project_dir or profiles_dir)
+    # profile is OPTIONAL: derived from <project_dir>/dbt_project.yml when omitted.
+    profile_raw = conn.get("profile")
     connection = ConnectionCfg(
-        profile=str(_require(conn, "profile", f"{where}.connection")),
         target=str(_require(conn, "target", f"{where}.connection")),
-        profiles_dir=str(_require(conn, "profiles_dir", f"{where}.connection")),
+        profiles_dir=profiles_dir,
+        project_dir=project_dir,
+        profile=(str(profile_raw) if profile_raw else None),
     )
 
     br = _require(raw, "bronze", where)

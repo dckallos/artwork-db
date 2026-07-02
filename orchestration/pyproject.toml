@@ -28,10 +28,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["dagster-webserver>=1.8,<2"]
+dev = [
+    "dagster-webserver>=1.8,<2",
+    "pytest>=8",
+]
 
 [tool.setuptools.packages.find]
 include = ["artwork_orchestration*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Unit tests are driver/Dagster-free where possible; config/loader/integration tests
+# self-skip via importorskip("dagster") when the runtime is absent.
+addopts = "-ra"
 
 [tool.dagster]
 module_name = "artwork_orchestration.definitions"

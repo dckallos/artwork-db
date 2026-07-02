@@ -18,12 +18,20 @@ class ConnectionCfg:
     """How the orchestration layer opens ad-hoc Snowflake queries for metadata/checks.
 
     It reuses the dbt PROFILE as the single connection identity, so there is no second
-    place credentials live. ``profiles_dir`` is resolved relative to the repo root.
+    place credentials live. ``project_dir`` (where ``dbt_project.yml`` lives) and
+    ``profiles_dir`` (where ``profiles.yml`` lives) are both resolved relative to the repo
+    root; they are usually the same directory but dbt permits them to differ, so we keep
+    them distinct rather than inferring one from the other.
+
+    ``profile`` is OPTIONAL: when omitted it is derived from ``<project_dir>/dbt_project.yml``
+    (``profile:``) so the profile name is single-sourced in the dbt project and never
+    drifts from a duplicate in ``framework.yaml``.
     """
 
-    profile: str
     target: str
     profiles_dir: str
+    project_dir: str
+    profile: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +73,8 @@ class ProfileConfig:
     private_key_passphrase: Optional[str] = None
     password: Optional[str] = None
     authenticator: Optional[str] = None
+    token: Optional[str] = None
+    host: Optional[str] = None
 
     @classmethod
     def from_mapping(cls, m: Mapping[str, Any]) -> "ProfileConfig":
@@ -80,6 +90,8 @@ class ProfileConfig:
             private_key_passphrase=m.get("private_key_passphrase"),
             password=m.get("password"),
             authenticator=m.get("authenticator"),
+            token=m.get("token"),
+            host=m.get("host"),
         )
 
 

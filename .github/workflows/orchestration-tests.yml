@@ -1,0 +1,47 @@
+# =============================================================================
+# orchestration-tests.yml -- unit + integration tests for the Dagster layer
+# =============================================================================
+# Offline: no Snowflake credentials required. Installs the orchestration package
+# (which pulls Dagster + dbt-snowflake) into a venv and runs pytest. Auth mapping,
+# profile resolution, config/path wiring, manifest derivation, and the grep gate are
+# all exercised without a live connection.
+# =============================================================================
+name: orchestration-tests
+
+on:
+  pull_request:
+    paths:
+      - "orchestration/**"
+      - ".github/workflows/orchestration-tests.yml"
+  push:
+    branches: ["feat/enable-dagster", "main"]
+    paths:
+      - "orchestration/**"
+      - ".github/workflows/orchestration-tests.yml"
+  workflow_dispatch: {}
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create venv and install the orchestration package (editable)
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -e "orchestration[dev]"
+
+      - name: Run pytest
+        # Clear PYTHONPATH so the installed package (not a stray sys.path entry) is
+        # imported -- documented sandbox gotcha from issue #6.
+        env:
+          PYTHONPATH: ""
+        run: |
+          . .venv/bin/activate
+          pytest orchestration/tests

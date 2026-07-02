@@ -12,12 +12,16 @@
 
 # The orchestration layer's ad-hoc metadata/check queries reuse the dbt PROFILE as the
 # single Snowflake connection identity (no second credential store, and it transparently
-# supports in-Snowflake session auth via target: snowflake). profiles_dir is relative to
-# the repo root. This is what replaces the old extraction.met.* connection import.
+# supports in-Snowflake session auth via target: snowflake). Paths are relative to the
+# repo root. This is what replaces the old extraction.met.* connection import.
 connection:
-  profile: artwork_pipeline            # matches profiles.yml top key + dbt_project.yml `profile:`
+  # profile is OPTIONAL and intentionally omitted: it is derived from
+  # <project_dir>/dbt_project.yml (`profile:`) so the profile name is single-sourced in
+  # the dbt project and can never drift from a duplicate here. Set it only to override.
+  # profile: dbt_daniel
   target: "${DBT_TARGET:dev}"          # dev = key-pair via env_var; snowflake = session-inherited
-  profiles_dir: artwork_pipeline       # relative to REPO_ROOT
+  profiles_dir: artwork_pipeline       # dir containing profiles.yml, relative to REPO_ROOT
+  project_dir: artwork_pipeline        # dir containing dbt_project.yml (target/manifest.json lives here)
 
 # Where the raw (Bronze) landing tables live; used for auto row-count metadata + checks.
 bronze:

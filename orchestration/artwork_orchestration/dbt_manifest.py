@@ -13,14 +13,14 @@ whatever is configured. No dbt import and no network.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import List
 
-from .config import FRAMEWORK, REPO_ROOT
+from .config import DBT_PROJECT_DIR
 
-# The dbt project dir is where profiles.yml lives (single-sourced from framework.yaml);
-# the compiled manifest is always <project>/target/manifest.json.
-_MANIFEST_PATH = REPO_ROOT / FRAMEWORK.connection.profiles_dir / "target" / "manifest.json"
+# The compiled manifest is always <dbt project>/target/manifest.json. DBT_PROJECT_DIR is
+# the single source of truth for the project location (config.py, from framework.yaml), so
+# manifest resolution can never drift from the DbtProject / profile wiring.
+_MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
 _MART_TAG = "marts"
 

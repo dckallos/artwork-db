@@ -1,0 +1,35 @@
+# Minimal valid framework.yaml fixture for loader/config unit tests.
+# Deliberately OMITS connection.profile and connection.project_dir to prove:
+#   * profile is optional (derived elsewhere from dbt_project.yml), and
+#   * project_dir defaults to profiles_dir when omitted.
+connection:
+  target: dev
+  profiles_dir: fixtures
+
+bronze:
+  database: TEST_DB
+  schema: TEST_BRONZE
+
+defaults:
+  retry:
+    max_retries: 2
+    delay_seconds: 30
+    backoff: exponential
+    jitter: plus_minus
+  timeouts_seconds:
+    default: 1800
+    snapshot: 1800
+  batching:
+    size: 2000
+    max_batches: 1
+  rate_limit:
+    rps_budget: 30
+    concurrency: 3
+
+tags:
+  rate_limit_key: artwork/rate_limited_api
+  max_runtime_key: dagster/max_runtime
+
+freshness:
+  gold_marts: []
+  gold_lag_hours: 30

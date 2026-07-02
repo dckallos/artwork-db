@@ -10,11 +10,16 @@
     "connection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "target", "profiles_dir"],
+      "required": ["target"],
+      "anyOf": [
+        {"required": ["profiles_dir"]},
+        {"required": ["project_dir"]}
+      ],
       "properties": {
-        "profile": {"type": "string", "description": "dbt profile name (matches profiles.yml top key)."},
+        "profile": {"type": "string", "description": "dbt profile name; OPTIONAL -- derived from <project_dir>/dbt_project.yml when omitted."},
         "target": {"type": "string", "description": "dbt target within the profile (e.g. dev | snowflake)."},
-        "profiles_dir": {"type": "string", "description": "Dir containing profiles.yml, relative to repo root."}
+        "profiles_dir": {"type": "string", "description": "Dir containing profiles.yml, relative to repo root (defaults to project_dir)."},
+        "project_dir": {"type": "string", "description": "Dir containing dbt_project.yml, relative to repo root (defaults to profiles_dir)."}
       }
     },
     "bronze": {

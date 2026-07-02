@@ -10,17 +10,17 @@ import os
 
 from dagster_dbt import DbtCliResource, DbtProject
 
-from .config import REPO_ROOT
+from .config import DBT_PROFILES_DIR, DBT_PROJECT_DIR, FRAMEWORK
 
-DBT_PROJECT_DIR = REPO_ROOT / "artwork_pipeline"
-
-# DbtProject handles manifest generation in dev (prepare_if_dev) and points at
-# a pre-built manifest.json in production. target="dev" uses the local
-# key-pair profile from profiles.yml.
+# Project dir, profiles dir, and target are all single-sourced from framework.yaml via
+# config.py -- no literal "artwork_pipeline" or "dev" here, so the DbtProject wiring can
+# never drift from the manifest/profile resolution used elsewhere.
+# DbtProject handles manifest generation in dev (prepare_if_dev) and points at a pre-built
+# manifest.json in production.
 artwork_dbt_project = DbtProject(
     project_dir=DBT_PROJECT_DIR,
-    profiles_dir=DBT_PROJECT_DIR,
-    target="dev",
+    profiles_dir=DBT_PROFILES_DIR,
+    target=FRAMEWORK.connection.target,
 )
 
 # Build the manifest ONCE, and only when it is missing.
