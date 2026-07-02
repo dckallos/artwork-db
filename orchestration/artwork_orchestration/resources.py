@@ -6,12 +6,10 @@ env vars documented in the repo's .env.example.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from dagster_dbt import DbtCliResource, DbtProject
 
-# orchestration/artwork_orchestration/resources.py -> repo root is three up.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from .config import REPO_ROOT
+
 DBT_PROJECT_DIR = REPO_ROOT / "artwork_pipeline"
 
 # DbtProject handles manifest generation in dev (prepare_if_dev) and points at
