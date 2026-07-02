@@ -37,8 +37,15 @@ else
 fi
 
 echo "Dagster definitions:"
-python -c "import artwork_orchestration.definitions as d; print('   assets:', len(d.defs.get_asset_graph().all_asset_keys))" 2>/dev/null \
-  && ok "definitions import cleanly" || bad "failed to import artwork_orchestration.definitions"
+# Count the module-level lists definitions.py exposes (version-stable) rather than a
+# dagster AssetGraph API that shifts between releases. Capture stderr so a REAL failure
+# shows its traceback instead of being swallowed (SupersessionWarnings are filtered out).
+if python -c "import artwork_orchestration.definitions as d; print('   assets:', len(d.extraction_assets), '| jobs:', len(d.jobs), '| checks:', len(d.asset_checks))" 2>/tmp/_dagster_defs_err; then
+  ok "definitions import cleanly"
+else
+  bad "failed to import artwork_orchestration.definitions"
+  grep -v "SupersessionWarning\|build_last_update_freshness_checks" /tmp/_dagster_defs_err | sed 's/^/       /'
+fi
 
 echo ""
 [[ "$FAILED" -eq 0 ]] && echo "doctor: PASS" || { echo "doctor: FAIL (see above)"; exit 1; }

@@ -40,6 +40,15 @@ if [[ -d "$VENV" ]]; then
   source "$VENV/bin/activate"
 fi
 
+# Build the dbt manifest ONCE here, in this single parent process, before launching
+# Dagster. This is what keeps run-worker subprocesses from each re-running `dbt deps`
+# concurrently (which races and, under dbt-fusion, fails with IoError dbt1001). With a
+# manifest already present, resources.py skips prepare in every worker. Also refreshes the
+# manifest so dbt model edits are picked up on each restart.
+log "Building dbt manifest (dbt parse) once before launch"
+dbt parse --project-dir "$REPO_ROOT/artwork_pipeline" --profiles-dir "$REPO_ROOT/artwork_pipeline" --target dev \
+  || log "WARNING: dbt parse failed; Dagster will try to prepare the manifest on load"
+
 log "DAGSTER_HOME=$DAGSTER_HOME"
 log "Starting Dagster UI + daemon on http://localhost:3000 (Ctrl-C to stop)"
 exec dagster dev -m artwork_orchestration.definitions
