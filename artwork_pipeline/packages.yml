@@ -36,10 +36,3 @@ packages:
   # --- Data quality & testing ---
   - package: metaplane/dbt_expectations
     version: [">=0.10.9", "<0.11.0"]
-
-  - package: dbt-labs/audit_helper
-    version: [">=0.14.0", "<1.0.0"]
-
-  # --- Governance & observability ---
-  - package: dbt-labs/dbt_project_evaluator
-    version: [">=1.3.0", "<2.0.0"]

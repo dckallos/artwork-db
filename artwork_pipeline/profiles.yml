@@ -35,42 +35,16 @@
 #   DBT_SNOWFLAKE_ROLE, DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
 # =============================================================================
 
-artwork_pipeline:
+dbt_daniel:
   target: dev
   outputs:
-
-    # -------------------------------------------------------------------------
-    # LOCAL: dbt Core on Mac (key-pair auth as ARTWORK_TRANSFORMER_SVC)
-    # -------------------------------------------------------------------------
     dev:
       type: snowflake
-      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
-      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
-      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
-      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
-      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
-      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH') }}"
-      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
-      schema: SILVER
-      threads: 4
-      client_session_keep_alive: false
-
-    # -------------------------------------------------------------------------
-    # SNOWFLAKE-NATIVE: runs inside Snowflake (workspace, EXECUTE DBT PROJECT)
-    # -------------------------------------------------------------------------
-    # Auth is inherited from the Snowflake session. `account` and `user` are
-    # required by dbt's YAML parser but ignored at runtime -- any non-empty
-    # string satisfies the requirement.
-    #
-    # DO NOT add password, private_key_path, authenticator, or any auth field
-    # here. Their presence causes errors in Snowflake-native execution.
-    # -------------------------------------------------------------------------
-    snowflake:
-      type: snowflake
-      account: "session"
-      user: "session"
-      role: ARTWORK_TRANSFORMER
-      warehouse: ARTWORK_WH
+      threads: 16
+      account: KUNHTEL-GL13131
+      user: ARTWORK_TRANSFORMER_SVC
       database: ARTWORK_DB
-      schema: SILVER
-      threads: 4
+      warehouse: ARTWORK_WH
+      schema: DBT_DKALLEWARD
+      role: ARTWORK_TRANSFORMER
+      private_key_path: /Users/daniel/.snowflake/keys/gl13131_transformer_rsa_key.p8
