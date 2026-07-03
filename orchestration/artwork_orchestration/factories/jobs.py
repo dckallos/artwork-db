@@ -1,4 +1,5 @@
-"""Job factory (generated from the registry).
+"""
+Job factory (generated from the registry).
 
 Per source:
   * ``{key}_ingest_job``           -- the whole source group (snapshot -> ... -> verify).
@@ -21,7 +22,7 @@ independently.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from dagster import AssetKey, AssetSelection, define_asset_job
 
@@ -30,11 +31,16 @@ from ..spec import SourceSpec
 
 
 def _source_runtime(spec: SourceSpec) -> int:
-    """Generous per-source ceiling: sum of step timeouts + 1h slack."""
+    """
+    Generous per-source ceiling: sum of step timeouts + 1h slack.
+    """
     return sum(step.timeout_s for step in spec.steps) + 60 * 60
 
 
 def _enrich_keys(registry) -> List[AssetKey]:
+    """
+    Return every asset key produced by bounded enrichment steps.
+    """
     keys: List[AssetKey] = []
     for spec in registry:
         step = spec.enrich_step()
@@ -43,9 +49,25 @@ def _enrich_keys(registry) -> List[AssetKey]:
     return keys
 
 
-def build_jobs(registry) -> List:
-    # Lazy import: keeps the module importable without the dbt manifest present.
+def _default_dbt_assets():
+    """
+    Load the real dbt assets only when no test/dry-run stub is supplied.
+    """
     from ..assets_dbt import artwork_dbt_assets
+
+    return artwork_dbt_assets
+
+
+def build_jobs(registry, *, dbt_assets: Optional[object] = None) -> List:
+    """
+    Build all source and global jobs.
+
+    Args:
+        registry: Source registry to generate jobs from.
+        dbt_assets: Optional dbt assets definition. Tests pass a stub to avoid importing the
+            real manifest-backed dbt asset module.
+    """
+    the_dbt_assets = dbt_assets if dbt_assets is not None else _default_dbt_assets()
 
     jobs: List = []
 
@@ -97,7 +119,7 @@ def build_jobs(registry) -> List:
     jobs.append(
         define_asset_job(
             name="dbt_build_job",
-            selection=AssetSelection.assets(artwork_dbt_assets),
+            selection=AssetSelection.assets(the_dbt_assets),
             tags={MAX_RUNTIME_TAG_KEY: 60 * 60},
             description="Run dbt build (models + tests) for the whole project.",
         )
