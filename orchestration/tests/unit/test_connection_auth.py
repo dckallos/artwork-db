@@ -1,4 +1,5 @@
-"""Unit tests for the auth-method mapping (``build_connect_kwargs``) -- driver/Dagster-free.
+"""
+Unit tests for the auth-method mapping (``build_connect_kwargs``) -- driver/Dagster-free.
 
 Complements ``test_connection_profile.py`` (which covers ``profiles.yml`` resolution) by
 asserting how a resolved :class:`ProfileConfig` maps onto ``snowflake.connector`` kwargs

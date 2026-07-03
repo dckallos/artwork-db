@@ -1,4 +1,5 @@
-"""Offline validation for the YAML-driven orchestration refactor (PHASE 3, fork-5f3a9c).
+"""
+Offline validation for the YAML-driven orchestration refactor (PHASE 3, fork-5f3a9c).
 
 A full Definitions load needs artwork_pipeline/target/manifest.json, which requires
 `dbt deps` over the network -- BLOCKED in this sandbox. So we inject stub modules for
@@ -25,7 +26,9 @@ sys.path.insert(0, str(HERE))
 
 
 def _install_stubs() -> None:
-    """Stub the dbt-manifest-dependent modules so definitions imports offline."""
+    """
+    Stub the dbt-manifest-dependent modules so definitions imports offline.
+    """
     from dagster import AssetSpec, multi_asset
 
     # Stub resources: definitions only needs a `dbt_resource` object.

@@ -1,4 +1,5 @@
-"""Grep-gate test: no museum identifiers may appear in framework ``.py``.
+"""
+Grep-gate test: no museum identifiers may appear in framework ``.py``.
 
 This enforces the prime directive from AGENTS.md -- behavior is configured in YAML, never
 hardcoded in Python. Adding a source must require editing zero framework ``.py`` files, so

@@ -1,4 +1,5 @@
-"""dbt models exposed as Dagster assets.
+"""
+dbt models exposed as Dagster assets.
 
 `@dbt_assets` reads the compiled manifest and turns every model/test into an
 asset. Because sources are keyed via ArtworkDbtTranslator to match the
@@ -18,5 +19,7 @@ from .translator import ArtworkDbtTranslator
     dagster_dbt_translator=ArtworkDbtTranslator(),
 )
 def artwork_dbt_assets(context, dbt: DbtCliResource):
-    """Run `dbt build` (models + tests) for the whole project."""
+    """
+    Run `dbt build` (models + tests) for the whole project.
+    """
     yield from dbt.cli(["build"], context=context).stream()

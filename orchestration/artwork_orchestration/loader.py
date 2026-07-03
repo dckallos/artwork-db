@@ -1,4 +1,5 @@
-"""ConfigLoader: parse + VALIDATE YAML into the typed in-memory model.
+"""
+ConfigLoader: parse + VALIDATE YAML into the typed in-memory model.
 
 Two entry points:
 
@@ -57,7 +58,9 @@ SCHEMAS_DIR = _PKG_DIR / "schemas"
 
 
 class ConfigError(ValueError):
-    """Raised on any invalid or malformed configuration, with an actionable message."""
+    """
+    Raised on any invalid or malformed configuration, with an actionable message.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +70,9 @@ _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}")
 
 
 def _interp(value: Any) -> Any:
-    """Resolve ``${VAR}`` / ``${VAR:default}`` in strings; recurse into dicts/lists."""
+    """
+    Resolve ``${VAR}`` / ``${VAR:default}`` in strings; recurse into dicts/lists.
+    """
     if isinstance(value, str):
         def repl(m: "re.Match[str]") -> str:
             name, default = m.group(1), m.group(2)
@@ -107,7 +112,8 @@ _E = TypeVar("_E", bound=Enum)
 
 
 def _as_enum(v: Any, enum_cls: Type[_E], where: str) -> _E:
-    """Coerce a YAML scalar into ``enum_cls`` (case-insensitively), or raise ConfigError.
+    """
+    Coerce a YAML scalar into ``enum_cls`` (case-insensitively), or raise ConfigError.
 
     Tries the value as-is, then lower- and upper-cased, so authors can write ``error`` or
     ``ERROR`` and ``Exponential`` or ``exponential``. The error lists the allowed tokens.
@@ -164,7 +170,9 @@ def _jsonschema_validate(instance: Any, schema_name: str, where: str) -> None:
 # ===========================================================================
 @functools.lru_cache(maxsize=1)
 def load_framework_config(path: Optional[str] = None) -> FrameworkConfig:
-    """Parse + validate ``framework.yaml`` into a :class:`FrameworkConfig` (cached)."""
+    """
+    Parse + validate ``framework.yaml`` into a :class:`FrameworkConfig` (cached).
+    """
     p = Path(path) if path else FRAMEWORK_YAML
     raw = _read_yaml(p)
     where = p.name
@@ -264,7 +272,8 @@ def load_framework_config(path: Optional[str] = None) -> FrameworkConfig:
 
 
 def reset_framework_cache() -> None:
-    """Clear the :func:`load_framework_config` cache.
+    """
+    Clear the :func:`load_framework_config` cache.
 
     ``load_framework_config`` is memoized (one framework.yaml per process), which is
     correct at runtime but awkward in tests that load alternate fixture configs. Call
@@ -429,7 +438,8 @@ def _parse_source(raw: Mapping, framework: FrameworkConfig, where: str) -> Sourc
 
 
 def load_source_specs(sources_dir: Optional[str] = None) -> List[SourceSpec]:
-    """Scan ``sources/*.yaml`` and build the registry, deterministically sorted by key.
+    """
+    Scan ``sources/*.yaml`` and build the registry, deterministically sorted by key.
 
     This IS the registry: there is no hardcoded list of sources anywhere in Python.
     """

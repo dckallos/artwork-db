@@ -1,4 +1,5 @@
-"""Enumerations for the framework config — the string literals that used to be validated
+"""
+Enumerations for the framework config — the string literals that used to be validated
 ad-hoc in :mod:`artwork_orchestration.loader`.
 
 Dependency-free leaf (stdlib only) so ``model.py``, ``spec.py``, ``loader.py``, and
@@ -12,21 +13,27 @@ from enum import Enum
 
 
 class Severity(str, Enum):
-    """Asset-check severity for non-empty and custom health checks."""
+    """
+    Asset-check severity for non-empty and custom health checks.
+    """
 
     ERROR = "ERROR"
     WARN = "WARN"
 
 
 class BackoffStrategy(str, Enum):
-    """Retry backoff shape (maps to ``dagster.Backoff`` in ``policies.py``)."""
+    """
+    Retry backoff shape (maps to ``dagster.Backoff`` in ``policies.py``).
+    """
 
     EXPONENTIAL = "exponential"
     LINEAR = "linear"
 
 
 class JitterStrategy(str, Enum):
-    """Retry jitter (maps to ``dagster.Jitter`` / ``None`` in ``policies.py``)."""
+    """
+    Retry jitter (maps to ``dagster.Jitter`` / ``None`` in ``policies.py``).
+    """
 
     PLUS_MINUS = "plus_minus"
     NONE = "none"
@@ -41,7 +48,9 @@ class StepKind(str, Enum):
 
 
 class StepMode(str, Enum):
-    """Step execution mode. ``BATCHED`` appends the framework batch flags to the CLI."""
+    """
+    Step execution mode. ``BATCHED`` appends the framework batch flags to the CLI.
+    """
 
     SIMPLE = "simple"
     BATCHED = "batched"

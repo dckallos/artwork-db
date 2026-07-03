@@ -1,4 +1,5 @@
-"""Unit tests for portability wiring: single-sourced dbt dirs, robust REPO_ROOT,
+"""
+Unit tests for portability wiring: single-sourced dbt dirs, robust REPO_ROOT,
 optional profile / defaulted project_dir, and manifest-derived marts.
 
 These import the framework ``config``/``loader`` (which pull in ``dagster`` via the spec

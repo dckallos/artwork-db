@@ -1,4 +1,5 @@
-"""Shared Dagster policies and tuning knobs (source-agnostic).
+"""
+Shared Dagster policies and tuning knobs (source-agnostic).
 
 Everything here is DERIVED from the validated engine config (``framework.yaml`` via
 ``config.FRAMEWORK``) -- there are no hardcoded constants and no museum-specific names.
@@ -61,10 +62,14 @@ MAX_RUNTIME_TAG_KEY = FRAMEWORK.tags.max_runtime_key
 
 
 def timeout_tags(seconds: int) -> Dict[str, Any]:
-    """Op tags mirroring the per-run wall-clock ceiling (see jobs run tags)."""
+    """
+    Op tags mirroring the per-run wall-clock ceiling (see jobs run tags).
+    """
     return {MAX_RUNTIME_TAG_KEY: seconds}
 
 
 def per_worker_rps() -> float:
-    """Divide the global rps budget across the max concurrent rate-limited workers."""
+    """
+    Divide the global rps budget across the max concurrent rate-limited workers.
+    """
     return _defaults.rate_limit.per_worker_rps()

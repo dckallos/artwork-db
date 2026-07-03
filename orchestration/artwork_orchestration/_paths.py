@@ -1,4 +1,5 @@
-"""Repo-root / project-dir resolution -- dependency-free so it is unit-testable alone.
+"""
+Repo-root / project-dir resolution -- dependency-free so it is unit-testable alone.
 
 Kept separate from :mod:`artwork_orchestration.config` because ``config`` imports the
 loader (and thus, transitively, Dagster via ``spec``). This module is stdlib-only, so the
@@ -19,7 +20,8 @@ _ROOT_MARKERS = ("AGENTS.md", ".git")
 
 
 def resolve_repo_root(project_dirname: str, *, start: Optional[Path] = None) -> Path:
-    """Locate the repo root robustly, in priority order:
+    """
+    Locate the repo root robustly, in priority order:
 
     1. ``$ARTWORK_REPO_ROOT`` -- explicit override (installed-package / container / tests).
     2. Walk up from ``start`` looking for a marker: the configured dbt project dir

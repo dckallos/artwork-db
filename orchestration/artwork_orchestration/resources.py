@@ -1,4 +1,5 @@
-"""Shared resources and paths for the artwork orchestration code location.
+"""
+Shared resources and paths for the artwork orchestration code location.
 
 Wires Dagster to the existing dbt project (``artwork_pipeline``) using the
 local ``dev`` profile target. No new credentials: dbt reads the same key-pair

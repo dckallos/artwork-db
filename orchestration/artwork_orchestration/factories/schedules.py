@@ -1,4 +1,5 @@
-"""Schedule factory (generated from the registry). All STOPPED in dev.
+"""
+Schedule factory (generated from the registry). All STOPPED in dev.
 
   * ``daily_dbt_build``           -- dbt-only, every morning.
   * ``weekly_full_pipeline``      -- end-to-end (excl. enrichment) weekly.

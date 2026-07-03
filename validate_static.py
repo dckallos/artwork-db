@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Static validation of the artwork_orchestration package WITHOUT importing dagster.
+"""
+Static validation of the artwork_orchestration package WITHOUT importing dagster.
 
 For every module, parse the AST, collect top-level defined names (functions, classes,
 assignments, imports). Then for every intra-package `from .X import a, b` verify that

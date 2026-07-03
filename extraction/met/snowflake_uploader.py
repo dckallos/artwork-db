@@ -56,7 +56,9 @@ _CSV_PAYLOAD_COLUMNS: Tuple[str, ...] = (
 
 
 def _iter_upload_rows(conn: sqlite3.Connection) -> Iterator[sqlite3.Row]:
-    """Yield rows ready for Bronze upload (done, not yet uploaded)."""
+    """
+    Yield rows ready for Bronze upload (done, not yet uploaded).
+    """
     cur = conn.execute(
         "SELECT * FROM met_artworks "
         "WHERE enrichment_status = 'done' "
@@ -72,7 +74,9 @@ def _iter_upload_rows(conn: sqlite3.Connection) -> Iterator[sqlite3.Row]:
 
 
 def _build_payload(row: sqlite3.Row, batch_id: str) -> Dict[str, Any]:
-    """Build the JSON document stored in raw_payload (VARIANT)."""
+    """
+    Build the JSON document stored in raw_payload (VARIANT).
+    """
     additional_raw = row["additional_image_urls"]
     try:
         additional = json.loads(additional_raw) if additional_raw else []
@@ -104,7 +108,9 @@ def _write_ndjson_chunk(
     chunk_index: int,
     target_dir: Path,
 ) -> Tuple[Path, List[int]]:
-    """Write one gzipped NDJSON file; return its path and the object_ids it contains."""
+    """
+    Write one gzipped NDJSON file; return its path and the object_ids it contains.
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
     file_path = target_dir / f"met_bronze_{batch_id}_{chunk_index:05d}.ndjson.gz"
     object_ids: List[int] = []
@@ -118,7 +124,8 @@ def _write_ndjson_chunk(
 
 
 def _snowflake_connect(config: Config) -> snowflake.connector.SnowflakeConnection:
-    """Open a Snowflake connection using key-pair auth.
+    """
+    Open a Snowflake connection using key-pair auth.
 
     ARTWORK_LOADER_SVC is a TYPE = SERVICE user with no password; the connector
     authenticates with the private key registered by
@@ -153,7 +160,8 @@ def _put_and_copy(
     config: Config,
     batch_id: str,
 ) -> int:
-    """PUT the local NDJSON file to the stage, then COPY INTO Bronze.
+    """
+    PUT the local NDJSON file to the stage, then COPY INTO Bronze.
 
     Returns the number of rows loaded according to COPY INTO's result.
     """
@@ -198,7 +206,9 @@ def _mark_uploaded(
     object_ids: List[int],
     batch_id: str,
 ) -> None:
-    """Update SQLite so uploaded rows are not re-sent on the next run."""
+    """
+    Update SQLite so uploaded rows are not re-sent on the next run.
+    """
     now_iso = datetime.now(timezone.utc).isoformat()
     conn.executemany(
         "UPDATE met_artworks "
@@ -210,7 +220,8 @@ def _mark_uploaded(
 
 
 def upload(config: Config) -> int:
-    """Upload every fully-enriched, not-yet-uploaded row to Snowflake Bronze.
+    """
+    Upload every fully-enriched, not-yet-uploaded row to Snowflake Bronze.
 
     Returns the total number of rows uploaded across all chunks.
     """

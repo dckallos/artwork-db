@@ -1,4 +1,5 @@
-"""Shared pytest fixtures for the orchestration test suite.
+"""
+Shared pytest fixtures for the orchestration test suite.
 
 Unit tests here are dependency-light: they exercise the PURE seams (auth kwargs, profile
 resolution, repo-root logic) and must not require a live Snowflake or a running Dagster
@@ -23,19 +24,24 @@ _AUTH_ENV_VARS = ("ARTWORK_TEST_ACCOUNT", "ARTWORK_TEST_USER", "ARTWORK_TEST_KEY
 
 @pytest.fixture
 def fixtures_dir() -> Path:
-    """Absolute path to the committed ``tests/fixtures`` directory."""
+    """
+    Absolute path to the committed ``tests/fixtures`` directory.
+    """
     return FIXTURES
 
 
 @pytest.fixture
 def profiles_path() -> Path:
-    """Path to the fixture dbt ``profiles.yml`` used by connection unit tests."""
+    """
+    Path to the fixture dbt ``profiles.yml`` used by connection unit tests.
+    """
     return FIXTURES / "profiles.yml"
 
 
 @pytest.fixture(autouse=True)
 def _clean_auth_env(tmp_path, monkeypatch):
-    """Neutralize ambient auth env for deterministic tests.
+    """
+    Neutralize ambient auth env for deterministic tests.
 
     * Clears the ``ARTWORK_TEST_*`` env vars the fixture profile renders, so the
       env_var default and no-default-raises branches are exercised deterministically.

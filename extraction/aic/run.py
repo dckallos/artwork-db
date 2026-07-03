@@ -25,7 +25,9 @@ from .loader import run_snapshot
 
 
 def _configure_logging(verbose: bool) -> None:
-    """Configure the root logger for CLI output."""
+    """
+    Configure the root logger for CLI output.
+    """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -37,7 +39,9 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def _print_status(config: Config) -> None:
-    """Print a dashboard of current AIC pipeline state from Snowflake."""
+    """
+    Print a dashboard of current AIC pipeline state from Snowflake.
+    """
     conn = _snowflake_connect(config)
     try:
         db_schema = f"{config.snowflake_database}.{config.snowflake_schema}"
@@ -106,7 +110,9 @@ def _print_status(config: Config) -> None:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """CLI entry point."""
+    """
+    CLI entry point.
+    """
     parser = argparse.ArgumentParser(
         prog="aic-extractor",
         description="AIC data dump -> Snowflake Bronze loader.",

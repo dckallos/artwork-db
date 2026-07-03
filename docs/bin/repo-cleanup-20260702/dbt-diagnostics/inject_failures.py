@@ -355,7 +355,9 @@ SCENARIOS = {
 # ---------------------------------------------------------------------------
 
 def inject(scenario_id: int) -> None:
-    """Inject a failure into the model file."""
+    """
+    Inject a failure into the model file.
+    """
     scenario = SCENARIOS[scenario_id]
     filepath = scenario["file"]
 
@@ -389,7 +391,9 @@ def inject(scenario_id: int) -> None:
 
 
 def discard(scenario_id: int) -> None:
-    """Revert an injected failure."""
+    """
+    Revert an injected failure.
+    """
     scenario = SCENARIOS[scenario_id]
     filepath = scenario["file"]
 
@@ -415,7 +419,9 @@ def discard(scenario_id: int) -> None:
 
 
 def list_scenarios() -> None:
-    """Print all available scenarios."""
+    """
+    Print all available scenarios.
+    """
     print("Available failure scenarios:")
     print("=" * 78)
 
@@ -469,7 +475,9 @@ def list_scenarios() -> None:
 
 
 def _is_injected(scenario_id: int) -> bool:
-    """Check if a scenario is currently injected."""
+    """
+    Check if a scenario is currently injected.
+    """
     scenario = SCENARIOS[scenario_id]
     filepath = scenario["file"]
     if not filepath.exists():

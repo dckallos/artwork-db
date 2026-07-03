@@ -1,4 +1,5 @@
-"""Declarative description of a source pipeline -- the internal model.
+"""
+Declarative description of a source pipeline -- the internal model.
 
 These dataclasses are the ONE abstraction the whole orchestration layer is built from.
 A source is described as *data* -- a list of :class:`ExtractionStep` that each produce
@@ -28,7 +29,8 @@ _DEFAULT_TIMEOUT_S = 1800
 
 @dataclass(frozen=True)
 class PartitionDim:
-    """A static partition dimension for a step (e.g. a set of curatorial departments).
+    """
+    A static partition dimension for a step (e.g. a set of curatorial departments).
 
     ``values`` maps a slug-safe partition KEY (Dagster forbids commas/brackets in keys)
     to the exact value the CLI expects behind ``cli_flag``.
@@ -56,7 +58,9 @@ class PartitionDim:
 
 @dataclass(frozen=True)
 class Produces:
-    """A Bronze table a step writes (or, for a verify step, reads and reports)."""
+    """
+    A Bronze table a step writes (or, for a verify step, reads and reports).
+    """
 
     table: str                          # logical name, e.g. "raw_x_objects" / "csv_snapshot"
     dbt_source: bool = False            # True -> keyed via translator (dbt lineage terminal)
@@ -69,8 +73,10 @@ class Produces:
         return (self.physical or self.table).upper()
 
     def asset_key(self, source_key: str) -> AssetKey:
-        """dbt-source terminals share the translator's key scheme; internals get
-        ``[source, table]``. Either way the key is stable and lineage-safe."""
+        """
+        dbt-source terminals share the translator's key scheme; internals get
+        ``[source, table]``. Either way the key is stable and lineage-safe.
+        """
         if self.dbt_source:
             return dbt_source_asset_key(source_key, self.table)
         return AssetKey([source_key, self.table])
@@ -78,8 +84,10 @@ class Produces:
 
 @dataclass(frozen=True)
 class ExtractionStep:
-    """One phase of a source pipeline -> becomes one Dagster asset (or a multi_asset
-    when it produces more than one dbt-source table)."""
+    """
+    One phase of a source pipeline -> becomes one Dagster asset (or a multi_asset
+    when it produces more than one dbt-source table).
+    """
 
     name: str                                   # step/asset name, e.g. "snapshot"
     produces: Tuple[Produces, ...]
@@ -107,9 +115,11 @@ class ExtractionStep:
 
 @dataclass(frozen=True)
 class HealthCheck:
-    """A custom data-quality/operational check beyond the auto-generated non-empty
+    """
+    A custom data-quality/operational check beyond the auto-generated non-empty
     checks (e.g. 'no worklist leases older than the reclaim TTL'). Attaches to the asset
-    that produces ``attach_table``."""
+    that produces ``attach_table``.
+    """
 
     name: str
     attach_table: str                     # logical table whose asset this check hangs off
@@ -121,7 +131,9 @@ class HealthCheck:
 
 @dataclass(frozen=True)
 class SourceSpec:
-    """Everything the factories need to build a source's Dagster objects."""
+    """
+    Everything the factories need to build a source's Dagster objects.
+    """
 
     key: str                              # source key -- also the dbt source name
     cli_module: str                       # e.g. "extraction.<key>.run"
@@ -140,14 +152,18 @@ class SourceSpec:
 
     @property
     def rate_tag_value(self) -> Optional[str]:
-        """The value for the rate-limit tag, or None if this source has no rate-limited step."""
+        """
+        The value for the rate-limit tag, or None if this source has no rate-limited step.
+        """
         if not self.has_rate_limited_step:
             return None
         return self.rate_limit_value or self.key
 
     def enrich_step(self) -> Optional[ExtractionStep]:
-        """The bounded, partitioned, rate-limited step (if any) that a per-source
-        'process next batch' job/schedule should target."""
+        """
+        The bounded, partitioned, rate-limited step (if any) that a per-source
+        'process next batch' job/schedule should target.
+        """
         for step in self.steps:
             if step.rate_limited and step.partition is not None:
                 return step
@@ -166,7 +182,8 @@ class SourceSpec:
 
 
 class SourceRegistry:
-    """Typed, read-only view over the loaded :class:`SourceSpec` set.
+    """
+    Typed, read-only view over the loaded :class:`SourceSpec` set.
 
     Replaces the bare tuple/list that used to be passed around and is the proper home for
     the lookup helper removed from ``sources/__init__.py``. Preserves the loader's

@@ -1,4 +1,5 @@
-"""Asset factory: turn a :class:`SourceSpec` into Dagster asset definitions.
+"""
+Asset factory: turn a :class:`SourceSpec` into Dagster asset definitions.
 
 One :class:`ExtractionStep` becomes one ``@asset`` -- or a ``@multi_asset`` when the
 step produces more than one dbt-source table (the multi-table snapshot case). Steps are
@@ -40,7 +41,9 @@ def _op_tags(spec: SourceSpec, step: ExtractionStep) -> dict:
 
 
 def _make_compute(spec: SourceSpec, step: ExtractionStep):
-    """Build the closure that runs one step's CLI (if any) and reports metadata."""
+    """
+    Build the closure that runs one step's CLI (if any) and reports metadata.
+    """
 
     def _compute(context):
         partition_value = ""
@@ -132,7 +135,9 @@ def _build_step_asset(
 
 
 def build_source_assets(spec: SourceSpec) -> List[AssetsDefinition]:
-    """All Dagster assets for one source, chained in declaration order."""
+    """
+    All Dagster assets for one source, chained in declaration order.
+    """
     assets: List[AssetsDefinition] = []
     prev_keys: List = []
     for step in spec.steps:

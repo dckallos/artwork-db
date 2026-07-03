@@ -1,4 +1,5 @@
-"""Unit tests for robust repo-root resolution (installed-package safe).
+"""
+Unit tests for robust repo-root resolution (installed-package safe).
 
 Imports only the dependency-free :mod:`artwork_orchestration._paths` -- no Dagster.
 """

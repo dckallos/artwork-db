@@ -27,7 +27,9 @@ MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1"
 
 @dataclass
 class Config:
-    """Runtime configuration for the Met extraction pipeline."""
+    """
+    Runtime configuration for the Met extraction pipeline.
+    """
 
     # Local SQLite database path -- intermediate state only.
     sqlite_path: Path = field(
@@ -83,6 +85,8 @@ class Config:
     upload_chunk_size: int = int(os.getenv("MET_UPLOAD_CHUNK", "5000"))
 
     def ensure_paths(self) -> None:
-        """Create parent directories for local data files if missing."""
+        """
+        Create parent directories for local data files if missing.
+        """
         self.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         self.csv_local_path.parent.mkdir(parents=True, exist_ok=True)

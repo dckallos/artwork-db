@@ -1,4 +1,5 @@
-"""Unit tests for dbt profile resolution + ``env_var()`` rendering (driver/Dagster-free).
+"""
+Unit tests for dbt profile resolution + ``env_var()`` rendering (driver/Dagster-free).
 
 These exercise ``_resolve_profile`` against the fixture ``profiles.yml`` using the explicit
 path seam (so no packaged config / dagster import is needed) and the profile-name

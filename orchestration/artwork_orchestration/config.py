@@ -1,4 +1,5 @@
-"""Central configuration for the orchestration layer.
+"""
+Central configuration for the orchestration layer.
 
 Two things live here, both deliberately dependency-light so importing this module
 never drags in the dbt stack:
@@ -31,7 +32,8 @@ REPO_ROOT = resolve_repo_root(FRAMEWORK.connection.project_dir)
 
 
 def _resolve_repo_root(project_dirname: str):
-    """Thin wrapper around :func:`artwork_orchestration._paths.resolve_repo_root`.
+    """
+    Thin wrapper around :func:`artwork_orchestration._paths.resolve_repo_root`.
 
     Kept on ``config`` as the stable entry point consumers/tests reference; the actual
     (dependency-free, unit-testable) logic lives in ``_paths``.

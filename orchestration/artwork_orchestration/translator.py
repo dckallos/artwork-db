@@ -1,4 +1,5 @@
-"""Custom dbt<->Dagster asset-key mapping.
+"""
+Custom dbt<->Dagster asset-key mapping.
 
 The default translator would give dbt sources their own asset keys that don't
 line up with our Python extraction assets. By mapping every dbt source to
@@ -18,12 +19,16 @@ from dagster_dbt import DagsterDbtTranslator
 
 
 def dbt_source_asset_key(source_name: str, table_name: str) -> AssetKey:
-    """The single source-key scheme shared by dbt sources and extraction assets."""
+    """
+    The single source-key scheme shared by dbt sources and extraction assets.
+    """
     return AssetKey([source_name, table_name])
 
 
 class ArtworkDbtTranslator(DagsterDbtTranslator):
-    """Map dbt sources onto the extraction assets that populate them."""
+    """
+    Map dbt sources onto the extraction assets that populate them.
+    """
 
     def get_asset_key(self, dbt_resource_props: Mapping[str, Any]) -> AssetKey:
         if dbt_resource_props.get("resource_type") == "source":

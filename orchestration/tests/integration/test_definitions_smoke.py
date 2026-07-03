@@ -1,4 +1,5 @@
-"""Integration smoke test for the assembled code location.
+"""
+Integration smoke test for the assembled code location.
 
 Verifies the Phase-2 refactor did not break ``build_definitions()`` assembly. Requires a
 real Dagster (and a built dbt manifest for the default registry), so it is skipped where

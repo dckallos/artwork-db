@@ -1,4 +1,5 @@
-"""Typed in-memory model for the framework (Layer A) configuration.
+"""
+Typed in-memory model for the framework (Layer A) configuration.
 
 These dataclasses are the internal representation the engine reads. They are LOADED
 from ``framework.yaml`` by :mod:`artwork_orchestration.loader` -- never authored in
@@ -15,7 +16,8 @@ from .enums import BackoffStrategy, JitterStrategy, StepKind
 
 @dataclass(frozen=True)
 class ConnectionCfg:
-    """How the orchestration layer opens ad-hoc Snowflake queries for metadata/checks.
+    """
+    How the orchestration layer opens ad-hoc Snowflake queries for metadata/checks.
 
     It reuses the dbt PROFILE as the single connection identity, so there is no second
     place credentials live. ``project_dir`` (where ``dbt_project.yml`` lives) and
@@ -36,13 +38,17 @@ class ConnectionCfg:
 
 @dataclass(frozen=True)
 class BronzeCfg:
-    """Location of the raw (Bronze) landing tables in Snowflake."""
+    """
+    Location of the raw (Bronze) landing tables in Snowflake.
+    """
 
     database: str
     schema: str
 
     def fqn(self, table: str) -> str:
-        """Fully-qualified name for a Bronze table, e.g. ``ARTWORK_DB.BRONZE.RAW_X``."""
+        """
+        Fully-qualified name for a Bronze table, e.g. ``ARTWORK_DB.BRONZE.RAW_X``.
+        """
         return f"{self.database}.{self.schema}.{table.upper()}"
 
 
@@ -56,7 +62,8 @@ class RetryCfg:
 
 @dataclass(frozen=True)
 class ProfileConfig:
-    """The resolved dbt profile output block (``profiles.yml`` -> profile -> target).
+    """
+    The resolved dbt profile output block (``profiles.yml`` -> profile -> target).
 
     Replaces the ad-hoc dict previously passed around in ``_connection.py``. Every field
     is optional because a profile only sets the keys it needs (e.g. key-pair auth omits
@@ -78,7 +85,9 @@ class ProfileConfig:
 
     @classmethod
     def from_mapping(cls, m: Mapping[str, Any]) -> "ProfileConfig":
-        """Build from a rendered profile mapping, ignoring keys we do not model."""
+        """
+        Build from a rendered profile mapping, ignoring keys we do not model.
+        """
         return cls(
             account=m.get("account"),
             user=m.get("user"),
@@ -97,22 +106,28 @@ class ProfileConfig:
 
 @dataclass(frozen=True)
 class TimeoutsCfg:
-    """Per-run wall-clock ceilings (seconds), keyed by step ``kind`` with a default."""
+    """
+    Per-run wall-clock ceilings (seconds), keyed by step ``kind`` with a default.
+    """
 
     default: int
     by_kind: Mapping[str, int] = field(default_factory=dict)
 
     def for_kind(self, kind: Union[StepKind, str]) -> int:
-        """Timeout for a step ``kind``. Accepts a :class:`StepKind` or a raw string;
-        both resolve against the ``by_kind`` map (keyed by the YAML kind tokens)."""
+        """
+        Timeout for a step ``kind``. Accepts a :class:`StepKind` or a raw string;
+        both resolve against the ``by_kind`` map (keyed by the YAML kind tokens).
+        """
         key = kind.value if isinstance(kind, StepKind) else str(kind)
         return int(self.by_kind.get(key, self.default))
 
 
 @dataclass(frozen=True)
 class BatchingCfg:
-    """Sizing for steps declared ``mode: batched`` (one materialization drains up to
-    ``size * max_batches`` rows)."""
+    """
+    Sizing for steps declared ``mode: batched`` (one materialization drains up to
+    ``size * max_batches`` rows).
+    """
 
     size: int
     max_batches: int
@@ -120,8 +135,10 @@ class BatchingCfg:
 
 @dataclass(frozen=True)
 class RateLimitCfg:
-    """Aggregate request budget shared across concurrent rate-limited workers, and the
-    max workers run at once (mirror in dagster.yaml tag_concurrency_limits)."""
+    """
+    Aggregate request budget shared across concurrent rate-limited workers, and the
+    max workers run at once (mirror in dagster.yaml tag_concurrency_limits).
+    """
 
     rps_budget: float
     concurrency: int
@@ -140,7 +157,9 @@ class DefaultsCfg:
 
 @dataclass(frozen=True)
 class TagsCfg:
-    """Dagster run/op tag keys the coordinator and daemon gate on."""
+    """
+    Dagster run/op tag keys the coordinator and daemon gate on.
+    """
 
     rate_limit_key: str
     max_runtime_key: str
@@ -148,7 +167,9 @@ class TagsCfg:
 
 @dataclass(frozen=True)
 class FreshnessCfg:
-    """dbt Gold marts that get a daily-cadence freshness check (not source-specific)."""
+    """
+    dbt Gold marts that get a daily-cadence freshness check (not source-specific).
+    """
 
     gold_marts: List[str]
     gold_lag_hours: float
@@ -156,7 +177,9 @@ class FreshnessCfg:
 
 @dataclass(frozen=True)
 class FrameworkConfig:
-    """The whole Layer-A engine config, parsed + validated from ``framework.yaml``."""
+    """
+    The whole Layer-A engine config, parsed + validated from ``framework.yaml``.
+    """
 
     connection: ConnectionCfg
     bronze: BronzeCfg

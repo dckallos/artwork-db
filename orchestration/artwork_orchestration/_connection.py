@@ -1,4 +1,5 @@
-"""Source-agnostic Snowflake connection provider.
+"""
+Source-agnostic Snowflake connection provider.
 
 This is what decouples the orchestration layer from any one source's extraction package
 (previously ``_snowflake`` reached into a specific museum's extraction config +
@@ -49,7 +50,9 @@ _DEFAULT_SESSION_TOKEN_PATH = "/snowflake/session/token"
 
 
 def _render_env_var(value: Any) -> Any:
-    """Render dbt-style ``env_var`` Jinja in a scalar string; pass through non-strings."""
+    """
+    Render dbt-style ``env_var`` Jinja in a scalar string; pass through non-strings.
+    """
     if not isinstance(value, str):
         return value
 
@@ -66,7 +69,9 @@ def _render_env_var(value: Any) -> Any:
 
 
 def _session_token() -> Optional[str]:
-    """Return the in-Snowflake session OAuth token, or ``None`` if not running inside one."""
+    """
+    Return the in-Snowflake session OAuth token, or ``None`` if not running inside one.
+    """
     path = os.environ.get(_SESSION_TOKEN_ENV, _DEFAULT_SESSION_TOKEN_PATH)
     try:
         token = Path(path).read_text().strip()
@@ -76,7 +81,8 @@ def _session_token() -> Optional[str]:
 
 
 def _derive_profile_name(project_dir: Any) -> str:
-    """Derive the dbt profile name from ``<project_dir>/dbt_project.yml`` (``profile:``).
+    """
+    Derive the dbt profile name from ``<project_dir>/dbt_project.yml`` (``profile:``).
 
     This is what lets ``framework.yaml`` OMIT ``connection.profile`` -- the name is
     single-sourced in the dbt project and can never drift from a duplicate. Raises an
@@ -105,7 +111,8 @@ def _resolve_profile(
     profile: Optional[str] = None,
     target: Optional[str] = None,
 ) -> ProfileConfig:
-    """Resolve ``profiles.yml -> profile -> target`` into a typed :class:`ProfileConfig`.
+    """
+    Resolve ``profiles.yml -> profile -> target`` into a typed :class:`ProfileConfig`.
 
     Two modes:
 
@@ -146,7 +153,8 @@ def _resolve_profile(
 
 
 def _auth_kwargs(p: ProfileConfig) -> Dict[str, Any]:
-    """Map a resolved profile onto ``snowflake.connector`` AUTH kwargs.
+    """
+    Map a resolved profile onto ``snowflake.connector`` AUTH kwargs.
 
     Handles every dbt-snowflake auth method the project uses. Precedence mirrors dbt:
     an explicit key-pair or authenticator wins over a bare password, and the in-Snowflake
@@ -196,7 +204,8 @@ def _auth_kwargs(p: ProfileConfig) -> Dict[str, Any]:
 
 
 def build_connect_kwargs(p: ProfileConfig) -> Dict[str, Any]:
-    """Build the full ``snowflake.connector.connect`` kwargs for a profile (pure).
+    """
+    Build the full ``snowflake.connector.connect`` kwargs for a profile (pure).
 
     Combines the identity/session fields with the auth kwargs from :func:`_auth_kwargs`
     and drops any ``None`` values. No Snowflake import -- this is the unit-test seam for
@@ -216,7 +225,8 @@ def build_connect_kwargs(p: ProfileConfig) -> Dict[str, Any]:
 
 
 def connect():
-    """Open a Snowflake connection from the configured dbt profile.
+    """
+    Open a Snowflake connection from the configured dbt profile.
 
     Supports every dbt auth method via :func:`build_connect_kwargs` (key-pair, password,
     externalbrowser, oauth, username_password_mfa, and the in-Snowflake session/native

@@ -106,7 +106,9 @@ _CSV_FIELDS: Tuple[Tuple[str, str], ...] = (
 
 
 def _clean(value: Optional[str]) -> Optional[str]:
-    """Trim a CSV cell; empty/whitespace -> None (so VARIANT stores JSON null)."""
+    """
+    Trim a CSV cell; empty/whitespace -> None (so VARIANT stores JSON null).
+    """
     if value is None:
         return None
     s = value.strip()
@@ -114,7 +116,9 @@ def _clean(value: Optional[str]) -> Optional[str]:
 
 
 def _object_id(row: Dict[str, str]) -> Optional[int]:
-    """Parse the Object ID, tolerating floats/whitespace; None if unusable."""
+    """
+    Parse the Object ID, tolerating floats/whitespace; None if unusable.
+    """
     raw = row.get("Object ID")
     if raw is None or not raw.strip():
         return None
@@ -125,7 +129,8 @@ def _object_id(row: Dict[str, str]) -> Optional[int]:
 
 
 def _map_snapshot_row(row: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    """Build the faithful snake_case JSON document for one CSV row.
+    """
+    Build the faithful snake_case JSON document for one CSV row.
 
     Returns None for rows without a valid Object ID (skipped).
     """
@@ -144,7 +149,9 @@ def _write_ndjson_chunk(
     chunk_index: int,
     target_dir: Path,
 ) -> Path:
-    """Write one gzipped NDJSON file of snapshot payloads; return its path."""
+    """
+    Write one gzipped NDJSON file of snapshot payloads; return its path.
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
     file_path = target_dir / f"met_snapshot_{batch_id}_{chunk_index:05d}.ndjson.gz"
     with gzip.open(file_path, "wt", encoding="utf-8") as f:
@@ -155,7 +162,9 @@ def _write_ndjson_chunk(
 
 
 def _iter_payloads(config: Config, limit: Optional[int]) -> Iterator[Dict[str, Any]]:
-    """Yield snapshot payloads from the local CSV, optionally capped at `limit`."""
+    """
+    Yield snapshot payloads from the local CSV, optionally capped at `limit`.
+    """
     emitted = 0
     for row in _iter_csv_rows(config.csv_local_path):
         payload = _map_snapshot_row(row)
@@ -168,7 +177,9 @@ def _iter_payloads(config: Config, limit: Optional[int]) -> Iterator[Dict[str, A
 
 
 def _create_staging_table(cur: snowflake.connector.cursor.SnowflakeCursor) -> None:
-    """Create the session-scoped staging table (auto-dropped on disconnect)."""
+    """
+    Create the session-scoped staging table (auto-dropped on disconnect).
+    """
     cur.execute(
         f"CREATE TEMPORARY TABLE {_STG_TABLE} ("
         "  object_id   NUMBER  NOT NULL,"
@@ -184,7 +195,9 @@ def _put_and_copy_stg(
     config: Config,
     batch_id: str,
 ) -> int:
-    """PUT one NDJSON file to the stage, COPY it into the staging table."""
+    """
+    PUT one NDJSON file to the stage, COPY it into the staging table.
+    """
     stage = f"@{config.snowflake_database}.{config.snowflake_schema}.{config.snowflake_stage}"
     put_sql = (
         f"PUT file://{file_path.as_posix()} {stage}/met_snapshot/{batch_id}/ "
@@ -204,7 +217,9 @@ def _put_and_copy_stg(
 def _merge_into_snapshot(
     cur: snowflake.connector.cursor.SnowflakeCursor, config: Config,
 ) -> Tuple[int, int]:
-    """MERGE the staging table into MET_CSV_SNAPSHOT; return (inserted, updated)."""
+    """
+    MERGE the staging table into MET_CSV_SNAPSHOT; return (inserted, updated).
+    """
     target = f"{config.snowflake_database}.{config.snowflake_schema}.MET_CSV_SNAPSHOT"
     cur.execute(MERGE_SNAPSHOT_SQL.format(target=target, stg=_STG_TABLE))
     result = cur.fetchone()
@@ -215,7 +230,9 @@ def _merge_into_snapshot(
 
 
 def _log_start(cur: snowflake.connector.cursor.SnowflakeCursor, batch_id: str) -> None:
-    """AUTO-03: open an EXTRACTION_LOG row for this snapshot run."""
+    """
+    AUTO-03: open an EXTRACTION_LOG row for this snapshot run.
+    """
     cur.execute(
         "INSERT INTO EXTRACTION_LOG (source_system, batch_id, started_at, status) "
         "VALUES ('met_museum', %s, CURRENT_TIMESTAMP(), 'running')",
@@ -230,7 +247,9 @@ def _log_finish(
     records: int,
     error: Optional[str] = None,
 ) -> None:
-    """AUTO-03: close the EXTRACTION_LOG row with outcome + counts."""
+    """
+    AUTO-03: close the EXTRACTION_LOG row with outcome + counts.
+    """
     cur.execute(
         "UPDATE EXTRACTION_LOG SET completed_at = CURRENT_TIMESTAMP(), status = %s, "
         "records_loaded = %s, error_message = %s "
@@ -240,7 +259,8 @@ def _log_finish(
 
 
 def load_snapshot(config: Config, refresh_csv: bool = True, limit: Optional[int] = None) -> int:
-    """Load the Met CSV into BRONZE.MET_CSV_SNAPSHOT via stage -> COPY -> MERGE.
+    """
+    Load the Met CSV into BRONZE.MET_CSV_SNAPSHOT via stage -> COPY -> MERGE.
 
     Args:
         refresh_csv: re-download the CSV (else reuse + revalidate the local copy).

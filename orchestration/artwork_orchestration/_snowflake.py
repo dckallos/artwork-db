@@ -1,4 +1,5 @@
-"""Best-effort Snowflake scalar queries for asset attributes and checks.
+"""
+Best-effort Snowflake scalar queries for asset attributes and checks.
 
 Shared by both the asset factory and the check factory without importing each other.
 Any failure (missing driver in a dev shell, no connectivity) is logged and swallowed for
@@ -19,7 +20,8 @@ from .config import BRONZE
 
 @dataclass(frozen=True)
 class ScalarResults:
-    """Typed result of a batch of ``label -> scalar`` queries.
+    """
+    Typed result of a batch of ``label -> scalar`` queries.
 
     Replaces the bare ``dict`` previously returned by :func:`sf_scalars`. Supports the
     mapping operations the factories rely on -- ``in``, ``results[label]``,
@@ -50,7 +52,8 @@ class ScalarResults:
 
 
 def render(sql: str, partition_value: str = "") -> str:
-    """Fill ``{db}``/``{schema}``/``{partition_value}`` tokens in a SourceSpec query.
+    """
+    Fill ``{db}``/``{schema}``/``{partition_value}`` tokens in a SourceSpec query.
 
     Uses ``str.replace`` (not ``str.format``) so literal braces elsewhere in the SQL
     are never misinterpreted. ``partition_value`` is single-quote-escaped because it
@@ -64,7 +67,8 @@ def render(sql: str, partition_value: str = "") -> str:
 
 
 def sf_scalars(context, queries: Mapping[str, str]) -> ScalarResults:
-    """Run ``label -> SQL`` scalar queries; return a :class:`ScalarResults`.
+    """
+    Run ``label -> SQL`` scalar queries; return a :class:`ScalarResults`.
 
     Best-effort: returns whatever succeeded (with the failed labels recorded), or an
     empty result on connection/driver failure.
@@ -93,5 +97,7 @@ def sf_scalars(context, queries: Mapping[str, str]) -> ScalarResults:
 
 
 def sf_scalar(context, sql: str) -> Optional[int]:
-    """Convenience: run a single scalar query; ``None`` if it could not be run."""
+    """
+    Convenience: run a single scalar query; ``None`` if it could not be run.
+    """
     return sf_scalars(context, {"_": sql}).get("_")

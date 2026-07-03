@@ -34,13 +34,17 @@ logger = logging.getLogger(__name__)
 
 
 def _load_sql(name: str) -> str:
-    """Read a .sql template from the extraction.aic.sql package."""
+    """
+    Read a .sql template from the extraction.aic.sql package.
+    """
     from importlib import resources
     return resources.files("extraction.aic.sql").joinpath(name).read_text(encoding="utf-8")
 
 
 def _generate_batch_id() -> str:
-    """Generate a snapshot batch ID (snap_ + 12-char hex)."""
+    """
+    Generate a snapshot batch ID (snap_ + 12-char hex).
+    """
     return f"{BATCH_PREFIX_SNAPSHOT}_{uuid.uuid4().hex[:12]}"
 
 
@@ -49,7 +53,8 @@ def _generate_batch_id() -> str:
 # ---------------------------------------------------------------------------
 
 def download_dump(config: Config) -> Path:
-    """Download the AIC data dump tar.bz2 to the configured path.
+    """
+    Download the AIC data dump tar.bz2 to the configured path.
 
     Uses streaming download with a simple retry (one attempt). Returns the
     path to the downloaded file.
@@ -76,7 +81,8 @@ def download_dump(config: Config) -> Path:
 # ---------------------------------------------------------------------------
 
 def extract_entities(config: Config) -> Path:
-    """Selectively extract Tier 1 entity folders from the tar.bz2.
+    """
+    Selectively extract Tier 1 entity folders from the tar.bz2.
 
     Only extracts json/artworks/ and json/agents/ to save disk space.
     Returns the path to the extraction directory.
@@ -107,7 +113,8 @@ def _transform_entity_to_ndjson(
     id_field: str,
     limit: Optional[int] = None,
 ) -> int:
-    """Read individual JSON files and write a single gzipped NDJSON file.
+    """
+    Read individual JSON files and write a single gzipped NDJSON file.
 
     Each JSON file contains one record. We read it, extract the id, and
     write the full JSON as one line in the NDJSON output.
@@ -147,7 +154,9 @@ def _transform_entity_to_ndjson(
 
 
 def transform_artworks(config: Config, limit: Optional[int] = None) -> Tuple[Path, int]:
-    """Transform artworks JSON files to gzipped NDJSON. Returns (path, count)."""
+    """
+    Transform artworks JSON files to gzipped NDJSON. Returns (path, count).
+    """
     json_dir = config.extract_dir / "artic-api-data" / "json" / "artworks"
     output_path = config.data_dir / "aic_artworks.ndjson.gz"
     count = _transform_entity_to_ndjson(json_dir, output_path, "artworks", "id", limit)
@@ -155,7 +164,9 @@ def transform_artworks(config: Config, limit: Optional[int] = None) -> Tuple[Pat
 
 
 def transform_agents(config: Config, limit: Optional[int] = None) -> Tuple[Path, int]:
-    """Transform agents JSON files to gzipped NDJSON. Returns (path, count)."""
+    """
+    Transform agents JSON files to gzipped NDJSON. Returns (path, count).
+    """
     json_dir = config.extract_dir / "artic-api-data" / "json" / "agents"
     output_path = config.data_dir / "aic_agents.ndjson.gz"
     count = _transform_entity_to_ndjson(json_dir, output_path, "agents", "id", limit)
@@ -171,7 +182,9 @@ def _put_file(
     local_path: Path,
     stage_path: str,
 ) -> None:
-    """PUT a local file to the Snowflake internal stage."""
+    """
+    PUT a local file to the Snowflake internal stage.
+    """
     put_sql = (
         f"PUT 'file://{local_path}' '{stage_path}' "
         f"AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
@@ -189,7 +202,9 @@ def _create_temp_staging_table(
     table_name: str,
     id_column: str,
 ) -> None:
-    """Create a temporary staging table for COPY INTO."""
+    """
+    Create a temporary staging table for COPY INTO.
+    """
     sql = f"""
     CREATE TEMPORARY TABLE {table_name} (
         {id_column} INT NOT NULL,
@@ -209,7 +224,8 @@ def _copy_into_staging(
     id_column: str,
     batch_id: str,
 ) -> int:
-    """COPY NDJSON from stage into the temporary staging table.
+    """
+    COPY NDJSON from stage into the temporary staging table.
 
     Parses each NDJSON line as VARIANT and extracts the id field.
     Returns the number of rows loaded.
@@ -239,7 +255,9 @@ def _merge_into_target(
     target_table: str,
     staging_table: str,
 ) -> Dict[str, int]:
-    """Execute a MERGE statement and return row counts."""
+    """
+    Execute a MERGE statement and return row counts.
+    """
     sql = strip_sql_comments(merge_sql_template).format(
         target=target_table,
         stg=staging_table,
@@ -261,7 +279,9 @@ def _soft_delete_deaccessioned(
     target_table: str,
     batch_id: str,
 ) -> int:
-    """Mark rows not in the current batch as soft-deleted. Returns count."""
+    """
+    Mark rows not in the current batch as soft-deleted. Returns count.
+    """
     template = _load_sql("soft_delete_deaccessioned.sql")
     sql = strip_sql_comments(template).format(
         target=target_table,
@@ -284,7 +304,8 @@ def run_snapshot(
     limit: Optional[int] = None,
     entities: Optional[List[str]] = None,
 ) -> None:
-    """Execute the full snapshot pipeline.
+    """
+    Execute the full snapshot pipeline.
 
     Steps:
       1. Download the tar.bz2 dump (skip if --no-refresh and file exists).
@@ -377,7 +398,9 @@ def _load_entity(
     merge_template: str,
     batch_id: str,
 ) -> None:
-    """PUT + COPY INTO temp + MERGE for a single entity."""
+    """
+    PUT + COPY INTO temp + MERGE for a single entity.
+    """
     # PUT
     _put_file(conn, ndjson_path, stage_prefix)
 

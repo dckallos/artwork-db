@@ -1,4 +1,5 @@
-"""The source registry: built by SCANNING ``sources/*.yaml`` -- never a hardcoded list.
+"""
+The source registry: built by SCANNING ``sources/*.yaml`` -- never a hardcoded list.
 
 Adding a source means dropping a new ``<key>.yaml`` in this directory (see
 ``../SCHEMA.md`` and ``../ADDING_A_SOURCE.md``). Nothing in the orchestration layer's
