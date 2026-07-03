@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Append a line to session-progress-log.md.
+"""
+Append a line to session-progress-log.md.
 
 The workspace FS does not support O_APPEND (>>), so we read-then-rewrite in 'w'
 mode (truncate-write IS supported). Usage: python3 logp.py "message"

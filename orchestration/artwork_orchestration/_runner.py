@@ -1,4 +1,5 @@
-"""Subprocess runner for extraction CLIs.
+"""
+Subprocess runner for extraction CLIs.
 
 The orchestration layer drives extraction by shelling out to the existing module
 CLIs (``python -m extraction.<source>.run <subcommand> ...``). This is the single
@@ -26,7 +27,9 @@ def run_module(
     args: Sequence[str],
     extra_env: Optional[Mapping[str, str]] = None,
 ) -> None:
-    """Run ``python -m <cli_module> <args...>`` from the repo root, raising on failure."""
+    """
+    Run ``python -m <cli_module> <args...>`` from the repo root, raising on failure.
+    """
     cmd = [sys.executable, "-m", cli_module, *args]
     context.log.info("Running: %s", " ".join(cmd))
     env = {**os.environ, **extra_env} if extra_env else None

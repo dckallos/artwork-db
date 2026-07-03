@@ -1,4 +1,5 @@
-"""Shared Dagster policies and tuning knobs (source-agnostic).
+"""
+Shared Dagster policies and tuning knobs (source-agnostic).
 
 Everything here is DERIVED from the validated engine config (``framework.yaml`` via
 ``config.FRAMEWORK``) -- there are no hardcoded constants and no museum-specific names.
@@ -12,11 +13,18 @@ from typing import Any, Dict
 from dagster import Backoff, Jitter, RetryPolicy
 
 from .config import FRAMEWORK
+from .enums import BackoffStrategy, JitterStrategy
 
 _defaults = FRAMEWORK.defaults
 
-_BACKOFF = {"exponential": Backoff.EXPONENTIAL, "linear": Backoff.LINEAR}
-_JITTER = {"plus_minus": Jitter.PLUS_MINUS, "none": None}
+_BACKOFF = {
+    BackoffStrategy.EXPONENTIAL: Backoff.EXPONENTIAL,
+    BackoffStrategy.LINEAR: Backoff.LINEAR,
+}
+_JITTER = {
+    JitterStrategy.PLUS_MINUS: Jitter.PLUS_MINUS,
+    JitterStrategy.NONE: None,
+}
 
 # Transient failures (API 5xx/timeouts, S3 hiccups) should not fail the whole run.
 # Backoff with jitter avoids a retry thundering herd.
@@ -54,10 +62,14 @@ MAX_RUNTIME_TAG_KEY = FRAMEWORK.tags.max_runtime_key
 
 
 def timeout_tags(seconds: int) -> Dict[str, Any]:
-    """Op tags mirroring the per-run wall-clock ceiling (see jobs run tags)."""
+    """
+    Op tags mirroring the per-run wall-clock ceiling (see jobs run tags).
+    """
     return {MAX_RUNTIME_TAG_KEY: seconds}
 
 
 def per_worker_rps() -> float:
-    """Divide the global rps budget across the max concurrent rate-limited workers."""
+    """
+    Divide the global rps budget across the max concurrent rate-limited workers.
+    """
     return _defaults.rate_limit.per_worker_rps()

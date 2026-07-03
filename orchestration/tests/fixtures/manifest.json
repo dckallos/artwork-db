@@ -1,0 +1,24 @@
+{
+  "nodes": {
+    "model.artwork_test.dim_artists": {
+      "resource_type": "model",
+      "name": "dim_artists",
+      "tags": ["marts"]
+    },
+    "model.artwork_test.fct_artworks": {
+      "resource_type": "model",
+      "name": "fct_artworks",
+      "tags": ["marts", "gold"]
+    },
+    "model.artwork_test.stg_raw": {
+      "resource_type": "model",
+      "name": "stg_raw",
+      "tags": ["staging"]
+    },
+    "seed.artwork_test.some_seed": {
+      "resource_type": "seed",
+      "name": "some_seed",
+      "tags": ["marts"]
+    }
+  }
+}

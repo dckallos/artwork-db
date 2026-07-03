@@ -45,7 +45,8 @@ def _build_predicate(
     highlight_only: bool,
     where: Optional[str],
 ) -> Tuple[str, List[object]]:
-    """Compose the slice WHERE predicate over the snapshot VARIANT.
+    """
+    Compose the slice WHERE predicate over the snapshot VARIANT.
 
     Returns (predicate_sql, bind_params). The department / no caller-free value is
     ever interpolated into the SQL string -- it is bound via %s. The optional raw
@@ -78,7 +79,9 @@ def _build_predicate(
 
 
 def _log_start(cur: snowflake.connector.cursor.SnowflakeCursor, batch_id: str) -> None:
-    """AUTO-03: open an EXTRACTION_LOG row for this seed run."""
+    """
+    AUTO-03: open an EXTRACTION_LOG row for this seed run.
+    """
     cur.execute(
         "INSERT INTO EXTRACTION_LOG (source_system, batch_id, started_at, status) "
         "VALUES ('met_museum', %s, CURRENT_TIMESTAMP(), 'running')",
@@ -93,7 +96,9 @@ def _log_finish(
     records: int,
     error: Optional[str] = None,
 ) -> None:
-    """AUTO-03: close the EXTRACTION_LOG row with outcome + count."""
+    """
+    AUTO-03: close the EXTRACTION_LOG row with outcome + count.
+    """
     cur.execute(
         "UPDATE EXTRACTION_LOG SET completed_at = CURRENT_TIMESTAMP(), status = %s, "
         "records_loaded = %s, error_message = %s "
@@ -110,7 +115,8 @@ def seed_control(
     where: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> int:
-    """Seed MET_ENRICHMENT_CONTROL with 'pending' rows for the chosen slice.
+    """
+    Seed MET_ENRICHMENT_CONTROL with 'pending' rows for the chosen slice.
 
     Returns the number of NEW control rows inserted (already-present object_ids are
     left untouched, so a re-seed returns 0).

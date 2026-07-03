@@ -57,7 +57,8 @@ _STG_TABLE = "MET_IMAGE_BLOCK_STG"
 
 # --------------------------------------------------------------------------- diag
 def _classify_error(msg: Optional[str]) -> str:
-    """P-D2: bucket a per-row enrichment_error string into a stable error class.
+    """
+    P-D2: bucket a per-row enrichment_error string into a stable error class.
 
     The class names are the labels that show up in the per-batch histogram log.
     Buckets are derived from the shapes _fetch_one (image_enricher.py) emits:
@@ -108,7 +109,9 @@ def _classify_error(msg: Optional[str]) -> str:
 
 
 def _histogram(blocks: List[Dict[str, Any]]) -> Dict[str, int]:
-    """Return {error_class: count} over the rows whose status == 'error'."""
+    """
+    Return {error_class: count} over the rows whose status == 'error'.
+    """
     hist: Dict[str, int] = {}
     for b in blocks:
         if b.get("enrichment_status") != "error":
@@ -126,7 +129,8 @@ def _claim_batch(
     batch_size: int,
     department: Optional[str] = None,
 ) -> List[int]:
-    """Lease up to batch_size prioritized rows; return the claimed object_ids.
+    """
+    Lease up to batch_size prioritized rows; return the claimed object_ids.
 
     When `department` is given, the claim is narrowed to that department slice so
     that concurrent workers (one per department partition) lease DISJOINT rows and
@@ -164,7 +168,8 @@ def _fetch_blocks(
     processed_offset: int = 0,
     total_label: str = "?",
 ) -> Tuple[List[Dict[str, Any]], _RateLimiter]:
-    """Fetch image data for the claimed ids via synchronous requests.
+    """
+    Fetch image data for the claimed ids via synchronous requests.
 
     Returns (blocks, rate_limiter). The limiter is returned so the caller can
     read its throttle counters into the per-batch INFO log -- P-T2.
@@ -220,7 +225,9 @@ def _fetch_blocks(
 
 # --------------------------------------------------------------------------- stage
 def _write_blocks_ndjson(blocks: List[Dict[str, Any]], batch_id: str, target_dir: Path) -> Path:
-    """Write the batch's image blocks as one gzipped NDJSON file; return its path."""
+    """
+    Write the batch's image blocks as one gzipped NDJSON file; return its path.
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
     file_path = target_dir / f"met_enrich_{batch_id}.ndjson.gz"
     with gzip.open(file_path, "wt", encoding="utf-8") as f:
@@ -236,7 +243,9 @@ def _stage_blocks(
     config: Config,
     batch_id: str,
 ) -> None:
-    """PUT the NDJSON file to the stage and COPY it into the TEMP staging table."""
+    """
+    PUT the NDJSON file to the stage and COPY it into the TEMP staging table.
+    """
     stage = f"@{config.snowflake_database}.{config.snowflake_schema}.{config.snowflake_stage}"
     cur.execute(f"TRUNCATE TABLE {_STG_TABLE}")
     cur.execute(
@@ -254,7 +263,8 @@ def _stage_blocks(
 def _assemble_and_callback(
     cur: snowflake.connector.cursor.SnowflakeCursor, config: Config, batch_id: str,
 ) -> int:
-    """Server-side assemble RAW_MET_OBJECTS, then callback the control table.
+    """
+    Server-side assemble RAW_MET_OBJECTS, then callback the control table.
 
     Returns the number of Bronze rows assembled (inserted + updated 'done' rows).
     """
@@ -273,7 +283,9 @@ def _assemble_and_callback(
 
 # --------------------------------------------------------------------------- log
 def _log_start(cur: snowflake.connector.cursor.SnowflakeCursor, batch_id: str) -> None:
-    """AUTO-03: open an EXTRACTION_LOG row for one enrich batch."""
+    """
+    AUTO-03: open an EXTRACTION_LOG row for one enrich batch.
+    """
     cur.execute(
         "INSERT INTO EXTRACTION_LOG (source_system, batch_id, started_at, status) "
         "VALUES ('met_museum', %s, CURRENT_TIMESTAMP(), 'running')",
@@ -288,7 +300,9 @@ def _log_finish(
     records: int,
     error: Optional[str] = None,
 ) -> None:
-    """AUTO-03: close the EXTRACTION_LOG row with outcome + count."""
+    """
+    AUTO-03: close the EXTRACTION_LOG row with outcome + count.
+    """
     cur.execute(
         "UPDATE EXTRACTION_LOG SET completed_at = CURRENT_TIMESTAMP(), status = %s, "
         "records_loaded = %s, error_message = %s "
@@ -300,7 +314,9 @@ def _log_finish(
 def _release_unfinished(
     cur: snowflake.connector.cursor.SnowflakeCursor, config: Config, batch_id: str,
 ) -> None:
-    """Best-effort: free any rows still leased to a failed batch so they re-queue."""
+    """
+    Best-effort: free any rows still leased to a failed batch so they re-queue.
+    """
     control = f"{config.snowflake_database}.{config.snowflake_schema}.MET_ENRICHMENT_CONTROL"
     cur.execute(
         f"UPDATE {control} SET claimed_by_batch = NULL, claimed_at = NULL "
@@ -315,7 +331,8 @@ def _process_one_batch(
     progress_every: int = 100, processed_offset: int = 0, total_label: str = "?",
     department: Optional[str] = None,
 ) -> Tuple[int, Dict[str, int]]:
-    """Claim, fetch, assemble, and callback one batch.
+    """
+    Claim, fetch, assemble, and callback one batch.
 
     Returns (claimed_count, status_counts). claimed_count == 0 means the worklist is
     drained (caller stops). `processed_offset`/`total_label` thread through to the
@@ -382,7 +399,9 @@ def _process_one_batch(
 
 
 def _create_staging_table(sf_conn: snowflake.connector.SnowflakeConnection) -> None:
-    """Create the session-scoped image-block staging table once per connection."""
+    """
+    Create the session-scoped image-block staging table once per connection.
+    """
     cur = sf_conn.cursor()
     try:
         cur.execute(
@@ -403,7 +422,8 @@ def enrich_from_control(
     total_expected: Optional[int] = None,
     department: Optional[str] = None,
 ) -> Dict[str, int]:
-    """Drain MET_WORKLIST in bounded batches. Returns aggregate status counts.
+    """
+    Drain MET_WORKLIST in bounded batches. Returns aggregate status counts.
 
     Args:
         batch_size:   rows leased + fetched per batch.

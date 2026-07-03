@@ -34,7 +34,9 @@ UPSERT_SQL = load_sql("upsert_artwork.sql")
 
 
 def _coalesce_str(value: Optional[str]) -> Optional[str]:
-    """Return None for empty/whitespace strings, otherwise trimmed string."""
+    """
+    Return None for empty/whitespace strings, otherwise trimmed string.
+    """
     if value is None:
         return None
     s = value.strip()
@@ -42,14 +44,18 @@ def _coalesce_str(value: Optional[str]) -> Optional[str]:
 
 
 def _coalesce_bool(value: Optional[str]) -> int:
-    """Translate a truthy CSV string into 1/0; default 0."""
+    """
+    Translate a truthy CSV string into 1/0; default 0.
+    """
     if value is None:
         return 0
     return 1 if value.strip().lower() in ("1", "true", "yes") else 0
 
 
 def _coalesce_int(value: Optional[str]) -> Optional[int]:
-    """Parse an int from a CSV cell, tolerating floats/whitespace/empties."""
+    """
+    Parse an int from a CSV cell, tolerating floats/whitespace/empties.
+    """
     if value is None or not value.strip():
         return None
     try:
@@ -59,7 +65,8 @@ def _coalesce_int(value: Optional[str]) -> Optional[int]:
 
 
 def _map_row(row: Dict[str, str], loaded_at: str) -> Optional[Dict[str, Any]]:
-    """Translate a raw CSV row dict into our SQLite parameter dict.
+    """
+    Translate a raw CSV row dict into our SQLite parameter dict.
 
     Returns None for rows without a valid object_id (these are skipped).
     """
@@ -129,7 +136,8 @@ MIN_CSV_BYTES = 50 * 1024 * 1024  # 50 MB floor; the real file is ~280+ MB.
 
 
 def assert_real_met_csv(path: Path) -> None:
-    """Validate a Met CSV file is real data, not an LFS pointer or error page.
+    """
+    Validate a Met CSV file is real data, not an LFS pointer or error page.
 
     Raises RuntimeError with remediation guidance on any failure (DATA-06). This
     is the single gate every load path (SQLite bootstrap and the Snowflake
@@ -165,7 +173,9 @@ def assert_real_met_csv(path: Path) -> None:
 
 
 def download_csv(csv_url: str, target_path: Path, chunk_bytes: int = 1024 * 1024) -> None:
-    """Stream the Met CSV from GitHub to a local file, then DATA-06-validate it."""
+    """
+    Stream the Met CSV from GitHub to a local file, then DATA-06-validate it.
+    """
     target_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading Met CSV from %s -> %s", csv_url, target_path)
     with requests.get(csv_url, stream=True, timeout=300) as resp:
@@ -182,7 +192,9 @@ def download_csv(csv_url: str, target_path: Path, chunk_bytes: int = 1024 * 1024
 
 
 def _iter_csv_rows(csv_path: Path) -> Iterator[Dict[str, str]]:
-    """Yield rows from the CSV with a forgiving field-size limit."""
+    """
+    Yield rows from the CSV with a forgiving field-size limit.
+    """
     csv.field_size_limit(sys.maxsize)
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         for row in csv.DictReader(f):
@@ -190,7 +202,9 @@ def _iter_csv_rows(csv_path: Path) -> Iterator[Dict[str, str]]:
 
 
 def _start_run(conn: sqlite3.Connection, phase: str) -> str:
-    """Insert a row in extraction_runs and return its run_id."""
+    """
+    Insert a row in extraction_runs and return its run_id.
+    """
     run_id = uuid.uuid4().hex[:12]
     conn.execute(
         "INSERT INTO extraction_runs (run_id, phase, started_at, status) "
@@ -208,7 +222,9 @@ def _finish_run(
     records: int,
     notes: Optional[str] = None,
 ) -> None:
-    """Mark an extraction run finished with the given status and counts."""
+    """
+    Mark an extraction run finished with the given status and counts.
+    """
     conn.execute(
         "UPDATE extraction_runs "
         "SET completed_at = ?, status = ?, records_processed = ?, notes = ? "
@@ -223,7 +239,8 @@ def bootstrap(
     refresh_csv: bool = True,
     batch_size: int = 5000,
 ) -> int:
-    """Download (optionally) the CSV, then upsert every row into SQLite.
+    """
+    Download (optionally) the CSV, then upsert every row into SQLite.
 
     Returns the number of rows inserted/updated.
     """

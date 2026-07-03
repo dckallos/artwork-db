@@ -1,4 +1,5 @@
-"""Derive dbt model facts from the compiled manifest -- so nothing here is hand-listed.
+"""
+Derive dbt model facts from the compiled manifest -- so nothing here is hand-listed.
 
 The Gold marts that get a freshness check used to be a hardcoded list in
 ``framework.yaml``. That is a maintained duplicate of what dbt already declares. Instead
@@ -13,14 +14,14 @@ whatever is configured. No dbt import and no network.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import List
 
-from .config import FRAMEWORK, REPO_ROOT
+from .config import DBT_PROJECT_DIR
 
-# The dbt project dir is where profiles.yml lives (single-sourced from framework.yaml);
-# the compiled manifest is always <project>/target/manifest.json.
-_MANIFEST_PATH = REPO_ROOT / FRAMEWORK.connection.profiles_dir / "target" / "manifest.json"
+# The compiled manifest is always <dbt project>/target/manifest.json. DBT_PROJECT_DIR is
+# the single source of truth for the project location (config.py, from framework.yaml), so
+# manifest resolution can never drift from the DbtProject / profile wiring.
+_MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
 _MART_TAG = "marts"
 
@@ -33,7 +34,9 @@ def _load_manifest() -> dict:
 
 
 def models_tagged(tag: str) -> List[str]:
-    """Names of dbt models carrying ``tag`` in the compiled manifest (sorted)."""
+    """
+    Names of dbt models carrying ``tag`` in the compiled manifest (sorted).
+    """
     manifest = _load_manifest()
     names = {
         node.get("name")
@@ -45,5 +48,7 @@ def models_tagged(tag: str) -> List[str]:
 
 
 def gold_mart_names() -> List[str]:
-    """dbt Gold mart model names, derived from the manifest (``[]`` if not built yet)."""
+    """
+    dbt Gold mart model names, derived from the manifest (``[]`` if not built yet).
+    """
     return models_tagged(_MART_TAG)

@@ -39,7 +39,9 @@ from .snowflake_uploader import upload
 
 
 def _configure_logging(verbose: bool) -> None:
-    """Configure the root logger for CLI output."""
+    """
+    Configure the root logger for CLI output.
+    """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -52,7 +54,9 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def _print_status(config: Config) -> None:
-    """Print a small dashboard of current pipeline state."""
+    """
+    Print a small dashboard of current pipeline state.
+    """
     initialize_database(config.sqlite_path)
     with connect(config.sqlite_path) as conn:
         print("met_artworks by enrichment_status:")
@@ -94,7 +98,9 @@ def _print_status(config: Config) -> None:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """CLI entry point."""
+    """
+    CLI entry point.
+    """
     parser = argparse.ArgumentParser(
         prog="met-extractor",
         description="Met OpenAccess -> SQLite -> Snowflake Bronze loader.",

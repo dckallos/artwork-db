@@ -34,3 +34,15 @@ repos:
         language: system
         pass_filenames: false
         files: ^artwork_pipeline/.*\.(sql|yml|yaml)$
+
+      # House-style docstrings (CODE_STANDARDS.md section 8): triple quotes each on their
+      # own line. Opt-in (manual stage) while the existing tree is normalized incrementally,
+      # so it never blocks an unrelated commit. Run on demand:
+      #   pre-commit run --hook-stage manual normalize-docstrings --all-files
+      # or directly:  python3 scripts/normalize_docstrings.py --check  (--write to fix)
+      - id: normalize-docstrings
+        name: normalize docstrings (house style)
+        entry: python3 scripts/normalize_docstrings.py --check
+        language: system
+        types: [python]
+        stages: [manual]

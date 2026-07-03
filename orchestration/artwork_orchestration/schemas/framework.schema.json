@@ -9,12 +9,26 @@
   "properties": {
     "connection": {
       "type": "object",
+      "description": "dbt connection wiring. The loader's semantic validation requires at least one of profiles_dir or project_dir, then defaults the missing one from the other so errors stay actionable.",
       "additionalProperties": false,
-      "required": ["profile", "target", "profiles_dir"],
+      "required": ["target"],
       "properties": {
-        "profile": {"type": "string", "description": "dbt profile name (matches profiles.yml top key)."},
-        "target": {"type": "string", "description": "dbt target within the profile (e.g. dev | snowflake)."},
-        "profiles_dir": {"type": "string", "description": "Dir containing profiles.yml, relative to repo root."}
+        "profile": {
+          "type": "string",
+          "description": "dbt profile name; OPTIONAL -- derived from <project_dir>/dbt_project.yml when omitted."
+        },
+        "target": {
+          "type": "string",
+          "description": "dbt target within the profile (e.g. dev | snowflake)."
+        },
+        "profiles_dir": {
+          "type": "string",
+          "description": "Dir containing profiles.yml, relative to repo root (defaults to project_dir)."
+        },
+        "project_dir": {
+          "type": "string",
+          "description": "Dir containing dbt_project.yml, relative to repo root (defaults to profiles_dir)."
+        }
       }
     },
     "bronze": {
@@ -22,8 +36,12 @@
       "additionalProperties": false,
       "required": ["database", "schema"],
       "properties": {
-        "database": {"type": "string"},
-        "schema": {"type": "string"}
+        "database": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        }
       }
     },
     "defaults": {
@@ -36,25 +54,45 @@
           "additionalProperties": false,
           "required": ["max_retries", "delay_seconds"],
           "properties": {
-            "max_retries": {"type": ["integer", "string"]},
-            "delay_seconds": {"type": ["integer", "string"]},
-            "backoff": {"type": "string", "enum": ["exponential", "linear"]},
-            "jitter": {"type": "string", "enum": ["plus_minus", "none"]}
+            "max_retries": {
+              "type": ["integer", "string"]
+            },
+            "delay_seconds": {
+              "type": ["integer", "string"]
+            },
+            "backoff": {
+              "type": "string",
+              "enum": ["exponential", "linear"]
+            },
+            "jitter": {
+              "type": "string",
+              "enum": ["plus_minus", "none"]
+            }
           }
         },
         "timeouts_seconds": {
           "type": "object",
           "required": ["default"],
-          "additionalProperties": {"type": ["integer", "string"]},
-          "properties": {"default": {"type": ["integer", "string"]}}
+          "additionalProperties": {
+            "type": ["integer", "string"]
+          },
+          "properties": {
+            "default": {
+              "type": ["integer", "string"]
+            }
+          }
         },
         "batching": {
           "type": "object",
           "additionalProperties": false,
           "required": ["size", "max_batches"],
           "properties": {
-            "size": {"type": ["integer", "string"]},
-            "max_batches": {"type": ["integer", "string"]}
+            "size": {
+              "type": ["integer", "string"]
+            },
+            "max_batches": {
+              "type": ["integer", "string"]
+            }
           }
         },
         "rate_limit": {
@@ -62,8 +100,12 @@
           "additionalProperties": false,
           "required": ["rps_budget", "concurrency"],
           "properties": {
-            "rps_budget": {"type": ["number", "string"]},
-            "concurrency": {"type": ["integer", "string"]}
+            "rps_budget": {
+              "type": ["number", "string"]
+            },
+            "concurrency": {
+              "type": ["integer", "string"]
+            }
           }
         }
       }
@@ -73,16 +115,28 @@
       "additionalProperties": false,
       "required": ["rate_limit_key", "max_runtime_key"],
       "properties": {
-        "rate_limit_key": {"type": "string"},
-        "max_runtime_key": {"type": "string"}
+        "rate_limit_key": {
+          "type": "string"
+        },
+        "max_runtime_key": {
+          "type": "string"
+        }
       }
     },
     "freshness": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "gold_marts": {"type": "array", "items": {"type": "string"}, "description": "Optional fallback; auto-derived from the dbt manifest (models tagged 'marts')."},
-        "gold_lag_hours": {"type": ["number", "string"]}
+        "gold_marts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional fallback; auto-derived from the dbt manifest (models tagged 'marts')."
+        },
+        "gold_lag_hours": {
+          "type": ["number", "string"]
+        }
       }
     }
   }

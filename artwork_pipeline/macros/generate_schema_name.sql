@@ -8,7 +8,7 @@
 --    dbt concatenates target.schema + custom_schema_name with an underscore.
 --    With target.schema = 'SILVER' and +schema: 'GOLD' in dbt_project.yml,
 --    the default produces: SILVER_GOLD (not what we want).
---    We want: GOLD (the custom_schema_name used verbatim).
+--    We want: GOLD (the custom_schema_name used verbatim) in production.
 --
 -- 2. Why VERBATIM and not PREFIX:
 --    Our architecture has distinct schemas (BRONZE, SILVER, GOLD) at the same
@@ -27,17 +27,12 @@
 --      CON: Adding a new schema requires editing this macro IN ADDITION TO
 --           creating it in IaC. This is intentional friction -- it forces a
 --           deliberate decision, not an accident.
---    Alternative rejected: no allowlist, just pass through. This would work
---    today (Snowflake RBAC blocks unauthorized schemas anyway), but loses the
---    compile-time guardrail and the explicit documentation of intent.
 --
--- 4. No per-developer prefix (DEV_<user>_SILVER):
---    We are a solo-developer project today. The multi-developer pattern
---    (Layer 4 of the governance proposal) adds branching on target.name here.
---    That is NOT implemented because it introduces complexity we don't need
---    and requires the DBA to pre-create per-developer schemas (or grant
---    CREATE SCHEMA on a dev database). Deferred to the multi-developer
---    milestone. When adopted, this macro is the single place to add it.
+-- 4. Per-developer prefix:
+--    We have implemented the multi-developer pattern. Local runs (e.g., target 'dev')
+--    will concatenate the developer's default schema (e.g., dbt_daniel) with
+--    the custom schema (e.g., GOLD) to produce dbt_daniel_GOLD.
+--    Production and snowflake-native targets bypass this and use the verbatim schema.
 --
 -- 5. Why this is in the dbt layer (not IaC):
 --    This macro controls what SQL dbt GENERATES. It is logic about dbt's
@@ -57,14 +52,25 @@
 {% macro generate_schema_name(custom_schema_name, node) -%}
 
     {% set allowed_schemas = ['SILVER', 'GOLD', 'DBT_TEST__AUDIT'] %}
+    {% set default_schema = target.schema %}
 
     {%- if custom_schema_name is none -%}
-        {# No +schema declared on the model; use the target default (SILVER). #}
-        {{ target.schema }}
+        {# No +schema declared on the model; use the target default. #}
+        {{ default_schema }}
+        
     {%- elif custom_schema_name | upper in allowed_schemas -%}
-        {# Approved schema: use verbatim (no prefix concatenation). #}
-        {{ custom_schema_name | upper }}
+        {# Approved schema: route based on execution context #}
+        
+        {%- if target.name in ['prod', 'snowflake'] -%}
+            {# Production or Snowflake-native: use verbatim (no prefix concatenation). #}
+            {{ custom_schema_name | upper }}
+        {%- else -%}
+            {# Local dev run: concatenate the developer's schema with the custom schema #}
+            {{ default_schema }}_{{ custom_schema_name | upper }}
+        {%- endif -%}
+
     {%- else -%}
+        {# Unapproved schema: fail early #}
         {{ exceptions.raise_compiler_error(
             "Schema '" ~ custom_schema_name ~ "' is not in the approved list: "
             ~ allowed_schemas | join(', ') ~ ". "

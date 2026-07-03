@@ -41,7 +41,9 @@ BATCH_PREFIX_DELTA = "delta"
 
 @dataclass
 class Config:
-    """Runtime configuration for the AIC extraction pipeline."""
+    """
+    Runtime configuration for the AIC extraction pipeline.
+    """
 
     # Local file paths for the downloaded dump and extracted data.
     data_dir: Path = field(
@@ -74,6 +76,8 @@ class Config:
     snowflake_stage: str = "bronze_load_stage"
 
     def ensure_paths(self) -> None:
-        """Create parent directories for local data files if missing."""
+        """
+        Create parent directories for local data files if missing.
+        """
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.tar_path.parent.mkdir(parents=True, exist_ok=True)

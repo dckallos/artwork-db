@@ -1,4 +1,5 @@
-"""Asset-check + freshness-check factory (generated from SourceSpecs).
+"""
+Asset-check + freshness-check factory (generated from SourceSpecs).
 
 Two sources of checks:
   * Non-empty checks -- auto-generated for every ``Produces(nonempty=True)`` table.
@@ -19,9 +20,13 @@ from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey, asset_check
 
 from .._snowflake import render, sf_scalars
 from ..config import BRONZE
+from ..enums import Severity
 from ..spec import HealthCheck, Produces, SourceSpec
 
-_SEVERITY = {"ERROR": AssetCheckSeverity.ERROR, "WARN": AssetCheckSeverity.WARN}
+_SEVERITY = {
+    Severity.ERROR: AssetCheckSeverity.ERROR,
+    Severity.WARN: AssetCheckSeverity.WARN,
+}
 
 
 def _unverified() -> AssetCheckResult:
@@ -83,7 +88,9 @@ def _custom_check(spec: SourceSpec, hc: HealthCheck):
 
 
 def build_source_checks(spec: SourceSpec) -> List:
-    """Auto non-empty checks + declared custom checks for one source."""
+    """
+    Auto non-empty checks + declared custom checks for one source.
+    """
     checks: List = []
     for _step, produced in spec.iter_produces():
         if produced.nonempty:
@@ -98,7 +105,8 @@ def build_freshness_checks(
     gold_assets: Sequence[str] = (),
     gold_lag_hours: float = 30,
 ) -> List:
-    """Freshness checks for every ``Produces(freshness_days=...)`` + the dbt Gold marts.
+    """
+    Freshness checks for every ``Produces(freshness_days=...)`` + the dbt Gold marts.
 
     Imported defensively: on a Dagster build without the freshness helper this
     degrades to [] rather than breaking the whole code location.

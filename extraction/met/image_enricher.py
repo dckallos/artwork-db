@@ -71,7 +71,8 @@ WHERE object_id = :object_id;
 
 
 class _RateLimiter:
-    """Adaptive token-bucket-style limiter.
+    """
+    Adaptive token-bucket-style limiter.
 
     Enforces a minimum interval between successive acquisitions, AND adapts the
     target RPS in response to throttle signals (a la the owner's prior project):
@@ -107,7 +108,9 @@ class _RateLimiter:
         return self._rps
 
     def acquire(self) -> None:
-        """Block until it is safe to issue another request."""
+        """
+        Block until it is safe to issue another request.
+        """
         min_interval = 1.0 / self._rps if self._rps > 0 else 0.1
         now = time.monotonic()
         wait = self._next_allowed - now
@@ -117,7 +120,9 @@ class _RateLimiter:
         self._next_allowed = now + min_interval
 
     def note_throttle(self) -> None:
-        """Throttle observed; after 3 in a row, decay RPS by 30 percent."""
+        """
+        Throttle observed; after 3 in a row, decay RPS by 30 percent.
+        """
         self._throttle_burst += 1
         if self._throttle_burst >= 3:
             self._rps = max(self._min_rps, self._rps * 0.7)
@@ -130,7 +135,9 @@ class _RateLimiter:
             logger.debug("Adaptive RPS dropped to %.2f after throttle burst", self._rps)
 
     def cool_up(self) -> None:
-        """Successful response; edge RPS back up toward the ceiling."""
+        """
+        Successful response; edge RPS back up toward the ceiling.
+        """
         # Reset burst counter so isolated 403s don't compound across long runs.
         self._throttle_burst = 0
         new = min(self._max_rps, self._rps * 1.05)
@@ -139,7 +146,8 @@ class _RateLimiter:
 
 
 class _ThrottleGate:
-    """Global backoff gate.
+    """
+    Global backoff gate.
 
     When a request observes a throttle (403/429/5xx), it signals the gate.
     The gate computes a global backoff_until timestamp using exponential backoff
@@ -159,7 +167,9 @@ class _ThrottleGate:
         self.chronic = False
 
     def signal_throttle(self, retry_after_hint: Optional[float]) -> None:
-        """A throttle was observed; extend the global pause."""
+        """
+        A throttle was observed; extend the global pause.
+        """
         self._consecutive_throttles += 1
         self._history.append(False)
         if retry_after_hint is not None and retry_after_hint > 0:
@@ -197,14 +207,18 @@ class _ThrottleGate:
                     )
 
     def wait_if_paused(self) -> None:
-        """Block until the global backoff window has elapsed."""
+        """
+        Block until the global backoff window has elapsed.
+        """
         now = time.monotonic()
         wait = self._backoff_until - now
         if wait > 0:
             time.sleep(wait)
 
     def note_success(self) -> None:
-        """A non-throttle response was received; reset the escalation."""
+        """
+        A non-throttle response was received; reset the escalation.
+        """
         self._consecutive_throttles = 0
         self._history.append(True)
         if self.chronic:
@@ -218,7 +232,8 @@ class _ThrottleGate:
 
 
 def _retry_after_seconds(resp: requests.Response) -> Optional[float]:
-    """Parse the `Retry-After` response header into a non-negative seconds delay.
+    """
+    Parse the `Retry-After` response header into a non-negative seconds delay.
 
     The header may be either:
       - a delta-seconds integer/float (e.g. "120"), or
@@ -243,7 +258,9 @@ def _retry_after_seconds(resp: requests.Response) -> Optional[float]:
 
 
 def _pending_object_ids(conn: sqlite3.Connection) -> List[int]:
-    """Return all object_ids whose enrichment_status is 'pending' or 'error'."""
+    """
+    Return all object_ids whose enrichment_status is 'pending' or 'error'.
+    """
     cur = conn.execute(
         "SELECT object_id FROM met_artworks "
         "WHERE enrichment_status IN ('pending', 'error') "
@@ -261,7 +278,8 @@ def _fetch_one(
     max_retries: int,
     timeout: float = 20,
 ) -> Tuple[int, str, Optional[Dict[str, Any]], Optional[str]]:
-    """Fetch a single Met object record with global throttle gate.
+    """
+    Fetch a single Met object record with global throttle gate.
 
     Returns: (object_id, status, payload_or_None, error_message_or_None)
     where status is one of: 'done', 'no_image', 'error'.
@@ -355,7 +373,9 @@ def _apply_result(
     payload: Optional[Dict[str, Any]],
     error_message: Optional[str],
 ) -> None:
-    """Persist a single API result back to SQLite."""
+    """
+    Persist a single API result back to SQLite.
+    """
     now_iso = datetime.now(timezone.utc).isoformat()
     if status == "done" and payload is not None:
         additional = payload.get("additionalImages") or []
@@ -390,7 +410,9 @@ def _enrich_sync(
     object_ids: List[int],
     progress_every: int = 500,
 ) -> Dict[str, int]:
-    """Drive the serial fetch loop and persist results to SQLite."""
+    """
+    Drive the serial fetch loop and persist results to SQLite.
+    """
     counters: Dict[str, int] = {"done": 0, "no_image": 0, "error": 0}
     rate_limiter = _RateLimiter(config.api_requests_per_second)
     throttle_gate = _ThrottleGate()
@@ -449,7 +471,9 @@ def _enrich_sync(
 
 
 def enrich(config: Config) -> Dict[str, int]:
-    """Enrich every pending/error row. Returns final status counts."""
+    """
+    Enrich every pending/error row. Returns final status counts.
+    """
     initialize_database(config.sqlite_path)
 
     with connect(config.sqlite_path) as conn:

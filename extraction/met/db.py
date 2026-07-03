@@ -17,7 +17,8 @@ from typing import Iterator
 
 
 def load_sql(name: str) -> str:
-    """Read a ``.sql`` file from the ``extraction.met.sql`` package.
+    """
+    Read a ``.sql`` file from the ``extraction.met.sql`` package.
 
     Centralizing this in one place lets every module use the same loader.
     """
@@ -25,7 +26,8 @@ def load_sql(name: str) -> str:
 
 
 def strip_sql_comments(sql: str) -> str:
-    """Remove ``--`` line comments from a SQL string.
+    """
+    Remove ``--`` line comments from a SQL string.
 
     WHY THIS EXISTS: the Snowflake connector pyformat-binds the ENTIRE command
     string when params are passed (``command % params``), and it does not know
@@ -45,7 +47,9 @@ def strip_sql_comments(sql: str) -> str:
 
 
 def initialize_database(sqlite_path: Path) -> None:
-    """Create the SQLite database file and apply the schema if missing."""
+    """
+    Create the SQLite database file and apply the schema if missing.
+    """
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.executescript(load_sql("schema.sql"))
@@ -54,7 +58,9 @@ def initialize_database(sqlite_path: Path) -> None:
 
 @contextmanager
 def connect(sqlite_path: Path) -> Iterator[sqlite3.Connection]:
-    """Yield a SQLite connection with Row factory; closes on exit."""
+    """
+    Yield a SQLite connection with Row factory; closes on exit.
+    """
     conn = sqlite3.connect(str(sqlite_path))
     conn.row_factory = sqlite3.Row
     try:

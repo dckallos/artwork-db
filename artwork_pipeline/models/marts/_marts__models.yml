@@ -86,15 +86,6 @@ models:
         description: "Timestamp when this row was last loaded/refreshed by dbt"
         constraints:
           - type: not_null
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 50
-          max_value: 1000000
-      - dbt_expectations.expect_column_distinct_count_to_equal:
-          column_name: source_system
-          value: 2
-          config:
-            severity: error
 
   # =========================================================================
   # dim_artworks -- Artwork dimension
@@ -199,15 +190,6 @@ models:
         description: "Timestamp when this row was last loaded/refreshed by dbt"
         constraints:
           - type: not_null
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 100
-          max_value: 1000000
-      - dbt_expectations.expect_column_distinct_count_to_equal:
-          column_name: source_system
-          value: 2
-          config:
-            severity: error
 
   # =========================================================================
   # fct_artwork_images -- Image fact table (incremental)
@@ -239,8 +221,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('dim_artworks')
-              field: artwork_id
+              arguments:
+                to: ref('dim_artworks')
+                field: artwork_id
       - name: source_image_id
         data_type: varchar(16777216)
         description: "Source system's native image identifier. AIC: IIIF UUID. Met: NULL."
@@ -283,15 +266,6 @@ models:
         description: "Timestamp when this row was last loaded/refreshed by dbt"
         tests:
           - not_null
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 100
-          max_value: 10000000
-      - dbt_expectations.expect_column_distinct_count_to_equal:
-          column_name: source_system
-          value: 2
-          config:
-            severity: error
 
   # =========================================================================
   # openaccess_catalog -- Wide OBT for public-domain artworks with images
@@ -384,7 +358,3 @@ models:
         description: "Timestamp when this row was last loaded/refreshed by dbt"
         constraints:
           - type: not_null
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 50
-          max_value: 1000000

@@ -1,0 +1,33 @@
+# Fixture dbt profiles.yml for _connection unit tests. Exercises multiple auth methods and
+# env_var() rendering (with and without defaults). No real secrets.
+artwork_test:
+  target: keypair
+  outputs:
+    # Key-pair auth (the project's default identity).
+    keypair:
+      type: snowflake
+      account: acct_kp
+      user: usr_kp
+      role: TEST_ROLE
+      warehouse: TEST_WH
+      database: TEST_DB
+      schema: TEST_SCHEMA
+      private_key_path: "~/keys/test_rsa_key.p8"
+      private_key_passphrase: kp_secret
+
+    # OAuth bearer token.
+    oauth:
+      type: snowflake
+      account: acct_oauth
+      user: usr_oauth
+      authenticator: oauth
+      token: oauth_token_value
+
+    # env_var() rendering: account/key have NO default (must be set or resolution raises);
+    # user has a default. account is listed FIRST so the no-default-raises test fails on it.
+    rendered:
+      type: snowflake
+      account: "{{ env_var('ARTWORK_TEST_ACCOUNT') }}"
+      user: "{{ env_var('ARTWORK_TEST_USER', 'fallback_user') }}"
+      role: TEST_ROLE
+      private_key_path: "{{ env_var('ARTWORK_TEST_KEY') }}"

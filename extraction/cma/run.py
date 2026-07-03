@@ -1,4 +1,5 @@
-"""Placeholder CMA (Cleveland Museum of Art) extraction CLI.
+"""
+Placeholder CMA (Cleveland Museum of Art) extraction CLI.
 
 A STUB that proves the orchestration "add a museum" path without real network work.
 Honors the CLI contract used by the orchestration layer's subprocess runner:

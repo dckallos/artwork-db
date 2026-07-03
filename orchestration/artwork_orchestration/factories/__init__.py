@@ -1,1 +1,3 @@
-"""Factories that build Dagster objects from the source registry."""
+"""
+Factories that build Dagster objects from the source registry.
+"""
