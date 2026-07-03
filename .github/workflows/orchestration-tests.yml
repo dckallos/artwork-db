@@ -22,6 +22,15 @@ on:
       - ".github/workflows/orchestration-tests.yml"
   workflow_dispatch: {}
 
+# Least privilege (H4): this workflow only needs to read the repo.
+permissions:
+  contents: read
+
+# Per-workflow + ref concurrency (H4): cancel superseded in-flight runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pytest:
     runs-on: ubuntu-latest

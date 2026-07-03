@@ -1,30 +1,151 @@
 # =============================================================================
-# ci.yml -- PR checks for the artwork dbt project (checks-only)
+# ci.yml -- PR checks for artwork-db, gated by the always-emitting `ci-required`.
 # =============================================================================
-# Runs the SAME steps as scripts/ci/ci_local.sh. While the project is in
-# local-only development this workflow is inert until you push to GitHub and
-# add the SNOWFLAKE_* / key-pair secrets below. It does NOT run a full
-# `dbt build` (no dev/prod isolation yet), so it never writes to prod schemas.
+# H2 fix (plan §2.2): this workflow triggers on EVERY pull request (no top-level
+# `paths:` filter) and ends in a single aggregate job, `ci-required`, that always
+# runs. Branch protection requires ONLY that aggregate context (set by
+# `ghclient ci reconcile`) -- never a path-filtered job name -- so docs-only or
+# tools/github-only PRs no longer deadlock waiting for a check that never emits.
 #
-# Required repo secrets (Settings > Secrets and variables > Actions):
+# Path-specific, credentialed work (the dbt checks) is isolated in the `dbt-checks`
+# job, which only runs when dbt-relevant paths change; `ci-required` treats a
+# legitimately skipped job as success.
+#
+# Required repo secrets for dbt-checks (Settings > Secrets and variables > Actions):
 #   SNOWFLAKE_ACCOUNT
-#   DBT_SNOWFLAKE_USER               (e.g. ARTWORK_TRANSFORMER_SVC)
+#   DBT_SNOWFLAKE_USER               (a dedicated low-privilege CI user, e.g.
+#                                     ARTWORK_TRANSFORMER_SVC -- never ACCOUNTADMIN, H3)
 #   DBT_SNOWFLAKE_PRIVATE_KEY        (full PEM contents of the .p8 key)
 #   DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE  (optional; "" if none)
+#
+# NOTE: no job here ever runs `ghclient ... --apply` (H4). GitHub-side required-check
+# settings are managed out-of-band by a maintainer running `ghclient ci reconcile`.
 # =============================================================================
 name: dbt-ci
 
 on:
-  pull_request:
-    paths:
-      - "artwork_pipeline/**"
-      - "scripts/ci/**"
-      - ".sqlfluff"
-      - ".github/workflows/ci.yml"
+  pull_request: {}
+  push:
+    branches: ["main"]
   workflow_dispatch: {}
 
+# Least privilege by default; individual jobs opt into more only if needed (H4).
+permissions:
+  contents: read
+
+# Per-workflow + ref concurrency (never a blanket group): a newer push to the same
+# ref cancels the older in-flight run (H4).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  checks:
+  # Detect whether dbt-relevant paths changed, so the credentialed job can be skipped
+  # on docs-only / tooling-only PRs without deadlocking the required aggregate.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dbt: ${{ steps.filter.outputs.dbt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base="${BASE_SHA:-$BEFORE_SHA}"
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            # Fail safe: if we cannot determine the base, run the dbt checks.
+            echo "dbt=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$base" HEAD \
+              | grep -Eq '^(artwork_pipeline/|scripts/ci/|\.sqlfluff$)'; then
+            echo "dbt=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dbt=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Lint all workflow YAML (also runs shellcheck on embedded run: scripts).
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint
+        shell: bash
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+      - name: Run actionlint
+        shell: bash
+        run: ./actionlint -color
+
+  # ShellCheck the standalone shell scripts (shellcheck is preinstalled on ubuntu).
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(scripts/*.sh scripts/**/*.sh tools/github/wrappers/*.sh)
+          printf 'shellcheck: %s\n' "${files[@]}"
+          shellcheck "${files[@]}"
+
+  # Installed-package smoke + offline unit/integration suite for the ghclient tool (H4).
+  github-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tools/github/pyproject.toml
+      - name: Install ghclient (editable, with dev extras)
+        run: pip install -e "tools/github[dev]"
+      - name: CLI smoke
+        run: ghclient --help
+      - name: Unit + integration tests (offline; PYTHONPATH cleared)
+        env:
+          PYTHONPATH: ""
+        run: pytest tools/github/tests
+
+  # Fast repo-wide Python gates: byte-compile + docstring house style.
+  py-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Byte-compile the ghclient package
+        run: python -m py_compile tools/github/ghclient/*.py
+      - name: Docstring house style
+        run: python3 scripts/normalize_docstrings.py --check
+
+  # H7 authorship guard -- ADVISORY-first: reports markers but never blocks a merge
+  # (it is intentionally NOT a dependency of ci-required). Promote to a required gate
+  # only after the hardening in plan §13.1 H7 has soaked. Needs full history to
+  # resolve the PR base ref, hence fetch-depth: 0.
+  authorship-guard:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for automated AI-authorship markers (advisory)
+        shell: bash
+        run: bash scripts/check_no_attribution.sh
+
+  # Path-specific, credentialed dbt checks -- only when dbt paths changed.
+  dbt-checks:
+    needs: changes
+    if: needs.changes.outputs.dbt == 'true'
     runs-on: ubuntu-latest
     env:
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -33,25 +154,54 @@ jobs:
       SNOWFLAKE_DATABASE: ARTWORK_DB
       SNOWFLAKE_WAREHOUSE: ARTWORK_WH
       DBT_SNOWFLAKE_ROLE: ARTWORK_TRANSFORMER
-      # dbt's key-pair auth reads the key from a file path.
       DBT_SNOWFLAKE_PRIVATE_KEY_PATH: ${{ github.workspace }}/ci_rsa_key.p8
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+          cache: pip
+          cache-dependency-path: requirements.txt
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install sqlfluff sqlfluff-templater-dbt
-
       - name: Write private key from secret
+        env:
+          DBT_SNOWFLAKE_PRIVATE_KEY: ${{ secrets.DBT_SNOWFLAKE_PRIVATE_KEY }}
         run: |
-          printf '%s' "${{ secrets.DBT_SNOWFLAKE_PRIVATE_KEY }}" > "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH"
+          printf '%s' "$DBT_SNOWFLAKE_PRIVATE_KEY" > "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH"
           chmod 600 "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH"
-
       - name: Run CI checks (compile + lint + unit tests)
         run: bash scripts/ci/ci_local.sh
+
+  # The single always-emitting required context (H2). Depends on every gating job and
+  # succeeds unless one of them failed or was cancelled; a legitimately skipped job
+  # (e.g. dbt-checks on a docs-only PR) does not fail the aggregate.
+  ci-required:
+    name: ci-required
+    needs: [changes, actionlint, shellcheck, github-client, py-quality, dbt-checks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all gating jobs passed (skipped is allowed)
+        shell: bash
+        env:
+          RESULTS: >-
+            ${{ needs.changes.result }}
+            ${{ needs.actionlint.result }}
+            ${{ needs.shellcheck.result }}
+            ${{ needs.github-client.result }}
+            ${{ needs.py-quality.result }}
+            ${{ needs.dbt-checks.result }}
+        run: |
+          echo "gating job results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::a required job did not pass (result=$r)"
+              exit 1
+            fi
+          done
+          echo "All required jobs passed or were legitimately skipped."
+          
