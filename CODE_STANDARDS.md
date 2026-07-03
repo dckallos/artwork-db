@@ -165,8 +165,11 @@ class ProduceSpec:
   triple-quoted string statement) opens with `"""` alone on its line and closes with `"""`
   alone on its line — even one-line docstrings. Never glue the first line of prose to the
   opening quotes, and never leave the whole docstring on a single line. `scripts/normalize_docstrings.py`
-  enforces and auto-fixes this (`--check` in CI, `--write` to apply); it is AST-based, so it
+  checks and auto-fixes this (`--check` to report, `--write` to apply); it is AST-based, so it
   only rewrites docstrings/statement strings and never touches triple-quoted string *values*.
+  It is wired as an **opt-in** `manual` pre-commit hook (`pre-commit run --hook-stage manual
+  normalize-docstrings --all-files`) while the existing tree is normalized incrementally — it
+  is not yet a hard CI gate, so run it on any file you touch before you push.
 - **Imports:** stdlib, third-party, local — grouped and ordered. Lazy-import heavy/optional
   deps at first use.
 - **No dead code, no speculative abstractions, no backwards-compat shims.** Delete unused

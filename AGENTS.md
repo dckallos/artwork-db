@@ -52,6 +52,20 @@ these forward without regressing the grep gate.
 
 ## Non-negotiables
 
+- **Docstring format is house style, not PEP 257 default.** Every triple-quoted docstring
+  puts `"""` **alone on its own line** at the open AND close — including one-liners. Never
+  glue prose to the opening quotes; never collapse a docstring onto one line. This differs
+  from the editor/formatter default, so it is easy to get wrong — get it right the first
+  time. Enforcer: `python3 scripts/normalize_docstrings.py --check` (`--write` to fix).
+
+  ```python
+  # REQUIRED                          # WRONG (do not produce either of these)
+  def f():                            def f():
+      """                                 """Summary glued to the quotes.
+      Summary on its own line.            """
+      """                             def g():
+                                          """One-liner on a single line."""
+  ```
 - **No import-time side effects** that touch the network, disk-mutating dbt, or
   credentials. Importing a module must be safe in a bare test process.
 - **Config is data.** New knobs go in `framework.yaml`/`sources/*.yaml` + the typed model +
