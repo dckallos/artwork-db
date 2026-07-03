@@ -1,0 +1,8 @@
+repo: octocat/hello-world
+
+branch_protection:
+  branches:
+    main:
+      policy: policies/policy.main.json
+      # `enforce_admin` is a typo for `required_checks_from_workflows` -> must be rejected.
+      enforce_admin: true

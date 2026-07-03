@@ -1,0 +1,6 @@
+repo: octocat/hello-world
+
+branch_protection:
+  branches:
+    main:
+      policy: policies/does-not-exist.json

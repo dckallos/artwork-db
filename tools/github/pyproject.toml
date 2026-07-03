@@ -1,0 +1,45 @@
+# =============================================================================
+# tools/github/pyproject.toml -- the `ghclient` GitHub governance client
+# =============================================================================
+# Standalone, installable package (plan §11). Install (editable) into a venv:
+#   pip install -e tools/github
+# Then use the CLI:
+#   ghclient preflight
+#   ghclient branch-protection apply            # dry-run by default
+#   ghclient branch-protection apply --apply     # mutate (maintainer, authed gh)
+#
+# Kept OUT of the repo-root requirements and the orchestration package: this is a
+# maintainer-side governance tool, not part of the extraction/dbt/Dagster runtime.
+# =============================================================================
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "artwork-github-client"
+version = "0.1.0"
+description = "YAML-driven GitHub governance client (branch protection, secrets, CI) for artwork-db."
+requires-python = ">=3.9"
+dependencies = [
+    "typer>=0.12",   # CLI verb dispatch (plan §12.2.1; reversible to argparse/click)
+    "PyYAML>=6",     # parse config/github-client-config.yml
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[project.scripts]
+ghclient = "ghclient.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ghclient*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Unit tests are offline and marked no-network; nothing here reaches GitHub.
+addopts = "-ra"
+markers = [
+    "no_network: test must never perform a live network / gh call (default for this suite).",
+]

@@ -36,6 +36,11 @@ orchestration/dagster_home/.logs_queue/
 orchestration/dagster_home/.telemetry/
 .dagster/
 
+# --- GitHub client (ghclient) ---
+# Generated branch-protection before-state snapshots (plan section 12.2.3).
+tools/github/policies/exports/*
+!tools/github/policies/exports/.gitignore
+
 # --- OS / IDE ---
 .DS_Store
 Thumbs.db
