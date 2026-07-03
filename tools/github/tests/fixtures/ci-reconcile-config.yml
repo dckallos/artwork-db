@@ -1,3 +1,5 @@
+# Fixture config for `ci reconcile` tests: workflows resolve under the fixtures dir
+# (workflows_root=fixtures_dir), so `workflow-normal.yml` sits alongside this file.
 repo: octocat/hello-world
 
 branch_protection:
@@ -6,12 +8,8 @@ branch_protection:
       policy: policies/policy.main.json
       required_checks_from_workflows: true
 
-snowflake_secrets:
-  source: ~/.snowflake/connections.toml
-  profiles: {}
-
 ci:
   workflows:
-    - .github/workflows/ci.yml
+    - workflow-normal.yml
   required_checks: auto
   aggregate_context: ci-required

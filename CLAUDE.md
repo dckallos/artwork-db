@@ -39,6 +39,54 @@ bash scripts/orchestration/doctor_orchestration.sh       # import/env health
 
 Re-run the grep gate and confirm **0** hits in framework `.py`.
 
+## Session continuity & Cortex fork awareness (MANDATORY)
+
+A connection break can silently spawn a **forked agent** that resumes mid-task. Two forks
+editing the same files — the "Cortex fork" hazard — is the most destructive failure mode in
+this repo; it has already happened (see `session-progress-log.md`: fork-39b1c4 vs an unlogged
+"Fork B" clobbered each other's registry refactor). Defend against it **every** session:
+
+- **Mint a unique fork id at startup** (e.g. `fork-<6 hex>`) and prefix every log line with it:
+  `[fork-ab12cd][<UTC ISO8601>] <message>`. Never reuse another session's id.
+- **Append to `session-progress-log.md` via a `bash` call after every meaningful action**
+  (a write, a delete, a validation, a decision). A `bash` tool call is a durable checkpoint —
+  process state is preserved up to that call — and the log is the *only* channel a parallel
+  fork can see. Small, frequent entries beat one end-of-task summary.
+- **Read the log tail before each append.** If a **different** fork id appears — or you see
+  files/mtimes you did not create — a parallel Cortex fork is live. **STOP** and reconcile
+  (inform the maintainer) *before* any destructive action (delete / overwrite / `--apply`).
+- **Trust disk over your context.** Prior forks may have advanced files beyond what your
+  context shows (tool reads can return stale/elided snapshots). **Re-read a file in full
+  immediately before editing it**; never assume your context matches disk. This applies to
+  already-"done" work (e.g. Area A): verify on-disk state, don't rebuild from memory.
+- **Prefer `web_search` over stale memory** for anything external (GitHub REST/Actions syntax,
+  `gh` flags, actionlint/shellcheck); verify current docs, then cite sources.
+
+Append pattern (workspace FS lacks `O_APPEND`; `sed -i` fails on rename — use read-rewrite).
+If `bash` is restricted to non-mutating commands mid-session, fall back to the edit tool but
+keep the read-then-append discipline:
+
+```bash
+FORK=fork-ab12cd; TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+python3 - "$FORK" "$TS" <<'PY'
+import sys, pathlib
+fork, ts = sys.argv[1], sys.argv[2]
+p = pathlib.Path("session-progress-log.md")
+p.write_text(p.read_text() + f"[{fork}][{ts}] REPLACE-with-what-just-happened\n")
+PY
+```
+
+## Sandbox gotchas (learned in Area A)
+
+- The workspace `/workspace` symlink can **remount to a new stage path** mid-session. Resolve
+  `ROOT=$(pwd -P)` and use absolute paths; if a file tool says "not found", re-resolve.
+- pytest: run `PYTHONDONTWRITEBYTECODE=1 /usr/sbin/pytest ... -p no:cacheprovider` (bytecode
+  writes hit an I/O error on the stage FS). CI clears `PYTHONPATH`; in this sandbox `pluggy`
+  lives on the ambient `PYTHONPATH`, so run locally with it intact.
+- `bash scripts/orchestration/doctor_orchestration.sh` **FAILs in a bare sandbox** (no venv /
+  no `dagster` install) — that is an env limitation, not a regression. It is green only where
+  `pip install -e orchestration` has run.
+
 ## Working style
 
 - Small, reviewable changes sliced along the issue #6 phases. Don't refactor unrelated code.

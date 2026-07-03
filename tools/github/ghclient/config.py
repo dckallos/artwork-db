@@ -84,13 +84,33 @@ class BranchProtectionCfg:
 
 
 @dataclass(frozen=True)
+class CiCfg:
+    """
+    The ``ci`` block: which workflows feed the required-check reconcile and the name of
+    the always-emitting aggregate context (H2).
+
+    ``aggregate_context`` is the single stable status name that ``ci reconcile`` sets as
+    the branch's required check -- never a path-filtered job name (which would deadlock
+    docs-only PRs). ``workflows`` are repo-relative paths (e.g.
+    ``.github/workflows/ci.yml``); the aggregate job must be defined in one of them.
+    ``source`` is the config file path so consumers can raise file-scoped errors.
+    """
+
+    workflows: Tuple[str, ...]
+    aggregate_context: str
+    required_checks: str = "auto"
+    source: str = _CONFIG_REL
+
+
+@dataclass(frozen=True)
 class GithubClientConfig:
     """
     The parsed, validated client configuration.
 
-    ``raw_secrets`` / ``raw_ci`` are the untouched blocks consumed by Areas B/C; Area A
-    validates only that they are mappings so the schema stays stable without coupling to
-    behavior that does not exist yet.
+    ``raw_secrets`` is the untouched ``snowflake_secrets`` block consumed by Area B; Area
+    A validates only that it is a mapping so the schema stays stable without coupling to
+    behavior that does not exist yet. ``ci`` is the typed Area-C block, or ``None`` when
+    the config declares no ``ci:`` section.
     """
 
     repo: str
@@ -98,7 +118,7 @@ class GithubClientConfig:
     config_path: Path
     base_dir: Path
     raw_secrets: Mapping[str, Any]
-    raw_ci: Mapping[str, Any]
+    ci: Optional[CiCfg]
 
     @property
     def exports_dir(self) -> Path:
@@ -106,6 +126,14 @@ class GithubClientConfig:
         Where before-state snapshots are written (gitignored): ``policies/exports/``.
         """
         return self.base_dir / "policies" / "exports"
+
+    @property
+    def repo_root(self) -> Path:
+        """
+        The repository root, derived from the config file's standard ``<root>/config/``
+        location; ``ci.workflows`` (repo-relative paths) resolve against it.
+        """
+        return self.config_path.resolve().parent.parent
 
 
 # --------------------------------------------------------------------------- #
@@ -179,7 +207,7 @@ def load_config(
     branch_protection = _parse_branch_protection(source, root, top.get("branch_protection", {}))
 
     raw_secrets = _require_mapping(source, "snowflake_secrets", top.get("snowflake_secrets", {}))
-    raw_ci = _require_mapping(source, "ci", top.get("ci", {}))
+    ci = _parse_ci(source, top.get("ci")) if "ci" in top else None
 
     return GithubClientConfig(
         repo=repo,
@@ -187,7 +215,7 @@ def load_config(
         config_path=path,
         base_dir=root,
         raw_secrets=raw_secrets,
-        raw_ci=raw_ci,
+        ci=ci,
     )
 
 
@@ -233,3 +261,48 @@ def _parse_branch_protection(source: str, base_dir: Path, value: Any) -> BranchP
         )
 
     return BranchProtectionCfg(branches=tuple(policies), source=source)
+
+
+_CI_ALLOWED_KEYS = {"workflows", "required_checks", "aggregate_context"}
+_CI_REQUIRED_CHECK_MODES = {"auto"}
+
+
+def _parse_ci(source: str, value: Any) -> CiCfg:
+    """
+    Validate the ``ci`` block into a :class:`CiCfg` (workflows, mode, aggregate context).
+
+    ``workflows`` must be a non-empty list of workflow paths, ``aggregate_context`` a
+    non-empty string, and ``required_checks`` (optional, default ``auto``) one of the
+    supported modes. Every failure is scoped to ``ci.<field>``.
+    """
+    block = _require_mapping(source, "ci", value)
+    _reject_unknown(source, "ci", block, _CI_ALLOWED_KEYS)
+
+    if "workflows" not in block:
+        raise ConfigError(source, "ci.workflows", "required key is missing")
+    workflows_raw = block["workflows"]
+    if not isinstance(workflows_raw, list) or not workflows_raw:
+        raise ConfigError(source, "ci.workflows", "expected a non-empty list of workflow paths")
+    workflows = tuple(
+        _require_str(source, f"ci.workflows[{i}]", wf) for i, wf in enumerate(workflows_raw)
+    )
+
+    if "aggregate_context" not in block:
+        raise ConfigError(source, "ci.aggregate_context", "required key is missing")
+    aggregate_context = _require_str(source, "ci.aggregate_context", block["aggregate_context"])
+
+    required_checks = block.get("required_checks", "auto")
+    if not isinstance(required_checks, str) or required_checks not in _CI_REQUIRED_CHECK_MODES:
+        allowed = ", ".join(sorted(_CI_REQUIRED_CHECK_MODES))
+        raise ConfigError(
+            source,
+            "ci.required_checks",
+            f"expected one of: {allowed}",
+        )
+
+    return CiCfg(
+        workflows=workflows,
+        aggregate_context=aggregate_context,
+        required_checks=required_checks,
+        source=source,
+    )

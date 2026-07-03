@@ -40,3 +40,7 @@ ci:
     - .github/workflows/orchestration-tests.yml
     - .github/workflows/ci.yml
   required_checks: auto
+  # H2: the single always-emitting aggregate status `ci reconcile` sets as the required
+  # check on protected branches -- must match the aggregate job in .github/workflows/ci.yml,
+  # never a path-filtered job name (which would deadlock docs-only PRs).
+  aggregate_context: ci-required

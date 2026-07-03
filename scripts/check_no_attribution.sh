@@ -7,9 +7,15 @@
 # intentionally NOT flagged, and a commit that merely DISCUSSES a marker (e.g. one
 # that removes them, or docs that quote one) is not flagged either.
 #
+# H7 hardening (plan §13.1): advisory-first in CI (the workflow runs it with
+# continue-on-error so it reports but never blocks yet); base-ref selection no longer
+# defaults to a sandbox branch; and file coverage is widened beyond code to docs,
+# YAML, shell, and workflow files.
+#
 # Why two pattern sets:
 #   - FILE_ERE  (broad): source-file headers, where CoCo writes the attribution
-#     header and tools write "Generated with ...". Scans *.py *.sql *.ipynb.
+#     header and tools write "Generated with ...". Scans *.py *.sql *.ipynb *.md
+#     *.yaml *.yml *.sh (the last three also cover .github/workflows/*.yml).
 #   - COMMIT_ERE (strict): only real trailers/footers/identity, anchored to their
 #     structural location (trailers/footers at line start; the author tag on the
 #     commit identity line), so prose that mentions a marker in a commit body is
@@ -56,7 +62,9 @@ COMMIT_ERE="${COMMIT_ERE}|(${AI_EMAILS})"
 COMMIT_ERE="${COMMIT_ERE}|claude\.(com/claude-code|ai/code)"
 COMMIT_ERE="${COMMIT_ERE}|^commit .*\\(aider\\)"
 
-GLOBS=( '*.py' '*.sql' '*.ipynb' )
+# Widened file coverage (H7): code + docs + YAML + shell. Workflow files under
+# .github/workflows/*.yml are covered by the *.yml glob.
+GLOBS=( '*.py' '*.sql' '*.ipynb' '*.md' '*.yaml' '*.yml' '*.sh' )
 MODE='all'   # all | files | commits
 
 err() { printf '%s\n' "$*" >&2; }
@@ -73,7 +81,7 @@ scan_explicit_files() {
   local f
   for f in "$@"; do
     case "$f" in
-      *.py|*.sql|*.ipynb)
+      *.py|*.sql|*.ipynb|*.md|*.yaml|*.yml|*.sh)
         [ -f "$f" ] && { grep -nHI -i -E -e "$FILE_ERE" -- "$f" 2>/dev/null || true; } ;;
     esac
   done | drop_allowed
@@ -84,9 +92,12 @@ resolve_base() {
   if [ -n "${GITHUB_BASE_REF:-}" ] && git rev-parse --verify -q "origin/${GITHUB_BASE_REF}" >/dev/null; then
     printf '%s' "origin/${GITHUB_BASE_REF}"; return
   fi
-  if git rev-parse --verify -q origin/donkey-kong-sandbox >/dev/null; then
-    printf '%s' "origin/donkey-kong-sandbox"; return
-  fi
+  # Prefer the repository's own default branch when reachable -- no hardcoded
+  # sandbox branch. origin/HEAD points at the remote default; fall back to main.
+  local ref
+  for ref in origin/HEAD origin/main main; do
+    if git rev-parse --verify -q "$ref" >/dev/null; then printf '%s' "$ref"; return; fi
+  done
   printf '%s' ''
 }
 

@@ -1,0 +1,6 @@
+name: broken
+on: {pull_request: {}}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+   name: bad-indent: [this is not: valid yaml

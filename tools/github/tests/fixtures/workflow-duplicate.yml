@@ -1,0 +1,15 @@
+# Fixture: two jobs sharing the same `name:` collapse to one deduped context + aggregate.
+name: duplicate-ci
+on:
+  pull_request: {}
+jobs:
+  build_a:
+    name: shared
+    runs-on: ubuntu-latest
+  build_b:
+    name: shared
+    runs-on: ubuntu-latest
+  ci-required:
+    runs-on: ubuntu-latest
+    needs: [build_a, build_b]
+    if: always()

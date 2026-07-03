@@ -102,6 +102,8 @@ def build_app():  # noqa: ANN201 - returns a typer.Typer; annotated loosely to a
     )
     bp = typer.Typer(help="Classic branch-protection: apply / export / rollback (dry-run default).")
     app.add_typer(bp, name="branch-protection")
+    ci_app = typer.Typer(help="CI governance: reconcile required checks to the aggregate (dry-run default).")
+    app.add_typer(ci_app, name="ci")
 
     @app.command()
     def preflight() -> None:
@@ -163,6 +165,20 @@ def build_app():  # noqa: ANN201 - returns a typer.Typer; annotated loosely to a
         from . import branch_protection as _bp
 
         code, lines = _bp.run_rollback(SubprocessGhRunner(), load_config(), branch=branch, apply=apply)
+        _echo(lines)
+        raise typer.Exit(code)
+
+    @ci_app.command("reconcile")
+    def ci_reconcile(
+        branch: Optional[str] = typer.Option(None, "--branch", help="Limit to one branch."),
+        apply: bool = typer.Option(False, "--apply", help="Perform the change (default: dry-run)."),
+    ) -> None:
+        """
+        Reconcile required checks to the aggregate ci-required context (dry-run unless --apply).
+        """
+        from . import ci as _ci
+
+        code, lines = _ci.run_reconcile(SubprocessGhRunner(), load_config(), branch=branch, apply=apply)
         _echo(lines)
         raise typer.Exit(code)
 
