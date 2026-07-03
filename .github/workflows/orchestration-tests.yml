@@ -14,7 +14,7 @@ on:
       - "orchestration/**"
       - ".github/workflows/orchestration-tests.yml"
   push:
-    branches: ["feat/enable-dagster", "main"]
+    branches: ["main"]
     paths:
       - "orchestration/**"
       - ".github/workflows/orchestration-tests.yml"
