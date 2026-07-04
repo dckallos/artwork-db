@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       dbt: ${{ steps.filter.outputs.dbt }}
+      orchestration: ${{ steps.filter.outputs.orchestration }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,26 +59,37 @@ jobs:
         run: |
           base="${BASE_SHA:-$BEFORE_SHA}"
           if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            # Fail safe: if we cannot determine the base, run the dbt checks.
+            # Fail safe: if we cannot determine the base, run every path-gated job.
             echo "dbt=true" >> "$GITHUB_OUTPUT"
+            echo "orchestration=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "$base" HEAD \
-              | grep -Eq '^(artwork_pipeline/|scripts/ci/|\.sqlfluff$)'; then
+          changed="$(git diff --name-only "$base" HEAD)"
+          if printf '%s\n' "$changed" | grep -Eq '^(artwork_pipeline/|scripts/ci/|\.sqlfluff$)'; then
             echo "dbt=true" >> "$GITHUB_OUTPUT"
           else
             echo "dbt=false" >> "$GITHUB_OUTPUT"
+          fi
+          if printf '%s\n' "$changed" | grep -Eq '^(orchestration/|artwork_pipeline/)'; then
+            echo "orchestration=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "orchestration=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Lint all workflow YAML (also runs shellcheck on embedded run: scripts).
   actionlint:
     runs-on: ubuntu-latest
+    env:
+      # Pin the actionlint version (C6): reproducible CI, no exposure to upstream drift.
+      ACTIONLINT_VERSION: "1.7.12"
     steps:
       - uses: actions/checkout@v4
-      - name: Install actionlint
+      - name: Install actionlint (pinned installer + version)
         shell: bash
         run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          # Fetch the installer from the matching *tagged* ref -- never `main` -- and pass
+          # the explicit version so both the script and the binary are pinned (C6).
+          bash <(curl -fsSL "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash") "$ACTIONLINT_VERSION"
       - name: Run actionlint
         shell: bash
         run: ./actionlint -color
@@ -176,12 +188,53 @@ jobs:
       - name: Run CI checks (compile + lint + unit tests)
         run: bash scripts/ci/ci_local.sh
 
+  # Offline Dagster-layer unit + integration tests -- folded in from the former standalone
+  # orchestration-tests.yml (C1) so the always-emitting aggregate actually depends on it.
+  # Path-gated via the `changes` job (orchestration/** or artwork_pipeline/**); no creds.
+  orchestration-tests:
+    needs: changes
+    if: needs.changes.outputs.orchestration == 'true'
+    runs-on: ubuntu-latest
+    env:
+      ARTWORK_REPO_ROOT: ${{ github.workspace }}
+      DBT_TARGET: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Create venv and install the orchestration package (editable)
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -e "orchestration[dev]"
+      - name: Prepare dbt packages and manifest
+        run: |
+          . .venv/bin/activate
+          dbt deps --project-dir artwork_pipeline --profiles-dir artwork_pipeline
+          dbt parse \
+            --project-dir artwork_pipeline \
+            --profiles-dir artwork_pipeline \
+            --target "$DBT_TARGET" \
+            --no-partial-parse
+          test -f artwork_pipeline/target/manifest.json
+      - name: Run pytest
+        # Clear PYTHONPATH so the installed package (not a stray sys.path entry) is
+        # imported -- documented sandbox gotcha from issue #6.
+        env:
+          PYTHONPATH: ""
+          ARTWORK_SKIP_DBT_PREPARE: "1"
+        run: |
+          . .venv/bin/activate
+          pytest orchestration/tests
+
   # The single always-emitting required context (H2). Depends on every gating job and
   # succeeds unless one of them failed or was cancelled; a legitimately skipped job
   # (e.g. dbt-checks on a docs-only PR) does not fail the aggregate.
   ci-required:
     name: ci-required
-    needs: [changes, actionlint, shellcheck, github-client, py-quality, dbt-checks]
+    needs: [changes, actionlint, shellcheck, github-client, py-quality, dbt-checks, orchestration-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -195,6 +248,7 @@ jobs:
             ${{ needs.github-client.result }}
             ${{ needs.py-quality.result }}
             ${{ needs.dbt-checks.result }}
+            ${{ needs.orchestration-tests.result }}
         run: |
           echo "gating job results: $RESULTS"
           for r in $RESULTS; do
