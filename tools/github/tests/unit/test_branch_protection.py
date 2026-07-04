@@ -38,9 +38,9 @@ def test_plan_apply_builds_put_from_policy_body(fixtures_dir: Path) -> None:
     # Required checks are derived from ci.aggregate_context (H1-X), not hardcoded in the policy.
     assert action.body["required_status_checks"] == {
         "strict": True,
-        "checks": [{"context": "ci-required", "app_id": -1}],
-        "contexts": [],
+        "contexts": ["ci-required"],
     }
+    assert "checks" not in action.body["required_status_checks"]
     assert isinstance(action.body, dict)
 
 

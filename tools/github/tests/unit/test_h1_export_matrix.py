@@ -79,7 +79,8 @@ def test_live_get_response_normalizes_to_valid_put_body(tmp_path: Path) -> None:
     assert rb["enforce_admins"] is False
     assert rb["required_linear_history"] is True
     assert rb["allow_force_pushes"] is False
-    assert rb["required_status_checks"] == {"strict": True, "checks": [{"context": "ci-required", "app_id": 42}], "contexts": []}
+    assert rb["required_status_checks"] == {"strict": True, "contexts": ["ci-required"]}
+    assert "checks" not in rb["required_status_checks"]
     assert rb["required_pull_request_reviews"] == {"dismiss_stale_reviews": True, "required_approving_review_count": 1}
     assert rb["restrictions"] == {"users": ["octocat"], "teams": ["core"], "apps": []}
     # The raw response is preserved for audit but never PUT.

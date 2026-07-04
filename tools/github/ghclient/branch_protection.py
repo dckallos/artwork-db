@@ -196,24 +196,41 @@ def _flag(value: Any) -> Optional[bool]:
     return None
 
 
+def _contexts_from_required_status_checks(rsc: Any) -> List[str]:
+    """
+    Extract status-check context names from a protection payload.
+
+    GitHub may expose required checks either as the legacy ``contexts`` list or as
+    modern ``checks`` objects.  The full ``PUT .../protection`` endpoint is stricter
+    than the status-check subresource, so full branch-protection bodies use a
+    contexts-only shape and leave app-specific ``checks`` writes to
+    ``ci reconcile``'s ``PATCH .../required_status_checks`` path.
+    """
+    if not isinstance(rsc, dict):
+        return []
+    contexts: List[str] = [c for c in (rsc.get("contexts") or []) if isinstance(c, str)]
+    for check in rsc.get("checks") or []:
+        if isinstance(check, dict) and isinstance(check.get("context"), str):
+            contexts.append(check["context"])
+    # Preserve first-seen order while avoiding duplicate contexts.
+    return list(dict.fromkeys(contexts))
+
+
 def _normalize_required_status_checks(rsc: Any) -> Optional[dict]:
     """
-    Reduce a GET ``required_status_checks`` object to its PUT-valid fields.
+    Reduce a GET ``required_status_checks`` object to the full branch-protection
+    ``PUT`` shape.
+
+    Deliberately contexts-only: the full update endpoint rejects payloads that include
+    both ``contexts`` and ``checks``.  The ``checks``/``app_id`` form remains isolated to
+    the required-status-checks subresource PATCH in :mod:`ghclient.ci`.
     """
     if not isinstance(rsc, dict):
         return None
-    out: dict = {"strict": bool(rsc.get("strict", True))}
-    checks = rsc.get("checks")
-    if isinstance(checks, list):
-        out["checks"] = [
-            {"context": c["context"], "app_id": c.get("app_id", -1)}
-            for c in checks
-            if isinstance(c, dict) and c.get("context")
-        ]
-        out["contexts"] = []
-    else:
-        out["contexts"] = [c for c in (rsc.get("contexts") or []) if isinstance(c, str)]
-    return out
+    return {
+        "strict": bool(rsc.get("strict", True)),
+        "contexts": _contexts_from_required_status_checks(rsc),
+    }
 
 
 def _normalize_pr_reviews(reviews: Any) -> Optional[dict]:
@@ -408,10 +425,14 @@ def policy_body_for_apply(cfg: GithubClientConfig, policy: BranchPolicyCfg) -> d
     Build the PUT body for a branch, deriving required checks from ci config (H1-X / C4).
 
     When ``required_checks_from_workflows`` is set, ``required_status_checks`` is generated
-    from ``cfg.ci.aggregate_context`` -- the single source of truth -- as
-    ``{"strict": <policy strict or True>, "checks": [{"context": <aggregate>, "app_id": -1}],
-    "contexts": []}`` (``app_id: -1`` allows any app to report the status). A forbidden
-    context (e.g. a leftover ``test``) is rejected either way.
+    from ``cfg.ci.aggregate_context`` -- the single source of truth -- as a full-branch-
+    protection ``PUT`` compatible, contexts-only object:
+    ``{"strict": <policy strict or True>, "contexts": [<aggregate>]}``.
+
+    The modern ``checks``/``app_id`` form is valid for the required-status-checks
+    subresource PATCH handled by :mod:`ghclient.ci`; keeping the two shapes separate
+    avoids GitHub's full ``PUT`` schema rejecting a mixed ``checks`` + ``contexts`` body.
+    A forbidden context (e.g. a leftover ``test``) is rejected either way.
     """
     body = load_policy_body(policy.policy_path)
     if policy.required_checks_from_workflows:
@@ -420,8 +441,7 @@ def policy_body_for_apply(cfg: GithubClientConfig, policy: BranchPolicyCfg) -> d
         strict = existing.get("strict", True) if isinstance(existing, dict) else True
         body["required_status_checks"] = {
             "strict": bool(strict),
-            "checks": [{"context": ci.aggregate_context, "app_id": -1}],
-            "contexts": [],
+            "contexts": [ci.aggregate_context],
         }
     _reject_forbidden_contexts(body, policy.branch)
     return body

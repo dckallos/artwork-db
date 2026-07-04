@@ -52,11 +52,13 @@ def test_apply_derives_required_check_from_aggregate_no_regression() -> None:
     policy = cfg.branch_protection.get("main")
     assert policy.required_checks_from_workflows is True
     body = bp.policy_body_for_apply(cfg, policy)
-    # The only required check is the always-emitting aggregate, via the modern checks array.
-    assert body["required_status_checks"]["checks"] == [
-        {"context": cfg.ci.aggregate_context, "app_id": -1}
-    ]
-    assert body["required_status_checks"]["contexts"] == []
+    # The full branch-protection PUT uses the legacy contexts-only shape;
+    # app-specific checks are applied, if desired, through ci reconcile's PATCH.
+    assert body["required_status_checks"] == {
+        "strict": True,
+        "contexts": [cfg.ci.aggregate_context],
+    }
+    assert "checks" not in body["required_status_checks"]
     # And it is genuinely derived from config, not a hardcoded literal.
     assert cfg.ci.aggregate_context not in bp._FORBIDDEN_CONTEXTS
 
