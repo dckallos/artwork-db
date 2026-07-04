@@ -19,6 +19,79 @@ For each provider, inspect:
 - Whether records include stable IDs and update timestamps.
 - Whether object, person/agent, and image data are separate resources or embedded payloads.
 
+## Access Mode Index
+
+This index is a routing aid only. Each provider section below has the source facts and
+open questions.
+
+### Unauthenticated APIs Or Public Endpoints
+
+- Met Collection API.
+- AIC REST API and IIIF image service.
+- CMA Open Access API.
+- V&A collection APIs and IIIF access.
+- Rijksmuseum Data Services Search API, OAI-PMH, LDES, and downloads.
+- LOC JSON/YAML API.
+- Wellcome Collection catalogue and IIIF APIs.
+- Wikimedia Commons and Wikidata public read APIs and dumps.
+- DigitalNZ API v3 public-content access, with optional key for higher-volume use.
+- Statens Museum for Kunst API and IIIF endpoints.
+- Getty Museum Collection REST records, ActivityStream, IIIF, and SPARQL endpoints.
+
+### Authenticated APIs Or Tokened Access
+
+- Smithsonian EDAN API through api.data.gov.
+- Harvard Art Museums API.
+- Europeana APIs.
+- DPLA API.
+- Cooper Hewitt Collection API.
+- Paris Musees collections API.
+- Trove API v3.
+- Museum Data Service API-token export for public search results.
+
+### Bulk Data, Dumps, GitHub Datasets, And Public Object Storage
+
+- Smithsonian public S3 bucket.
+- Met Open Access CSV on GitHub.
+- AIC nightly S3 tarball.
+- CMA GitHub Open Access data.
+- Rijksmuseum downloads, OAI-PMH, and LDES options.
+- Europeana Dataset Download and OAI-PMH.
+- DPLA bulk download.
+- Wikimedia and Wikidata dumps.
+- National Gallery of Art GitHub CSV dataset.
+- MoMA GitHub CSV and JSON datasets.
+- Tate GitHub CSV and JSON snapshot, but stale.
+- Minneapolis Institute of Art GitHub JSON repository.
+- Museum Data Service CSV export and tokened JSON/CSV fetcher flow.
+
+### IIIF Or Media-Focused Endpoints
+
+- AIC IIIF image service.
+- V&A IIIF image access.
+- Rijksmuseum image and Linked Art access.
+- Europeana IIIF API.
+- Wellcome IIIF APIs.
+- Harvard image base URLs.
+- Getty IIIF Image and Presentation APIs.
+- SMK IIIF manifest and image fields.
+- Smithsonian IDS delivery and download URLs.
+- Minneapolis Institute of Art thumbnail endpoints.
+
+### Aggregators And Cross-Institution Sources
+
+- Europeana.
+- DPLA.
+- DigitalNZ.
+- Trove.
+- LOC.
+- Museum Data Service.
+- Wikimedia Commons and Wikidata.
+
+### Stale Or Historical Datasets
+
+- Tate Collection GitHub repository, last updated October 2014.
+
 ## Smithsonian Institution Open Access
 
 Primary links:
@@ -635,6 +708,499 @@ Implementation research questions:
 - How to filter Commons files by license.
 - How to reconcile external IDs with museum source records.
 
+## National Gallery Of Art Open Data
+
+Primary links:
+
+- [NGA Open Data GitHub repository](https://github.com/NationalGalleryOfArt/opendata)
+- [NGA free images and open access page](https://www.nga.gov/artworks/free-images-and-open-access)
+
+Access mode:
+
+- GitHub-hosted CSV dataset.
+- The repository includes `data/`, `documentation/`, `sql_tables/`, and a data
+  dictionary.
+
+Authentication:
+
+- No authorization is needed to download the dataset from GitHub.
+
+Data scope and format:
+
+- NGA describes records for more than 130,000 artworks and artists.
+- The dataset is published in CSV format with UTF-8 encoding.
+- The repository includes documentation and a data dictionary.
+- Wikidata identifiers are included where reconciled.
+
+License and reuse:
+
+- NGA releases the dataset under Creative Commons Zero to the extent permitted by law.
+- Attribution or citation is requested but not required as a license condition.
+
+Update notes:
+
+- NGA says the dataset is updated frequently, usually once a day.
+
+Media notes:
+
+- Images and media files are not included in the dataset.
+- The dataset can contain links and references to images, but image files are outside the
+  open data program.
+
+Implementation research questions:
+
+- Which CSV files become Bronze entities, such as objects, constituents, attribution,
+  provenance, and media references.
+- Whether daily GitHub updates are treated as snapshots, deltas, or release-like commits.
+- How to preserve image references without implying image reuse rights.
+- Whether Wikidata IDs are used only as enrichment fields or as reconciliation keys.
+
+## Museum Of Modern Art Collection Dataset
+
+Primary links:
+
+- [MoMA collection GitHub repository](https://github.com/MuseumofModernArt/collection)
+- [MoMA collection website](https://www.moma.org/collection/)
+
+Access mode:
+
+- GitHub dataset in CSV and JSON.
+
+Authentication:
+
+- No API key is required for the GitHub dataset.
+
+Data scope and format:
+
+- MoMA describes its website collection as 107,903 artworks from 28,369 artists.
+- The research dataset contains 160,597 artwork records.
+- The artists dataset contains 15,927 records.
+- Files include `Artworks.csv`, `Artworks.json`, `Artists.csv`, and `Artists.json`.
+- Artwork fields include basic metadata such as title, artist, date made, medium,
+  dimensions, and acquisition date.
+- Artist fields include name, nationality, gender, birth and death years, Wikidata QID, and
+  Getty ULAN ID.
+
+License and reuse:
+
+- The datasets are placed in the public domain under CC0.
+- MoMA requests attribution and asks users not to misrepresent the dataset or imply
+  endorsement.
+
+Update notes:
+
+- MoMA says it plans regular updates.
+- The GitHub repository showed a latest release `v2026-06-30` during this review.
+
+Media notes:
+
+- Images are not included and are not part of the dataset.
+- MoMA directs image licensing through rights-management services.
+
+Implementation research questions:
+
+- Whether CSV or JSON is the preferred Bronze raw format.
+- How to represent curator-approved versus research-in-progress records.
+- Whether the release tag, Git commit SHA, or file hash is the snapshot version.
+- How to model artist records separately from artwork records.
+
+## Tate Collection Dataset
+
+Primary links:
+
+- [Tate collection GitHub repository](https://github.com/tategallery/collection)
+
+Access mode:
+
+- GitHub JSON and CSV dataset.
+
+Authentication:
+
+- No API key is required for the GitHub dataset.
+
+Data scope and format:
+
+- Tate describes metadata for around 70,000 artworks and around 3,500 associated artists.
+- JSON is organized by folders.
+- CSV files include `artist_data.csv` and `artwork_data.csv`.
+- Artwork JSON is filed by accession number.
+- Artist JSON is filed by the first letter of the artist surname.
+
+License and reuse:
+
+- Metadata is released under Creative Commons Zero Public Domain Dedication.
+- Tate requests attribution where possible.
+
+Staleness note:
+
+- The repository says it is no longer actively maintained.
+- The dataset was last updated in October 2014.
+
+Media notes:
+
+- Images are not included and are not part of the dataset.
+- Tate image use is covered separately by Tate copyright and permissions or image licensing
+  channels.
+
+Implementation research questions:
+
+- Whether this is useful only as a historical fixture or research reference.
+- Whether staleness makes it unsuitable for production ingestion.
+- How to flag the source as stale if loaded for tests, comparison, or exploration.
+
+## Minneapolis Institute Of Art Collection Metadata
+
+Primary links:
+
+- [Mia collection GitHub repository](https://github.com/artsmia/collection)
+- [Mia collections website](https://collections.artsmia.org/)
+- [Mia image access policy](https://new.artsmia.org/image-access-use)
+
+Access mode:
+
+- GitHub JSON repository.
+- Provider thumbnail endpoints by object ID.
+
+Authentication:
+
+- No API key is required for the GitHub dataset.
+
+Data layout and shape:
+
+- Object records live at `objects/$bucket/$id.json`, where `bucket` is the object ID divided
+  by 1000.
+- Exhibition records are organized in similar buckets.
+- Observed object fields include accession number, artist, continent, country, credit line,
+  culture, date, description, dimensions, ID, image state, image copyright, image
+  dimensions, life date, medium, nationality, provenance, restricted flag, role, room,
+  style, text, and title.
+
+License and reuse:
+
+- Mia publishes artwork metadata as JSON under a CC0 license.
+- The repository asks for attribution and for users to obey the separate image policy.
+
+Update notes:
+
+- Mia says records are updated and added constantly, with changes committed approximately
+  once per day.
+
+Media notes:
+
+- Images are not under the same license as metadata.
+- Object records expose `image: valid|invalid` and `restricted: 0|1`.
+- Thumbnail URLs use:
+
+```text
+http://api.artsmia.org/images/$id/{small,medium,large}.jpg
+```
+
+- Small images are 100px on the long side, medium 600px, and large 800px.
+- Unrestricted images are described for limited non-commercial and educational purposes.
+
+Implementation research questions:
+
+- Whether to ingest objects only, or objects plus exhibitions and departments.
+- Whether object IDs or accession numbers are the Bronze natural key.
+- Whether image thumbnails are stored as source facts only, or separately classified by
+  downstream rights logic.
+- How to handle `restricted` media separately from CC0 metadata.
+
+## Paris Musees Collections API
+
+Primary links:
+
+- [Paris Musees collections API portal](https://apicollections.parismusees.paris.fr/)
+- [Paris Musees collections portal](https://parismuseescollections.paris.fr/)
+- [API documentation link from the portal](https://parismuseescollections.paris.fr/fr/api)
+
+Access mode:
+
+- JSON API access.
+- GraphQL explorer is linked from the API portal.
+
+Authentication:
+
+- Account creation is required.
+- An authentication token is required for requests.
+
+Data scope:
+
+- Paris Musees manages the network of 14 City of Paris museums.
+- The collections portal describes more than 280,000 object notices, bibliographic
+  resources, and archives.
+- The API exists to open part of the institution's data and enable reuse in digital
+  projects.
+
+Endpoint and model notes:
+
+- The public landing page does not expose the complete endpoint list in static HTML.
+- The portal says users can make GraphQL requests in an explorer after account creation.
+
+Implementation research questions:
+
+- What the current GraphQL endpoint URL and schema look like after authentication.
+- Which fields distinguish open data from restricted records.
+- How media URLs and media rights are represented.
+- Whether the API supports pagination, filtering by museum, and changed-since queries.
+- Whether token issuance is stable enough for scheduled extraction.
+
+## DigitalNZ API
+
+Primary links:
+
+- [DigitalNZ developers page](https://digitalnz.org/developers)
+- [DigitalNZ API v3 docs](https://digitalnz.org/developers/api-docs-v3)
+- [DigitalNZ OpenAPI spec on SwaggerHub](https://app.swaggerhub.com/apis/DigitalNZ/digital-nz_api/3.0.0)
+- [DigitalNZ metadata dictionary](https://digitalnz.org/developers/metadata-dictionary)
+
+Access mode:
+
+- API v3.
+- Search records endpoint.
+- Get metadata endpoint for a specific record.
+
+Authentication:
+
+- Public content no longer requires an API key.
+- DigitalNZ encourages a key for regular, high-volume, or application use.
+- API keys are sent in the `Authentication-Token` HTTP header.
+- Unauthenticated requests share a maximum rate limit.
+
+Data scope and model:
+
+- DigitalNZ aggregates New Zealand-related digital items from contributing cultural,
+  government, education, science, and community organizations.
+- DigitalNZ holds metadata and pointers to source content; it does not hold copies of the
+  collection items.
+- The API returns pointers to content objects and thumbnail images.
+
+Implementation research questions:
+
+- Whether DigitalNZ is useful as an aggregator source or only as enrichment/discovery.
+- How to filter by rights, provider, collection, and thumbnail availability.
+- How to avoid duplicate records if direct New Zealand museum sources are later added.
+- What rate limit applies to unauthenticated versus tokened extraction.
+
+## Trove API
+
+Primary links:
+
+- [Trove API overview](https://trove.nla.gov.au/about/create-something/using-api)
+- [Trove API v3 interface](https://api.trove.nla.gov.au/v3/)
+- [Trove API technical guide](https://trove.nla.gov.au/about/create-something/using-api/api-technical-guide)
+- [Trove bulk download](https://trove.nla.gov.au/about/create-something/bulk-download)
+
+Access modes:
+
+- Trove API v3.
+- Bulk-download workflows are linked from Trove documentation.
+
+Authentication:
+
+- Ongoing API use requires an active API key.
+- Users need a Trove account and must request an API key.
+- The application asks for desired call rate and intended use.
+
+Data scope:
+
+- Trove aggregates Australian cultural and research records from partner organizations.
+- Relevant categories include images, maps, artefacts, diaries, letters, archives, music,
+  audio, video, newspapers, books, and people or organizations.
+
+Rate and policy notes:
+
+- API access is reviewed by intended use.
+- The public application table includes a 200 requests per minute call-rate tier.
+- AI modelling, machine learning, and generative-AI training uses receive higher review and
+  may need exemptions or data-sharing agreements.
+- Trove API version 2 was discontinued in September 2024.
+
+Implementation research questions:
+
+- Whether Trove should be treated as an aggregator, enrichment source, or source-specific
+  extraction target.
+- Which categories and rights filters isolate reusable art or visual-culture records.
+- Whether bulk download is more appropriate than API pagination for large analyses.
+- How provider attribution and duplicate detection would work.
+
+## Statens Museum For Kunst API
+
+Primary links:
+
+- [SMK API Swagger UI](https://api.smk.dk/api/v1/docs/)
+- [SMK Open](https://open.smk.dk/)
+- [SMK API article](https://www.smk.dk/article/smk-api/)
+
+Access mode:
+
+- REST API at `https://api.smk.dk/api/v1`.
+- Swagger/OpenAPI document at `https://api.smk.dk/api/v1/swagger.json`.
+- IIIF manifest and image fields in artwork records.
+
+Authentication:
+
+- The OpenAPI description calls the API free to use.
+- No API key requirement was visible in the inspected OpenAPI document.
+
+Documented endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /art` | Fetch one or more artworks by `object_number`. |
+| `GET /art/search` | Search artworks with available information. |
+| `GET /art/all_ids` | Return all object IDs. |
+| `GET /person` | Fetch one person record. |
+| `GET /person/search` | Search persons. |
+| `GET /iiif/manifest` | Return IIIF Presentation API manifests. |
+| `GET /iiif/autocomplete` | Find objects with IIIF links. |
+| `GET /art/field_info` | Return artwork field descriptions. |
+| `GET /persons/field_info` | Return person field descriptions. |
+
+Important parameters and output formats:
+
+- `keys` is required on `/art/search` and `/person/search`.
+- `offset` and `rows` paginate search results.
+- `rows` has a documented maximum of 2000.
+- Output options include SMK JSON by default, plus `IIIF-Manifest`, `DC-json`, `JSON-LD`,
+  and `Mets` in relevant endpoints.
+- Language options include Danish and English.
+
+Data and media notes:
+
+- A sampled `/art/search?keys=*&offset=0&rows=1` response reported `found: 200018`.
+- Artwork fields include `created`, `modified`, `object_number`, titles, production,
+  materials, dimensions, collection, work status, `public_domain`, `rights`, `has_image`,
+  `image_hq`, `image_iiif_id`, `image_iiif_info`, `image_thumbnail`, `image_native`,
+  `iiif_manifest`, alternative images, and 3D-file flags.
+- `/art/field_info` identifies `modified` as useful for updating data.
+- Facets include `public_domain`, `has_image`, `image_hq`, `has_3d_file`, collection,
+  object names, creator fields, and other classifications.
+
+Implementation research questions:
+
+- Whether `/art/all_ids` or paginated `/art/search` is the better full-snapshot driver.
+- Whether to use `modified` range filters for incremental sync.
+- How to preserve SMK JSON versus JSON-LD or IIIF manifest forms.
+- How to model public-domain flags separately from image availability and 3D files.
+
+## Getty Museum Collection API
+
+Primary links:
+
+- [Getty Museum Collection API documentation](https://data.getty.edu/museum/collection/docs/)
+- [Getty Museum Collection API root](https://data.getty.edu/museum/collection/)
+- [Getty Museum Collection ActivityStream](https://data.getty.edu/museum/collection/activity-stream)
+- [Getty Museum Collection SPARQL endpoint](https://data.getty.edu/museum/collection/sparql)
+- [Getty Museum Collection SPARQL UI](https://data.getty.edu/museum/collection/sparql-ui)
+
+Access modes:
+
+- REST-style entity records.
+- ActivityStreams change feed.
+- SPARQL endpoint.
+- IIIF Image API.
+- IIIF Presentation API.
+
+Authentication:
+
+- No API key requirement was visible in the inspected documentation.
+
+Data scope:
+
+- Getty describes metadata for more than 250,000 objects in the Getty Museum Collection,
+  including current and deaccessioned objects.
+- Entity types include `object`, `place`, `document`, `group`, `person`, `exhibition`, and
+  `activity`.
+
+Data model:
+
+- The API is based on the Linked Art standard.
+- JSON records link to related entities.
+- The API uses ActivityStreams to track created, edited, and deleted records.
+- Getty explicitly says there is currently no list-all endpoint and no full data download,
+  but both are on the roadmap.
+- The documentation says the ActivityStream can be crawled to build a list of records and
+  track changes.
+
+Endpoint examples:
+
+```text
+https://data.getty.edu/museum/collection/object/<ENTITY_ID>
+https://data.getty.edu/museum/collection/person/<ENTITY_ID>
+https://media.getty.edu/iiif/image/<IMAGE_ID>
+https://media.getty.edu/iiif/manifest/<MANIFEST_ID>
+```
+
+License and rights:
+
+- Getty says the dataset is CC0 with exceptions.
+- Images are linked through IIIF but are not always available under the same terms.
+- Image rights are machine-readable under image `subject_to` blocks.
+- Written descriptions and artist biographies can have separate rights, often CC BY rather
+  than CC0.
+
+Implementation research questions:
+
+- Whether ActivityStream crawling is acceptable for full inventory discovery.
+- Whether SPARQL is needed for broad queries before record fetches.
+- How to preserve Linked Art JSON-LD in Bronze without premature normalization.
+- How to evaluate per-image and per-description rights before downstream reuse.
+
+## Museum Data Service
+
+Primary links:
+
+- [Museum Data Service](https://museumdata.uk/)
+- [Object search](https://museumdata.uk/object-search/)
+- [Data scope](https://museumdata.uk/using-data/data-scope/)
+- [Who can use MDS data?](https://museumdata.uk/using-data/who-can-use-mds-data/)
+
+Access modes:
+
+- Public object-search interface.
+- CSV export for search results.
+- Tokened API access for public fields from search results.
+- MDS Data Fetcher utility can download tokened result sets as CSV or JSON.
+
+Authentication:
+
+- Public search does not require a login.
+- API-token export is requested from the search interface.
+- Restricted fields may require named-user or accredited-researcher access if museums allow
+  it.
+
+Data scope:
+
+- MDS is a joint initiative by Art UK, Collections Trust, and the University of Leicester.
+- It aims to connect and share object records across UK museums.
+- On the inspected object-search page, MDS reported 7,839,415 object records from 133
+  collection datasets, including data from 257 accredited museums.
+- The same page reported 1,087,826 records indicating an associated image.
+- Records are more-or-less source exports with mapped field names, not deeply harmonized
+  cultural-heritage records.
+
+License and reuse:
+
+- MDS explicitly says it is not an open-data initiative.
+- Source museums control how much data is visible and set licensing terms.
+- Public records can be searched and reused subject to the relevant data licenses.
+- MDS notes many UK museums may choose non-commercial or attribution licenses rather than
+  CC0.
+
+Media notes:
+
+- MDS does not ingest image files or other digital media.
+- Records may include image locations stored elsewhere when museums provide them.
+
+Implementation research questions:
+
+- Whether MDS belongs in scope given its mixed licensing model.
+- How to filter records by data-use license before extraction.
+- Whether tokened result exports are sufficient for repeatable ingestion.
+- How to preserve source museum identity and raw field names.
+- How to avoid overlap with Art UK, direct museum APIs, or other UK aggregators.
+
 ## IIIF As A Cross-Provider Theme
 
 Many museum APIs expose image media through IIIF or IIIF-like image services.
@@ -647,6 +1213,10 @@ Providers in this catalog with explicit IIIF relevance:
 - Europeana
 - Wellcome
 - Harvard Art Museums
+- Getty Museum Collection
+- Statens Museum for Kunst
+- Minneapolis Institute of Art thumbnail endpoints, though these are not full IIIF in the
+  repository docs
 - Smithsonian, through Smithsonian image delivery URLs and downloadable media resources, even
   though the observed EDAN payloads use Smithsonian IDS URLs rather than a simple IIIF
   pattern in the sampled records.
@@ -680,6 +1250,16 @@ These are considerations for later design, not decisions.
 | Cooper Hewitt | API key or OAuth-style access described. |
 | Wellcome | No standard key observed for basic catalogue docs. |
 | Wikimedia/Wikidata | No key for public read APIs. |
+| National Gallery of Art | No key for GitHub CSV dataset. |
+| MoMA | No key for GitHub CSV/JSON dataset. |
+| Tate | No key for GitHub CSV/JSON snapshot. |
+| Minneapolis Institute of Art | No key for GitHub JSON dataset. |
+| Paris Musees | Account and token required. |
+| DigitalNZ | No key for public content; key encouraged for regular or high-volume use. |
+| Trove | API key required for ongoing API use. |
+| SMK | No key observed in OpenAPI document. |
+| Getty Museum Collection | No key observed in inspected docs. |
+| Museum Data Service | Public search is open; API-token export is requested through search UI. |
 
 ### Bulk Data Versus API Crawling
 
@@ -693,6 +1273,11 @@ Providers with documented bulk or dump access:
 - Europeana Dataset Download and OAI-PMH.
 - DPLA bulk download.
 - Wikimedia/Wikidata dumps.
+- National Gallery of Art GitHub CSV dataset.
+- MoMA GitHub CSV and JSON datasets.
+- Tate GitHub CSV and JSON snapshot, but stale.
+- Minneapolis Institute of Art GitHub JSON repository.
+- Museum Data Service CSV export and tokened result-fetching flow.
 
 API crawling may be most useful for:
 
@@ -773,3 +1358,25 @@ verified against current official documentation before implementation:
 - [Wikidata cultural heritage properties](https://www.wikidata.org/wiki/Wikidata:WikiProject_Cultural_heritage)
 - [Data.gov](https://data.gov/)
 - [AWS Open Data Registry](https://registry.opendata.aws/)
+
+## Candidate Sources Needing Verification
+
+Do not treat these as implementation-ready until official current documentation confirms both
+reusable metadata and a programmatic retrieval layer.
+
+| Candidate | Current status |
+| --- | --- |
+| British Museum | Public collection pages exist, but current official API, dump, or licensing docs were not verified in this pass. |
+| National Portrait Gallery London | Public collection and image-licensing information exists, but a current open programmatic collection API was not verified. |
+| Los Angeles County Museum of Art | Collection search exists, but official reusable data and programmatic access were not verified. |
+| Dallas Museum of Art | Public collection exists and appears in aggregator contexts, but direct official API/open-data docs were not verified. |
+| Walters Art Museum | Strong open-access history and online collection, but current official API/dump docs were not verified in this pass. |
+| Yale Center for British Art and Yale University Art Gallery | Yale LUX exposes Linked Art-style entity data in the app, but public developer docs, bulk access, and reuse terms need verification. |
+| Auckland Museum | Candidate cultural collection source; official API or dump docs were not verified. |
+| Te Papa | Candidate New Zealand collection source; official API or dump docs were not verified. |
+| Powerhouse Museum | Candidate Australian collection source; official API or dump docs were not verified. |
+| National Gallery of Victoria | Collection site exists, but current official API/open-data docs were not verified. |
+| Finnish National Gallery | Collection site exists, but official API or dump docs were not verified. |
+| DigitaltMuseum / DIMU | Search results suggest an API exists, but official current API and licensing docs were not verified. |
+| Brooklyn Museum | Historic API paths now redirect or fail in inspected requests; current API status and reuse terms need verification. |
+| Art UK | Major UK artwork aggregator and MDS partner, but direct public API/export terms were not verified separately from MDS. |
