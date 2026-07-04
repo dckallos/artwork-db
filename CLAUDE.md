@@ -55,6 +55,15 @@ this repo; it has already happened (see `session-progress-log.md`: fork-39b1c4 v
 - **Read the log tail before each append.** If a **different** fork id appears — or you see
   files/mtimes you did not create — a parallel Cortex fork is live. **STOP** and reconcile
   (inform the maintainer) *before* any destructive action (delete / overwrite / `--apply`).
+- **`.fork-alert` stop-signal — check it OFTEN (before EVERY write, delete, `--apply`, and log
+  append).** The instant you detect a collision (a foreign fork id in the log, or an on-disk
+  file/mtime you did not create), **write a `.fork-alert` file at the repo root** containing a
+  one-line summary plus the surviving fork id, e.g.
+  `fork-7d3e91 AUTHORITATIVE — collision on tools/github/tests/unit/test_secrets.py at
+  <UTC ts>; all OTHER forks HALT`. Every fork must **read `.fork-alert` before any mutating
+  action**: if it exists and names a *different* surviving fork, **stop all work immediately**,
+  do not write/delete/apply, and inform the maintainer. The surviving (authoritative) fork
+  deletes `.fork-alert` only once the collision is fully reconciled.
 - **Trust disk over your context.** Prior forks may have advanced files beyond what your
   context shows (tool reads can return stale/elided snapshots). **Re-read a file in full
   immediately before editing it**; never assume your context matches disk. This applies to

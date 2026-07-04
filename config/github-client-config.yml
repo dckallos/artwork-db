@@ -29,10 +29,42 @@ branch_protection:
 # --- Consumed by later slices (present so the schema is stable; not used by Area A) ---
 
 # Area B (`secrets publish`): map ~/.snowflake/connections.toml fields -> GitHub
-# Environment secrets/variables for the dbt layer.
+# Environment secrets/variables for the dbt layer. This block is DATA: the profile ->
+# environment/secret/variable mapping and the H3 role allowlist live here, never in .py.
+#   - `map`   : a connections.toml field -> a GitHub {secret|variable} name. Secrets are
+#               write-only (H8: never value-diffed); variables are readable.
+#   - `extra` : items NOT in the TOML (key material), always published as secrets; the raw
+#               value is resolved at apply time and passed to gh on stdin, never logged (H5).
+#   - `allow_roles` : H3 least-privilege allowlist. ACCOUNTADMIN is refused regardless;
+#               a role absent here is refused unless `--allow-role` is passed deliberately.
+# Model: one publish set per GitHub Environment (§12.2.8 scaffolds `staging` + `prod`).
 snowflake_secrets:
   source: ~/.snowflake/connections.toml
-  profiles: {}
+  profiles:
+    staging:
+      profile: artwork_ci_staging          # the connections.toml profile for the staging CI user
+      target: { type: environment, name: staging }
+      map:
+        account:   { secret: SNOWFLAKE_ACCOUNT }
+        user:      { secret: DBT_SNOWFLAKE_USER }
+        role:      { variable: DBT_SNOWFLAKE_ROLE }
+        warehouse: { variable: SNOWFLAKE_WAREHOUSE }
+      extra:
+        DBT_SNOWFLAKE_PRIVATE_KEY:            { from_file: "~/.snowflake/keys/staging_ci.p8" }
+        DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: { prompt: true }
+      allow_roles: [ARTWORK_TRANSFORMER]
+    prod:
+      profile: artwork_ci_prod              # the connections.toml profile for the prod CI user
+      target: { type: environment, name: prod }
+      map:
+        account:   { secret: SNOWFLAKE_ACCOUNT }
+        user:      { secret: DBT_SNOWFLAKE_USER }
+        role:      { variable: DBT_SNOWFLAKE_ROLE }
+        warehouse: { variable: SNOWFLAKE_WAREHOUSE }
+      extra:
+        DBT_SNOWFLAKE_PRIVATE_KEY:            { from_file: "~/.snowflake/keys/prod_ci.p8" }
+        DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: { prompt: true }
+      allow_roles: [ARTWORK_TRANSFORMER]
 
 # Area C (`ci reconcile`): the workflows whose required checks are reconciled.
 ci:

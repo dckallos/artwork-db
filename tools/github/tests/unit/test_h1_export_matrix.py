@@ -1,9 +1,13 @@
 """
-H1 fail-closed export/rollback matrix (no network).
+H1 fail-closed export + A1/A2 snapshot-envelope matrix (no network).
 
-A *verified* HTTP 404 is the only failure that yields a ``null`` (delete-eligible)
-snapshot; every other failure raises and writes nothing, so "couldn't reach GitHub" is
-never mistaken for "there were no rules." Corrupt/untrusted snapshots are refused.
+Export: a *verified* HTTP 404 is the only failure that yields a delete-eligible
+(verified-404) capture; every other failure raises and writes nothing, so "couldn't
+reach GitHub" is never mistaken for "there were no rules."
+
+Persistence (A1/A2): a snapshot is stored as a schema-versioned envelope carrying a
+PUT-ready ``restore_body`` (a raw GET response is not a valid PUT payload). A bare
+``null`` file is refused, and only a ``verified-404`` envelope is delete-eligible.
 """
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ import pytest
 pytestmark = pytest.mark.no_network
 
 from ghclient import branch_protection as bp
-from ghclient.branch_protection import Snapshot
+from ghclient.branch_protection import ProtectionSnapshot, Snapshot
 from ghclient.errors import GhApiError, GhClientError
 
 _REPO = "octocat/hello-world"
@@ -48,19 +52,58 @@ def test_success_with_malformed_json_fails_closed(fake_runner_factory, gh_result
         bp.export_snapshot(runner, _REPO, "main")
 
 
-def test_null_snapshot_roundtrips_and_is_delete_eligible(tmp_path: Path) -> None:
-    snap = Snapshot(branch="main", body=None, source="verified-404")
-    out = bp.write_snapshot(snap, tmp_path)
-    assert out.read_text().strip() == "null"
+def test_verified_404_envelope_roundtrips_and_is_delete_eligible(tmp_path: Path) -> None:
+    env = bp.build_snapshot(_REPO, Snapshot(branch="main", body=None, source="verified-404"))
+    out = bp.write_snapshot(env, tmp_path)
+    # Persisted as a schema-versioned envelope object, NOT a bare `null` (A2).
+    assert out.read_text().strip() != "null"
     reloaded = bp.read_snapshot(out, "main")
     assert reloaded.is_null and reloaded.source == "verified-404"
     assert bp.plan_rollback(_REPO, reloaded).kind.value == "DELETE"
 
 
-def test_untrusted_null_provenance_is_refused() -> None:
-    # A null body that did NOT come from a verified 404 must never delete protection.
-    tainted = Snapshot(branch="main", body=None, source="error")
-    with pytest.raises(GhClientError, match="untrusted provenance"):
+def test_live_get_response_normalizes_to_valid_put_body(tmp_path: Path) -> None:
+    # A realistic GET response: {"enabled": ...} wrappers, url fields, nested user objects.
+    live = {
+        "url": "https://api.github.com/…/protection",
+        "required_status_checks": {"url": "…", "strict": True, "contexts": [], "checks": [{"context": "ci-required", "app_id": 42}]},
+        "enforce_admins": {"url": "…", "enabled": False},
+        "required_pull_request_reviews": {"url": "…", "dismiss_stale_reviews": True, "required_approving_review_count": 1},
+        "restrictions": {"url": "…", "users": [{"login": "octocat"}], "teams": [{"slug": "core"}], "apps": []},
+        "required_linear_history": {"enabled": True},
+        "allow_force_pushes": {"enabled": False},
+    }
+    env = bp.build_snapshot(_REPO, Snapshot(branch="main", body=live, source="live"))
+    rb = env.restore_body
+    # {"enabled": ...} wrappers flattened to booleans; url fields dropped.
+    assert rb["enforce_admins"] is False
+    assert rb["required_linear_history"] is True
+    assert rb["allow_force_pushes"] is False
+    assert rb["required_status_checks"] == {"strict": True, "checks": [{"context": "ci-required", "app_id": 42}], "contexts": []}
+    assert rb["required_pull_request_reviews"] == {"dismiss_stale_reviews": True, "required_approving_review_count": 1}
+    assert rb["restrictions"] == {"users": ["octocat"], "teams": ["core"], "apps": []}
+    # The raw response is preserved for audit but never PUT.
+    assert env.live_response == live
+    put = bp.plan_rollback(_REPO, bp.read_snapshot(bp.write_snapshot(env, tmp_path), "main"))
+    assert put.kind.value == "PUT"
+    assert put.body == rb
+
+
+def test_bare_null_file_is_refused(tmp_path: Path) -> None:
+    # A hand-written `echo null` must NOT be treated as a delete-eligible verified 404 (A2).
+    bad = tmp_path / "main.json"
+    bad.write_text("null\n")
+    with pytest.raises(GhClientError, match="bare-null"):
+        bp.read_snapshot(bad, "main")
+
+
+def test_untrusted_provenance_envelope_is_refused() -> None:
+    # A null restore_body whose source is NOT a verified 404 must never delete protection.
+    tainted = ProtectionSnapshot(
+        schema_version=1, repo=_REPO, branch="main", captured_at="t",
+        source="live", live_response=None, restore_body=None,
+    )
+    with pytest.raises(GhClientError):
         bp.plan_rollback(_REPO, tainted)
 
 

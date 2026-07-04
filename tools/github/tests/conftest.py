@@ -38,10 +38,11 @@ class FakeGhRunner:
         handler: Optional[Callable[[str, str, str, object], GhResult]] = None,
     ) -> None:
         """
-        Store the response handler and initialize the call log.
+        Store the response handler and initialize the call logs.
         """
         self._handler = handler
         self.calls: list = []
+        self.run_inputs: list = []
 
     def _respond(self, kind: str, method: str, path: str, body: object) -> GhResult:
         """
@@ -58,12 +59,16 @@ class FakeGhRunner:
         self.calls.append(("api", method, path, input_body))
         return self._respond("api", method, path, input_body)
 
-    def run(self, args) -> GhResult:
+    def run(self, args, *, input_text=None) -> GhResult:
         """
         Record and answer an arbitrary ``gh`` subcommand.
+
+        ``input_text`` (stdin) is captured in :attr:`run_inputs` keyed by argv so tests can
+        assert a secret value was fed via stdin -- and never appears on argv.
         """
         args = tuple(args)
         self.calls.append(("run", "", " ".join(args), None))
+        self.run_inputs.append((args, input_text))
         return self._respond("run", "", " ".join(args), None)
 
     @property

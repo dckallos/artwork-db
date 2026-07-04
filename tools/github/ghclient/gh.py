@@ -102,9 +102,12 @@ class GhRunner(Protocol):
         """
         ...
 
-    def run(self, args: Sequence[str]) -> GhResult:
+    def run(self, args: Sequence[str], *, input_text: Optional[str] = None) -> GhResult:
         """
         Execute an arbitrary ``gh <args...>`` subcommand and return the result.
+
+        ``input_text``, when given, is fed to the process on stdin -- the way a secret
+        value reaches ``gh secret set`` without ever appearing on argv or in any log (H5).
         """
         ...
 
@@ -167,8 +170,11 @@ class SubprocessGhRunner:
             input_text = json.dumps(input_body)
         return self._exec(args, input_text)
 
-    def run(self, args: Sequence[str]) -> GhResult:
+    def run(self, args: Sequence[str], *, input_text: Optional[str] = None) -> GhResult:
         """
-        Execute an arbitrary ``gh <args...>`` subcommand.
+        Execute an arbitrary ``gh <args...>`` subcommand, optionally feeding stdin.
+
+        ``input_text`` is passed to the process on stdin (never on argv), so a secret
+        value handed to ``gh secret set NAME --env ...`` stays off the process list (H5).
         """
-        return self._exec(list(args), None)
+        return self._exec(list(args), input_text)

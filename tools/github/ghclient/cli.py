@@ -14,13 +14,11 @@ wired into CI with ``--apply``.
 """
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence
 
 from .config import load_config
-from .errors import ConfigError, GhClientError
-from .gh import GhRunner, SubprocessGhRunner
+from .errors import GhClientError
+from .gh import SubprocessGhRunner
 
 try:  # typer is a real dependency, but import-safety must not depend on it being present.
     import typer
@@ -32,50 +30,10 @@ except ImportError:  # pragma: no cover - exercised only where typer is absent.
 
 
 # --------------------------------------------------------------------------- #
-# Pure command implementations (no typer; injected runner; return (code, lines)).
-# --------------------------------------------------------------------------- #
-def run_preflight(
-    runner: GhRunner,
-    *,
-    config_path: Optional[Path] = None,
-    jq_present: Optional[bool] = None,
-) -> Tuple[int, List[str]]:
-    """
-    Verify the client's preconditions: config validity, ``gh`` auth, and ``jq``.
-
-    Returns ``(exit_code, lines)`` where a non-zero code means at least one check failed.
-    ``jq_present`` is injectable so the check is deterministic in tests; when ``None`` it
-    is probed from ``PATH``.
-    """
-    lines: List[str] = []
-    ok = True
-
-    try:
-        cfg = load_config(config_path)
-        lines.append(f"config: OK (repo={cfg.repo}, branches={cfg.branch_protection.names()})")
-    except ConfigError as exc:
-        ok = False
-        lines.append(f"config: FAIL: {exc}")
-
-    auth = runner.run(["auth", "status"])
-    if auth.ok:
-        lines.append("gh auth: OK")
-    else:
-        ok = False
-        lines.append("gh auth: FAIL (run `gh auth login` as a repo admin)")
-
-    has_jq = jq_present if jq_present is not None else shutil.which("jq") is not None
-    if has_jq:
-        lines.append("jq: OK")
-    else:
-        ok = False
-        lines.append("jq: FAIL (install jq)")
-
-    return (0 if ok else 1, lines)
-
-
-# --------------------------------------------------------------------------- #
 # typer wiring (thin). Built only when typer is importable.
+# The pure command implementations live in their modules (``preflight``, ``ci``,
+# ``branch_protection``, ``secrets``); each takes an injected :class:`GhRunner` and
+# returns ``(code, lines)``. Tests drive those directly, never through typer.
 # --------------------------------------------------------------------------- #
 def _echo(lines: Sequence[str]) -> None:
     """
@@ -104,12 +62,18 @@ def build_app():  # noqa: ANN201 - returns a typer.Typer; annotated loosely to a
     app.add_typer(bp, name="branch-protection")
     ci_app = typer.Typer(help="CI governance: reconcile required checks to the aggregate (dry-run default).")
     app.add_typer(ci_app, name="ci")
+    secrets_app = typer.Typer(
+        help="Publish dbt Snowflake credentials to GitHub Environment secrets/variables (dry-run default)."
+    )
+    app.add_typer(secrets_app, name="secrets")
 
     @app.command()
     def preflight() -> None:
         """
-        Verify gh auth, jq, and config validity.
+        Verify gh auth, config validity, and repo admin permission.
         """
+        from .preflight import run_preflight
+
         code, lines = run_preflight(SubprocessGhRunner())
         _echo(lines)
         raise typer.Exit(code)
@@ -131,13 +95,24 @@ def build_app():  # noqa: ANN201 - returns a typer.Typer; annotated loosely to a
     def bp_apply(
         branch: Optional[str] = typer.Option(None, "--branch", help="Limit to one branch."),
         apply: bool = typer.Option(False, "--apply", help="Perform the change (default: dry-run)."),
+        allow_ruleset_overlap: bool = typer.Option(
+            False,
+            "--allow-ruleset-overlap",
+            help="Proceed even when a repo/org ruleset also governs the branch (A3).",
+        ),
     ) -> None:
         """
         Apply the desired-state policy (dry-run unless --apply).
         """
         from . import branch_protection as _bp
 
-        code, lines = _bp.run_apply(SubprocessGhRunner(), load_config(), branch=branch, apply=apply)
+        code, lines = _bp.run_apply(
+            SubprocessGhRunner(),
+            load_config(),
+            branch=branch,
+            apply=apply,
+            allow_ruleset_overlap=allow_ruleset_overlap,
+        )
         _echo(lines)
         raise typer.Exit(code)
 
@@ -179,6 +154,46 @@ def build_app():  # noqa: ANN201 - returns a typer.Typer; annotated loosely to a
         from . import ci as _ci
 
         code, lines = _ci.run_reconcile(SubprocessGhRunner(), load_config(), branch=branch, apply=apply)
+        _echo(lines)
+        raise typer.Exit(code)
+
+    @secrets_app.command("publish")
+    def secrets_publish(
+        profile_set: str = typer.Option(
+            ..., "--profile-set", "--profile", help="Config publish set (snowflake_secrets.profiles.<name>)."
+        ),
+        env: Optional[str] = typer.Option(None, "--env", help="Override the target GitHub Environment name."),
+        apply: bool = typer.Option(False, "--apply", help="Perform the change (default: dry-run)."),
+        no_overwrite: bool = typer.Option(
+            True, "--no-overwrite/--overwrite", help="Never clobber existing items (default); --force overrides."
+        ),
+        force: bool = typer.Option(False, "--force", help="Update items that already exist."),
+        delete_missing: bool = typer.Option(
+            False, "--delete-missing", help="Delete managed items absent from the mapping."
+        ),
+        allow_role: List[str] = typer.Option(
+            [], "--allow-role", help="Explicitly permit a role, overriding the H3 allowlist (repeatable)."
+        ),
+    ) -> None:
+        """
+        Publish mapped connection fields to a GitHub Environment (dry-run unless --apply).
+        """
+        import getpass
+
+        from . import secrets as _secrets
+
+        code, lines = _secrets.run_publish(
+            SubprocessGhRunner(),
+            load_config(),
+            profile_set=profile_set,
+            env=env,
+            apply=apply,
+            no_overwrite=no_overwrite,
+            force=force,
+            delete_missing=delete_missing,
+            allow_roles=tuple(allow_role),
+            local_user=getpass.getuser(),
+        )
         _echo(lines)
         raise typer.Exit(code)
 

@@ -26,20 +26,40 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-from .config import BranchPolicyCfg, GithubClientConfig
+from ._paths import quote_segment
+from .config import BranchPolicyCfg, CiCfg, GithubClientConfig
 from .errors import GhApiError, GhClientError
 from .gh import GhResult, GhRunner
+
+# Status-check contexts that must never appear on a protected branch: ``test`` is the
+# legacy path-filtered job name that deadlocks docs-only PRs; the single source of truth
+# for required checks is ``cfg.ci.aggregate_context`` (H1-X / feedback "A and C fight").
+_FORBIDDEN_CONTEXTS: frozenset = frozenset({"test"})
+
+# Snapshot envelope schema version (A2): a persisted snapshot is always a JSON *object*
+# carrying provenance + a PUT-ready restore body. A bare ``null`` file is refused, so a
+# hand-written ``echo null`` can never become delete-eligible.
+_SNAPSHOT_SCHEMA = 1
 
 
 def _protection_path(repo: str, branch: str) -> str:
     """
-    REST path for a branch's classic protection.
+    REST path for a branch's classic protection (branch percent-encoded, A4).
     """
-    return f"repos/{repo}/branches/{branch}/protection"
+    return f"repos/{repo}/branches/{quote_segment(branch)}/protection"
+
+
+def _snapshot_filename(branch: str) -> str:
+    """
+    Filesystem-safe snapshot filename for ``branch`` (``/`` encoded, so ``release/x`` is
+    one file, not a nested directory) -- A4.
+    """
+    return f"{quote_segment(branch)}.json"
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +129,184 @@ class Snapshot:
 
 
 @dataclass(frozen=True)
+class ProtectionSnapshot:
+    """
+    A persisted before-state envelope (A1/A2): provenance + a PUT-ready restore body.
+
+    ``live_response`` is the raw ``GET .../protection`` payload (kept for audit only);
+    ``restore_body`` is the normalized body that :func:`plan_rollback` PUTs -- a GET
+    response is *not* a valid PUT payload (it carries ``url`` fields and ``{"enabled":
+    ...}`` wrappers), so rollback must never replay it verbatim. ``source == "verified-404"``
+    (with ``restore_body is None``) is the only delete-eligible state, and it can only be
+    produced by :func:`export_snapshot`'s verified 404 -- never by a hand-written file.
+    """
+
+    schema_version: int
+    repo: str
+    branch: str
+    captured_at: str
+    source: str  # "live" | "verified-404"
+    live_response: Optional[dict]
+    restore_body: Optional[dict]
+
+    @property
+    def is_null(self) -> bool:
+        """
+        True when the branch had no protection at capture time (verified 404).
+        """
+        return self.restore_body is None and self.source == "verified-404"
+
+    def to_json(self) -> dict:
+        """
+        The on-disk envelope object (never a bare ``null``).
+        """
+        return {
+            "schema_version": self.schema_version,
+            "repo": self.repo,
+            "branch": self.branch,
+            "captured_at": self.captured_at,
+            "source": self.source,
+            "live_response": self.live_response,
+            "restore_body": self.restore_body,
+        }
+
+
+# GET returns these as ``{"enabled": bool, "url": ...}``; PUT wants a bare boolean.
+_ENABLED_FLAG_KEYS: Tuple[str, ...] = (
+    "enforce_admins",
+    "required_linear_history",
+    "allow_force_pushes",
+    "allow_deletions",
+    "required_conversation_resolution",
+    "block_creations",
+    "required_signatures",
+    "lock_branch",
+    "allow_fork_syncing",
+)
+
+
+def _flag(value: Any) -> Optional[bool]:
+    """
+    Normalize a GET flag (``bool`` or ``{"enabled": bool}``) to a PUT boolean.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict) and isinstance(value.get("enabled"), bool):
+        return value["enabled"]
+    return None
+
+
+def _normalize_required_status_checks(rsc: Any) -> Optional[dict]:
+    """
+    Reduce a GET ``required_status_checks`` object to its PUT-valid fields.
+    """
+    if not isinstance(rsc, dict):
+        return None
+    out: dict = {"strict": bool(rsc.get("strict", True))}
+    checks = rsc.get("checks")
+    if isinstance(checks, list):
+        out["checks"] = [
+            {"context": c["context"], "app_id": c.get("app_id", -1)}
+            for c in checks
+            if isinstance(c, dict) and c.get("context")
+        ]
+        out["contexts"] = []
+    else:
+        out["contexts"] = [c for c in (rsc.get("contexts") or []) if isinstance(c, str)]
+    return out
+
+
+def _normalize_pr_reviews(reviews: Any) -> Optional[dict]:
+    """
+    Keep only the PUT-valid keys of a GET ``required_pull_request_reviews`` object.
+    """
+    if not isinstance(reviews, dict):
+        return None
+    allowed = (
+        "dismiss_stale_reviews",
+        "require_code_owner_reviews",
+        "required_approving_review_count",
+        "require_last_push_approval",
+    )
+    out = {k: reviews[k] for k in allowed if k in reviews}
+    dr = reviews.get("dismissal_restrictions")
+    if isinstance(dr, dict):
+        out["dismissal_restrictions"] = {
+            "users": [u["login"] for u in dr.get("users", []) if isinstance(u, dict) and u.get("login")],
+            "teams": [t["slug"] for t in dr.get("teams", []) if isinstance(t, dict) and t.get("slug")],
+        }
+    return out
+
+
+def _normalize_restrictions(restrictions: Any) -> Optional[dict]:
+    """
+    Reduce a GET ``restrictions`` object to the PUT shape (login/slug lists) or ``None``.
+    """
+    if not isinstance(restrictions, dict):
+        return None
+    return {
+        "users": [u["login"] for u in restrictions.get("users", []) if isinstance(u, dict) and u.get("login")],
+        "teams": [t["slug"] for t in restrictions.get("teams", []) if isinstance(t, dict) and t.get("slug")],
+        "apps": [a["slug"] for a in restrictions.get("apps", []) if isinstance(a, dict) and a.get("slug")],
+    }
+
+
+def normalize_to_put_body(live: dict) -> dict:
+    """
+    Convert a ``GET .../protection`` response into a valid ``PUT`` restore body (A1).
+
+    GitHub's protection GET returns response-only shapes -- ``url`` fields and
+    ``{"enabled": ...}`` wrappers -- that the update endpoint rejects. This maps them to
+    the PUT schema: the four required keys (``required_status_checks``,
+    ``enforce_admins``, ``required_pull_request_reviews``, ``restrictions``) are always
+    present (``None`` when absent), and the optional ``{"enabled"}`` flags are flattened
+    to booleans only when the GET carried them.
+    """
+    body: dict = {
+        "required_status_checks": _normalize_required_status_checks(live.get("required_status_checks")),
+        "enforce_admins": bool(_flag(live.get("enforce_admins"))),
+        "required_pull_request_reviews": _normalize_pr_reviews(live.get("required_pull_request_reviews")),
+        "restrictions": _normalize_restrictions(live.get("restrictions")),
+    }
+    for key in _ENABLED_FLAG_KEYS:
+        if key == "enforce_admins":
+            continue
+        flag = _flag(live.get(key))
+        if flag is not None:
+            body[key] = flag
+    return body
+
+
+def build_snapshot(repo: str, snapshot: Snapshot) -> ProtectionSnapshot:
+    """
+    Wrap a captured :class:`Snapshot` in a persisted :class:`ProtectionSnapshot` envelope.
+
+    A verified-404 capture yields ``restore_body=None`` (delete-eligible); a live capture
+    stores the raw response for audit and a normalized, PUT-ready ``restore_body`` (A1).
+    """
+    captured_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    if snapshot.is_null:
+        return ProtectionSnapshot(
+            schema_version=_SNAPSHOT_SCHEMA,
+            repo=repo,
+            branch=snapshot.branch,
+            captured_at=captured_at,
+            source="verified-404",
+            live_response=None,
+            restore_body=None,
+        )
+    return ProtectionSnapshot(
+        schema_version=_SNAPSHOT_SCHEMA,
+        repo=repo,
+        branch=snapshot.branch,
+        captured_at=captured_at,
+        source="live",
+        live_response=snapshot.body,
+        restore_body=normalize_to_put_body(snapshot.body or {}),
+    )
+
+
+@dataclass(frozen=True)
 class AuditReport:
     """
     The read-only inventory produced by :func:`audit` (classic + rulesets, H9).
@@ -167,36 +365,102 @@ def load_policy_body(policy_path: Path) -> dict:
     return body
 
 
-def plan_apply(repo: str, policy: BranchPolicyCfg) -> ProtectionAction:
+def _require_ci(cfg: GithubClientConfig, branch: str) -> CiCfg:
+    """
+    Return the typed ``ci`` config or raise: a branch that derives required checks from
+    workflows needs an aggregate context to derive them *to*.
+    """
+    if cfg.ci is None:
+        raise GhClientError(
+            f"branch {branch!r} sets required_checks_from_workflows: true but the config "
+            "has no 'ci:' block; add ci.aggregate_context (single source of truth for the "
+            "required check)."
+        )
+    return cfg.ci
+
+
+def _reject_forbidden_contexts(body: dict, branch: str) -> None:
+    """
+    Refuse a policy whose required status checks name a forbidden context (e.g. ``test``).
+
+    Guards against a hand-edited policy re-introducing the path-filtered check that
+    deadlocks docs-only PRs -- the derived aggregate is the only permitted required check.
+    """
+    rsc = body.get("required_status_checks")
+    if not isinstance(rsc, dict):
+        return
+    present = {c for c in (rsc.get("contexts") or []) if isinstance(c, str)}
+    present |= {
+        c.get("context")
+        for c in (rsc.get("checks") or [])
+        if isinstance(c, dict) and c.get("context")
+    }
+    bad = sorted(present & _FORBIDDEN_CONTEXTS)
+    if bad:
+        raise GhClientError(
+            f"policy for {branch!r} names forbidden required check(s) {bad}; the required "
+            "check is derived from ci.aggregate_context (remove the hardcoded context)."
+        )
+
+
+def policy_body_for_apply(cfg: GithubClientConfig, policy: BranchPolicyCfg) -> dict:
+    """
+    Build the PUT body for a branch, deriving required checks from ci config (H1-X / C4).
+
+    When ``required_checks_from_workflows`` is set, ``required_status_checks`` is generated
+    from ``cfg.ci.aggregate_context`` -- the single source of truth -- as
+    ``{"strict": <policy strict or True>, "checks": [{"context": <aggregate>, "app_id": -1}],
+    "contexts": []}`` (``app_id: -1`` allows any app to report the status). A forbidden
+    context (e.g. a leftover ``test``) is rejected either way.
+    """
+    body = load_policy_body(policy.policy_path)
+    if policy.required_checks_from_workflows:
+        ci = _require_ci(cfg, policy.branch)
+        existing = body.get("required_status_checks")
+        strict = existing.get("strict", True) if isinstance(existing, dict) else True
+        body["required_status_checks"] = {
+            "strict": bool(strict),
+            "checks": [{"context": ci.aggregate_context, "app_id": -1}],
+            "contexts": [],
+        }
+    _reject_forbidden_contexts(body, policy.branch)
+    return body
+
+
+def plan_apply(cfg: GithubClientConfig, policy: BranchPolicyCfg) -> ProtectionAction:
     """
     Build the PUT plan that makes ``policy.branch`` match its desired-state body.
 
-    Idempotent by construction: ``PUT .../protection`` replaces the whole config,
-    so re-applying converges to the committed policy.
+    Idempotent by construction: ``PUT .../protection`` replaces the whole config, so
+    re-applying converges to the committed policy. Required checks are derived from
+    ``cfg.ci.aggregate_context`` when the branch opts in (H1-X), so the policy JSON and
+    ``ci reconcile`` never fight over the required check.
     """
-    body = load_policy_body(policy.policy_path)
+    body = policy_body_for_apply(cfg, policy)
     return ProtectionAction(
         kind=ActionKind.PUT,
-        repo=repo,
+        repo=cfg.repo,
         branch=policy.branch,
         reason=f"apply desired-state policy {policy.policy_path.name}",
         body=body,
     )
 
 
-def plan_rollback(repo: str, snapshot: Snapshot) -> ProtectionAction:
+def plan_rollback(repo: str, snapshot: ProtectionSnapshot) -> ProtectionAction:
     """
-    Build the plan that restores ``snapshot`` (the captured before-state).
+    Build the plan that restores ``snapshot`` (the captured before-state envelope).
 
-    A ``null`` snapshot (verified 404) -> DELETE protection; a captured body ->
-    PUT-restore it. H1: because ``export_snapshot`` never writes ``null`` on an
-    error, a ``null`` snapshot is proof of a verified 404 and is delete-eligible.
+    A verified-404 envelope (``restore_body is None``) -> DELETE protection; a captured
+    envelope -> PUT its **normalized** ``restore_body`` (never the raw GET response, which
+    is not a valid PUT payload -- A1). H1/A2: only a ``source == "verified-404"`` envelope
+    is delete-eligible, and :func:`export_snapshot` is the sole producer of one, so a
+    hand-written or transport-error snapshot can never delete protection.
     """
     if snapshot.is_null:
         if snapshot.source != "verified-404":
             raise GhClientError(
                 f"refusing to DELETE protection on {snapshot.branch}: null "
-                f"snapshot has untrusted provenance {snapshot.source!r} (H1)."
+                f"snapshot has untrusted provenance {snapshot.source!r} (H1/A2)."
             )
         return ProtectionAction(
             kind=ActionKind.DELETE,
@@ -204,12 +468,17 @@ def plan_rollback(repo: str, snapshot: Snapshot) -> ProtectionAction:
             branch=snapshot.branch,
             reason="restore unprotected before-state (verified 404)",
         )
+    if snapshot.restore_body is None:
+        raise GhClientError(
+            f"refusing to roll back {snapshot.branch}: snapshot has no restore_body and "
+            f"source {snapshot.source!r} is not a verified 404 (A2)."
+        )
     return ProtectionAction(
         kind=ActionKind.PUT,
         repo=repo,
         branch=snapshot.branch,
-        reason="restore saved protection from snapshot",
-        body=snapshot.body,
+        reason="restore saved protection from snapshot (normalized PUT body)",
+        body=snapshot.restore_body,
     )
 
 
@@ -246,25 +515,26 @@ def export_snapshot(runner: Any, repo: str, branch: str) -> Snapshot:
     )
 
 
-def write_snapshot(snapshot: Snapshot, exports_dir: Path) -> Path:
+def write_snapshot(snapshot: ProtectionSnapshot, exports_dir: Path) -> Path:
     """
-    Persist ``snapshot`` to ``exports/<branch>.json`` (literal ``null`` when empty).
+    Persist a :class:`ProtectionSnapshot` envelope to ``exports/<branch>.json``.
+
+    Always a JSON object (schema-versioned) -- never a bare ``null`` -- so provenance
+    travels with the file and a hand-written ``null`` is not delete-eligible (A2).
     """
     exports_dir.mkdir(parents=True, exist_ok=True)
-    out = exports_dir / f"{snapshot.branch}.json"
-    if snapshot.is_null:
-        out.write_text("null\n")
-    else:
-        out.write_text(json.dumps(snapshot.body, indent=2, sort_keys=True) + "\n")
+    out = exports_dir / _snapshot_filename(snapshot.branch)
+    out.write_text(json.dumps(snapshot.to_json(), indent=2, sort_keys=True) + "\n")
     return out
 
 
-def read_snapshot(path: Path, branch: str) -> Snapshot:
+def read_snapshot(path: Path, branch: str) -> ProtectionSnapshot:
     """
-    Load a previously written snapshot, refusing a corrupt one.
+    Load a persisted :class:`ProtectionSnapshot` envelope, refusing a corrupt/legacy one.
 
-    A literal ``null`` -> verified-404 (delete-eligible); a JSON object -> a live
-    body; anything else raises (corrupt-snapshot rollback refusal, H5).
+    A bare ``null`` (legacy or hand-written) is **refused** -- delete-eligibility requires
+    a schema-versioned envelope whose ``source`` is ``"verified-404"`` (A2). A non-object
+    or unparseable file is refused (corrupt-snapshot rollback refusal, H5).
     """
     if not path.exists():
         raise GhClientError(
@@ -273,19 +543,35 @@ def read_snapshot(path: Path, branch: str) -> Snapshot:
         )
     text = path.read_text().strip()
     if text == "null":
-        return Snapshot(branch=branch, body=None, source="verified-404")
+        raise GhClientError(
+            f"refusing bare-null snapshot {path.name}: legacy/untrusted provenance; "
+            "re-export to produce a schema-versioned envelope (A2)."
+        )
     try:
-        body = json.loads(text)
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise GhClientError(
             f"corrupt snapshot {path.name}: not valid JSON; refusing to roll back."
         ) from exc
-    if not isinstance(body, dict):
+    if not isinstance(data, dict) or "schema_version" not in data:
         raise GhClientError(
-            f"corrupt snapshot {path.name}: expected a JSON object or null; "
+            f"corrupt snapshot {path.name}: expected a schema-versioned envelope; "
             "refusing to roll back."
         )
-    return Snapshot(branch=branch, body=body, source="live")
+    source = data.get("source")
+    if source not in ("live", "verified-404"):
+        raise GhClientError(
+            f"corrupt snapshot {path.name}: unknown source {source!r}; refusing to roll back."
+        )
+    return ProtectionSnapshot(
+        schema_version=int(data["schema_version"]),
+        repo=data.get("repo", ""),
+        branch=data.get("branch", branch),
+        captured_at=data.get("captured_at", ""),
+        source=source,
+        live_response=data.get("live_response"),
+        restore_body=data.get("restore_body"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -313,17 +599,20 @@ def list_rulesets(runner: Any, repo: str) -> List[dict]:
 
 def get_branch_rules(runner: Any, repo: str, branch: str) -> List[dict]:
     """
-    List ruleset-sourced rules that apply to ``branch`` (fail-closed on non-404).
+    List ruleset-sourced rules that apply to ``branch`` -- fail-closed on ANY error (A3).
+
+    GitHub's ``GET /repos/{repo}/rules/branches/{branch}`` returns ``200`` with all active
+    rules -- even for a branch that does not exist -- so a ``404`` here is anomalous
+    (endpoint/auth/repo ambiguity), never proof of "no rules." We therefore fail closed on
+    a 404 too, so a ruleset overlap is never silently missed before a classic mutation.
     """
-    res: GhResult = runner.api(f"repos/{repo}/rules/branches/{branch}", method="GET")
+    res: GhResult = runner.api(f"repos/{repo}/rules/branches/{quote_segment(branch)}", method="GET")
     if res.ok:
         data = json.loads(res.stdout or "[]")
         return list(data) if isinstance(data, list) else []
-    if res.status_code == 404:
-        return []
     raise GhApiError(
         f"audit {repo}@{branch}: listing branch rules failed (HTTP "
-        f"{res.status_code}); failing closed.",
+        f"{res.status_code}); failing closed (a 404 here is not 'no rules', A3).",
         status_code=res.status_code,
         stderr=res.stderr,
     )
@@ -382,13 +671,21 @@ def _selected_policies(cfg: GithubClientConfig, branch: Optional[str]) -> List[B
 
 
 def run_apply(
-    runner: GhRunner, cfg: GithubClientConfig, *, branch: Optional[str] = None, apply: bool = False
+    runner: GhRunner,
+    cfg: GithubClientConfig,
+    *,
+    branch: Optional[str] = None,
+    apply: bool = False,
+    allow_ruleset_overlap: bool = False,
 ) -> Tuple[int, List[str]]:
     """
     Preview (default) or ``--apply`` the desired-state policy for the selected branches.
 
-    On ``--apply`` the current state is exported first (H1 before-state), then the PUT
-    runs. Idempotent: re-applying converges to the committed policy.
+    Ruleset-aware (A3): each branch is audited first (classic protection + active
+    rulesets/branch rules, fail-closed). An overlap is always warned about; on ``--apply``
+    it BLOCKS the mutation unless ``allow_ruleset_overlap`` is set, so classic protection
+    never silently fights a ruleset. The audit's classic capture doubles as the H1
+    before-state snapshot (no second GET). Idempotent: re-applying converges.
     """
     try:
         policies = _selected_policies(cfg, branch)
@@ -398,11 +695,24 @@ def run_apply(
     code = 0
     for policy in policies:
         try:
-            action = plan_apply(cfg.repo, policy)
+            report = audit(runner, cfg.repo, policy.branch)  # A3: read-only audit-first
+            action = plan_apply(cfg, policy)
             lines.append(action.render())
+            if report.has_ruleset_overlap:
+                kinds = sorted({str(r.get("type", "?")) for r in report.branch_rules})
+                lines.append(
+                    f"  WARNING: {len(report.branch_rules)} ruleset rule(s) also govern "
+                    f"{policy.branch} (types: {kinds}); a classic PUT may fight them (A3)."
+                )
+                if apply and not allow_ruleset_overlap:
+                    code = 1
+                    lines.append(
+                        f"  BLOCKED: refusing to --apply over a ruleset overlap on "
+                        f"{policy.branch}; re-run with --allow-ruleset-overlap to override (A3)."
+                    )
+                    continue
             if apply:
-                snapshot = export_snapshot(runner, cfg.repo, policy.branch)
-                out = write_snapshot(snapshot, cfg.exports_dir)
+                out = write_snapshot(build_snapshot(cfg.repo, report.classic), cfg.exports_dir)
                 lines.append(f"  before-state snapshot -> {out}")
                 execute(runner, action)
                 lines.append(f"  APPLIED: {policy.branch} protection updated.")
@@ -460,7 +770,7 @@ def run_rollback(
     code = 0
     for policy in policies:
         try:
-            snapshot = read_snapshot(cfg.exports_dir / f"{policy.branch}.json", policy.branch)
+            snapshot = read_snapshot(cfg.exports_dir / _snapshot_filename(policy.branch), policy.branch)
             action = plan_rollback(cfg.repo, snapshot)
             lines.append(action.render())
             if apply:

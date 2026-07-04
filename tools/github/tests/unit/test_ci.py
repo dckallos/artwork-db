@@ -139,7 +139,12 @@ def test_apply_issues_exactly_one_patch_of_the_aggregate(fixtures_dir: Path, fak
     code, _ = ci.run_reconcile(runner, _cfg(fixtures_dir), apply=True, workflows_root=fixtures_dir)
     assert code == 0
     patches = [(p, b) for (m, p, b) in runner.api_calls if m == "PATCH"]
-    assert patches == [(_REQUIRED_CHECKS, {"checks": [{"context": _AGGREGATE}]})]
+    assert patches == [
+        (
+            _REQUIRED_CHECKS,
+            {"strict": True, "checks": [{"context": _AGGREGATE, "app_id": -1}], "contexts": []},
+        )
+    ]
 
 
 def test_apply_is_idempotent(fixtures_dir: Path, fake_runner_factory) -> None:

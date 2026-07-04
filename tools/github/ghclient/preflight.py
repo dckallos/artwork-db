@@ -1,17 +1,23 @@
 """
 preflight: verify the local environment before any GitHub operation.
 
-Read-only and injectable -- the ``gh`` seam and the ``which`` lookup are passed
-in, so the whole check is unit-testable offline. Reports per-check status; the
-overall result is ``ok`` only when every required check passes.
+Read-only and injectable -- the ``gh`` seam is passed in, so the whole check is
+unit-testable offline. This is the *single* preflight implementation (A5): it reports
+per-check status and the overall result is ``ok`` only when every required check passes.
+
+Checks (A5): ``gh`` is authenticated; the config loads; and the authenticated identity
+has **admin** permission on the target repo (branch-protection and required-status-check
+updates require admin/owner). The obsolete ``jq`` check was removed -- snapshots are
+formatted with ``json.dumps``, not ``jq``.
 """
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, List, Optional, Tuple
 
-from .config import GithubClientConfig
+from .config import GithubClientConfig, load_config
+from .errors import ConfigError
 
 
 @dataclass(frozen=True)
@@ -49,18 +55,39 @@ class PreflightReport:
         return "\n".join(lines)
 
 
-def preflight(
-    runner: Any,
-    config: Optional[GithubClientConfig],
-    *,
-    which: Callable[[str], Optional[str]] = shutil.which,
-) -> PreflightReport:
+def _admin_check(runner: Any, repo: str) -> Check:
     """
-    Check ``gh`` auth, ``jq`` presence, and config validity.
+    Confirm the authenticated identity has ``admin`` permission on ``repo`` (A5).
 
-    ``config`` is the already-loaded config (or ``None`` if loading failed, which
-    is itself reported as a failed check). ``which`` is injected so tests can
-    simulate a missing ``jq`` without touching the real ``PATH``.
+    Branch-protection and required-status-check updates require admin/owner; a
+    non-admin token would fail mid-apply, so we surface it up front and read-only.
+    """
+    res = runner.api(f"repos/{repo}")
+    if not res.ok:
+        return Check(
+            "repo admin",
+            False,
+            f"could not read {repo} (HTTP {res.status_code}); need admin/owner access",
+        )
+    try:
+        perms = (res.json() or {}).get("permissions") or {}
+    except Exception:  # noqa: BLE001 - a malformed body is simply "unknown, fail safe"
+        perms = {}
+    admin = bool(perms.get("admin"))
+    return Check(
+        "repo admin",
+        admin,
+        "admin: true" if admin else f"insufficient permission on {repo}; branch protection requires admin",
+    )
+
+
+def preflight(runner: Any, config: Optional[GithubClientConfig]) -> PreflightReport:
+    """
+    Check ``gh`` auth, config validity, and repo admin permission.
+
+    ``config`` is the already-loaded config (or ``None`` if loading failed, itself reported
+    as a failed check). The admin check runs only when the config loaded and ``gh`` is
+    authenticated, since it needs both a repo slug and a working credential.
     """
     checks: List[Check] = []
 
@@ -70,15 +97,6 @@ def preflight(
             name="gh auth",
             ok=bool(auth.ok),
             detail="authenticated" if auth.ok else "run `gh auth login` (not authenticated)",
-        )
-    )
-
-    jq_path = which("jq")
-    checks.append(
-        Check(
-            name="jq",
-            ok=jq_path is not None,
-            detail=jq_path or "not found on PATH (install jq)",
         )
     )
 
@@ -94,4 +112,22 @@ def preflight(
         )
     )
 
+    if config is not None and auth.ok:
+        checks.append(_admin_check(runner, config.repo))
+
     return PreflightReport(checks=tuple(checks))
+
+
+def run_preflight(runner: Any, *, config_path: Optional[Path] = None) -> Tuple[int, List[str]]:
+    """
+    Load the config and run :func:`preflight`, returning ``(exit_code, lines)``.
+
+    A non-zero code means at least one check failed. A config that fails to load is
+    reported as a failed ``config`` check (never a bare traceback).
+    """
+    try:
+        config: Optional[GithubClientConfig] = load_config(config_path)
+    except ConfigError:
+        config = None
+    report = preflight(runner, config)
+    return (0 if report.ok else 1, report.render().splitlines())

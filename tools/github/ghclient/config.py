@@ -15,6 +15,7 @@ Path resolution:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
 
@@ -93,13 +94,144 @@ class CiCfg:
     the branch's required check -- never a path-filtered job name (which would deadlock
     docs-only PRs). ``workflows`` are repo-relative paths (e.g.
     ``.github/workflows/ci.yml``); the aggregate job must be defined in one of them.
+    ``aggregate_workflow`` (optional, C2) names the ONE workflow that actually emits the
+    aggregate; the rest are *informational* (their jobs feed the gate but are not the
+    required check). When set, ``ci reconcile`` validates that workflow's shape (C3).
     ``source`` is the config file path so consumers can raise file-scoped errors.
     """
 
     workflows: Tuple[str, ...]
     aggregate_context: str
+    aggregate_workflow: Optional[str] = None
     required_checks: str = "auto"
     source: str = _CONFIG_REL
+
+    @property
+    def informational_workflows(self) -> Tuple[str, ...]:
+        """
+        The configured workflows that are NOT the aggregate emitter (feed it, not required).
+        """
+        if self.aggregate_workflow is None:
+            return ()
+        return tuple(wf for wf in self.workflows if wf != self.aggregate_workflow)
+
+
+class ItemKind(Enum):
+    """
+    Whether a published item is a GitHub Actions **secret** (write-only, value never
+    readable) or a **variable** (readable, value may be diffed). Drives H8 semantics.
+    """
+
+    SECRET = "secret"
+    VARIABLE = "variable"
+
+
+class TargetType(Enum):
+    """
+    Where published items land. v1 supports GitHub deployment **environments** only;
+    ``repo``/``org`` targets are an additive future extension (plan §4.2).
+    """
+
+    ENVIRONMENT = "environment"
+
+
+class ExtraSource(Enum):
+    """
+    Where an ``extra`` item's value comes from when it is not a connections.toml field:
+    a file on disk (key material), an interactive prompt, or an inline literal.
+    """
+
+    FROM_FILE = "from_file"
+    PROMPT = "prompt"
+    VALUE = "value"
+
+
+@dataclass(frozen=True)
+class TargetRef:
+    """
+    The publish target: a type (v1: environment) plus its name (e.g. ``prod``).
+    """
+
+    type: TargetType
+    name: str
+
+
+@dataclass(frozen=True)
+class MappedField:
+    """
+    One connections.toml field routed to a GitHub item.
+
+    ``toml_field`` is the profile key to read (e.g. ``account``); ``gh_name`` is the
+    GitHub secret/variable name to write (e.g. ``SNOWFLAKE_ACCOUNT``); ``kind`` selects
+    secret vs variable (H8).
+    """
+
+    toml_field: str
+    gh_name: str
+    kind: ItemKind
+
+
+@dataclass(frozen=True)
+class ExtraItem:
+    """
+    A published item whose value is *not* in the connections.toml profile.
+
+    ``source`` says where the value comes from; ``ref`` is the file path (``FROM_FILE``)
+    or inline literal (``VALUE``), and ``None`` for ``PROMPT``. Extra items are always
+    secrets (key material / passphrases), so the raw value never enters config or logs.
+    """
+
+    gh_name: str
+    kind: ItemKind
+    source: ExtraSource
+    ref: Optional[str]
+
+
+@dataclass(frozen=True)
+class PublishSet:
+    """
+    One named publish set: a connections.toml profile mapped onto a GitHub target.
+
+    ``allow_roles`` is the per-set role allowlist (H3); a connection whose role is absent
+    from it (or is ``ACCOUNTADMIN``) is refused unless the CLI passes an explicit
+    ``--allow-role`` override.
+    """
+
+    name: str
+    profile: str
+    target: TargetRef
+    mapped: Tuple[MappedField, ...]
+    extra: Tuple[ExtraItem, ...]
+    allow_roles: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SecretsCfg:
+    """
+    The ``snowflake_secrets`` block: the connections.toml source plus named publish sets.
+
+    ``source`` is the raw (unexpanded) path exactly as written; ``~`` is expanded by
+    :mod:`ghclient.connections` at run time, never at import. ``source_file`` is the
+    config file path so lookups raise file-scoped errors.
+    """
+
+    source: str
+    profiles: Mapping[str, PublishSet]
+    source_file: str = _CONFIG_REL
+
+    def get(self, name: str) -> PublishSet:
+        """
+        Return the publish set ``name``, or raise a scoped :class:`ConfigError`.
+        """
+        publish_set = self.profiles.get(name)
+        if publish_set is None:
+            available = ", ".join(sorted(self.profiles)) or "(none)"
+            raise ConfigError(
+                self.source_file,
+                "snowflake_secrets.profiles",
+                f"{name!r} is not a configured publish set; available: {available}",
+            )
+        return publish_set
 
 
 @dataclass(frozen=True)
@@ -107,17 +239,16 @@ class GithubClientConfig:
     """
     The parsed, validated client configuration.
 
-    ``raw_secrets`` is the untouched ``snowflake_secrets`` block consumed by Area B; Area
-    A validates only that it is a mapping so the schema stays stable without coupling to
-    behavior that does not exist yet. ``ci`` is the typed Area-C block, or ``None`` when
-    the config declares no ``ci:`` section.
+    ``secrets`` is the typed Area-B ``snowflake_secrets`` block (connections source +
+    named publish sets), or ``None`` when the config declares no ``snowflake_secrets:``
+    section. ``ci`` is the typed Area-C block, or ``None`` when there is no ``ci:``.
     """
 
     repo: str
     branch_protection: BranchProtectionCfg
     config_path: Path
     base_dir: Path
-    raw_secrets: Mapping[str, Any]
+    secrets: Optional[SecretsCfg]
     ci: Optional[CiCfg]
 
     @property
@@ -206,7 +337,7 @@ def load_config(
 
     branch_protection = _parse_branch_protection(source, root, top.get("branch_protection", {}))
 
-    raw_secrets = _require_mapping(source, "snowflake_secrets", top.get("snowflake_secrets", {}))
+    secrets = _parse_secrets(source, top["snowflake_secrets"]) if "snowflake_secrets" in top else None
     ci = _parse_ci(source, top.get("ci")) if "ci" in top else None
 
     return GithubClientConfig(
@@ -214,7 +345,7 @@ def load_config(
         branch_protection=branch_protection,
         config_path=path,
         base_dir=root,
-        raw_secrets=raw_secrets,
+        secrets=secrets,
         ci=ci,
     )
 
@@ -263,7 +394,7 @@ def _parse_branch_protection(source: str, base_dir: Path, value: Any) -> BranchP
     return BranchProtectionCfg(branches=tuple(policies), source=source)
 
 
-_CI_ALLOWED_KEYS = {"workflows", "required_checks", "aggregate_context"}
+_CI_ALLOWED_KEYS = {"workflows", "required_checks", "aggregate_context", "aggregate_workflow"}
 _CI_REQUIRED_CHECK_MODES = {"auto"}
 
 
@@ -300,9 +431,174 @@ def _parse_ci(source: str, value: Any) -> CiCfg:
             f"expected one of: {allowed}",
         )
 
+    aggregate_workflow = block.get("aggregate_workflow")
+    if aggregate_workflow is not None:
+        aggregate_workflow = _require_str(source, "ci.aggregate_workflow", aggregate_workflow)
+        if aggregate_workflow not in workflows:
+            raise ConfigError(
+                source,
+                "ci.aggregate_workflow",
+                f"{aggregate_workflow!r} is not one of ci.workflows {list(workflows)}",
+            )
+
     return CiCfg(
         workflows=workflows,
         aggregate_context=aggregate_context,
+        aggregate_workflow=aggregate_workflow,
         required_checks=required_checks,
         source=source,
     )
+
+
+_SECRETS_ALLOWED_KEYS = {"source", "profiles"}
+_PUBLISH_SET_ALLOWED_KEYS = {"profile", "target", "map", "extra", "allow_roles"}
+_TARGET_ALLOWED_KEYS = {"type", "name"}
+_ITEM_ALLOWED_KEYS = {"secret", "variable"}
+_EXTRA_ALLOWED_KEYS = {"from_file", "prompt", "value"}
+
+
+def _parse_secrets(source: str, value: Any) -> SecretsCfg:
+    """
+    Validate the ``snowflake_secrets`` block into a :class:`SecretsCfg`.
+
+    Requires a ``source`` path and an optional ``profiles`` map of named publish sets.
+    Every failure is scoped to ``snowflake_secrets.<field>`` so the message points at the
+    exact line; unknown keys are rejected.
+    """
+    block = _require_mapping(source, "snowflake_secrets", value)
+    _reject_unknown(source, "snowflake_secrets", block, _SECRETS_ALLOWED_KEYS)
+
+    if "source" not in block:
+        raise ConfigError(source, "snowflake_secrets.source", "required key is missing")
+    toml_source = _require_str(source, "snowflake_secrets.source", block["source"])
+
+    profiles_raw = _require_mapping(
+        source, "snowflake_secrets.profiles", block.get("profiles", {})
+    )
+    profiles = {
+        name: _parse_publish_set(source, name, spec) for name, spec in profiles_raw.items()
+    }
+    return SecretsCfg(source=toml_source, profiles=profiles, source_file=source)
+
+
+def _parse_publish_set(source: str, name: str, value: Any) -> PublishSet:
+    """
+    Validate one named publish set (``snowflake_secrets.profiles.<name>``).
+    """
+    field = f"snowflake_secrets.profiles.{name}"
+    block = _require_mapping(source, field, value)
+    _reject_unknown(source, field, block, _PUBLISH_SET_ALLOWED_KEYS)
+
+    if "profile" not in block:
+        raise ConfigError(source, f"{field}.profile", "required key is missing")
+    profile = _require_str(source, f"{field}.profile", block["profile"])
+
+    target = _parse_target(source, f"{field}.target", block.get("target"))
+    mapped = _parse_map(source, f"{field}.map", block.get("map", {}))
+    extra = _parse_extra(source, f"{field}.extra", block.get("extra", {}))
+    allow_roles = _parse_allow_roles(source, f"{field}.allow_roles", block.get("allow_roles", []))
+
+    if not mapped and not extra:
+        raise ConfigError(source, field, "must publish at least one item (map or extra)")
+
+    seen: Dict[str, str] = {}
+    for gh_name in [m.gh_name for m in mapped] + [e.gh_name for e in extra]:
+        if gh_name in seen:
+            raise ConfigError(source, field, f"duplicate GitHub item name {gh_name!r}")
+        seen[gh_name] = gh_name
+
+    return PublishSet(
+        name=name,
+        profile=profile,
+        target=target,
+        mapped=mapped,
+        extra=extra,
+        allow_roles=allow_roles,
+    )
+
+
+def _parse_target(source: str, field: str, value: Any) -> TargetRef:
+    """
+    Validate a publish set's ``target`` (type + name).
+    """
+    if value is None:
+        raise ConfigError(source, field, "required key is missing")
+    block = _require_mapping(source, field, value)
+    _reject_unknown(source, field, block, _TARGET_ALLOWED_KEYS)
+
+    if "type" not in block:
+        raise ConfigError(source, f"{field}.type", "required key is missing")
+    type_raw = _require_str(source, f"{field}.type", block["type"])
+    try:
+        target_type = TargetType(type_raw)
+    except ValueError:
+        allowed = ", ".join(t.value for t in TargetType)
+        raise ConfigError(source, f"{field}.type", f"expected one of: {allowed}")
+
+    if "name" not in block:
+        raise ConfigError(source, f"{field}.name", "required key is missing")
+    target_name = _require_str(source, f"{field}.name", block["name"])
+    return TargetRef(type=target_type, name=target_name)
+
+
+def _parse_item_kind(source: str, field: str, value: Any) -> Tuple[str, "ItemKind"]:
+    """
+    Parse a ``{secret: NAME}`` or ``{variable: NAME}`` spec into ``(gh_name, kind)``.
+    """
+    block = _require_mapping(source, field, value)
+    _reject_unknown(source, field, block, _ITEM_ALLOWED_KEYS)
+    if len(block) != 1:
+        raise ConfigError(source, field, "expected exactly one of: secret, variable")
+    if "secret" in block:
+        return _require_str(source, f"{field}.secret", block["secret"]), ItemKind.SECRET
+    return _require_str(source, f"{field}.variable", block["variable"]), ItemKind.VARIABLE
+
+
+def _parse_map(source: str, field: str, value: Any) -> Tuple[MappedField, ...]:
+    """
+    Validate the ``map`` block (connections.toml field -> GitHub secret/variable).
+    """
+    block = _require_mapping(source, field, value)
+    items = []
+    for toml_field, spec in block.items():
+        gh_name, kind = _parse_item_kind(source, f"{field}.{toml_field}", spec)
+        items.append(MappedField(toml_field=toml_field, gh_name=gh_name, kind=kind))
+    return tuple(items)
+
+
+def _parse_extra(source: str, field: str, value: Any) -> Tuple[ExtraItem, ...]:
+    """
+    Validate the ``extra`` block (values not in the connections.toml, always secrets).
+    """
+    block = _require_mapping(source, field, value)
+    items = []
+    for gh_name, spec in block.items():
+        sub = f"{field}.{gh_name}"
+        spec_map = _require_mapping(source, sub, spec)
+        _reject_unknown(source, sub, spec_map, _EXTRA_ALLOWED_KEYS)
+        if len(spec_map) != 1:
+            raise ConfigError(source, sub, "expected exactly one of: from_file, prompt, value")
+        if "from_file" in spec_map:
+            ref = _require_str(source, f"{sub}.from_file", spec_map["from_file"])
+            item_source = ExtraSource.FROM_FILE
+        elif "value" in spec_map:
+            ref = _require_str(source, f"{sub}.value", spec_map["value"])
+            item_source = ExtraSource.VALUE
+        else:
+            if spec_map.get("prompt") is not True:
+                raise ConfigError(source, f"{sub}.prompt", "expected the literal true")
+            ref = None
+            item_source = ExtraSource.PROMPT
+        items.append(
+            ExtraItem(gh_name=gh_name, kind=ItemKind.SECRET, source=item_source, ref=ref)
+        )
+    return tuple(items)
+
+
+def _parse_allow_roles(source: str, field: str, value: Any) -> Tuple[str, ...]:
+    """
+    Validate the optional ``allow_roles`` list (H3 role allowlist for the publish set).
+    """
+    if not isinstance(value, list):
+        raise ConfigError(source, field, "expected a list of role names")
+    return tuple(_require_str(source, f"{field}[{i}]", role) for i, role in enumerate(value))
