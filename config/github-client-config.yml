@@ -3,81 +3,59 @@
 # =============================================================================
 # This file is DATA. It declares WHAT the GitHub client governs for this repo;
 # the mechanism (HOW a change is planned/executed) lives in tools/github/ghclient/**.
-# Repo slug, protected branches, and policy bodies are read from here -- never
-# hardcoded in Python -- so the client stays repo-agnostic and reusable.
+# Repo slug, protected branches, policy bodies, Snowflake profile mappings, and
+# CI aggregate context are read from here -- never hardcoded in Python -- so the
+# client stays repo-agnostic and reusable.
 #
 # Loaded + validated by tools/github/ghclient/config.py into frozen dataclasses,
 # with unknown keys rejected and file/field-scoped errors. Paths under
 # `branch_protection.*.policy` resolve relative to tools/github/ (the package home).
 # =============================================================================
 
-# The GitHub repository these settings govern (owner/name). Read by every verb.
 repo: dckallos/artwork-db
 
-# Classic branch-protection governance.
-#   Model A (plan §12.2.6): v1 protects `main` ONLY. Add more protected branches
-#   here as one-line entries when needed -- zero Python edits required.
 branch_protection:
   branches:
     main:
-      # Desired-state body applied via `PUT .../branches/main/protection`.
       policy: policies/policy.main.json
-      # H2: reconcile required checks to the always-emitting aggregate `ci-required`
-      # context (Area C), not raw path-filtered job names. Consumed by `ci reconcile`.
       required_checks_from_workflows: true
 
-# --- Consumed by later slices (present so the schema is stable; not used by Area A) ---
-
-# Area B (`secrets publish`): map ~/.snowflake/connections.toml fields -> GitHub
-# Environment secrets/variables for the dbt layer. Non-sensitive metadata such as
-# account/role/warehouse is published as Variables; user and key material remains
-# Secrets. This block is DATA: the profile -> environment/secret/variable mapping
-# and the H3 role allowlist live here, never in .py.
-#   - `map`   : a connections.toml field -> a GitHub {secret|variable} name. Secrets are
-#               write-only (H8: never value-diffed); variables are readable.
-#   - `extra` : items NOT in the TOML (key material), always published as secrets; the raw
-#               value is resolved at apply time and passed to gh on stdin, never logged (H5).
-#   - `allow_roles` : H3 least-privilege allowlist. ACCOUNTADMIN is refused regardless;
-#               a role absent here is refused unless `--allow-role` is passed deliberately.
-# Model: one publish set per GitHub Environment (§12.2.8 scaffolds `staging` + `prod`).
+# Environment-scoped Snowflake CI publishing. Non-sensitive values are Variables;
+# durable credential material remains Secrets. The helper script
+# scripts/setup/create_ci_snowflake_profiles.py creates the two local Snowflake CLI
+# profiles this block reads. DBT_TARGET is not a Snowflake connection field, so
+# scripts/setup/github_governance.sh sets it explicitly as an Environment Variable.
 snowflake_secrets:
   source: ~/.snowflake/connections.toml
   profiles:
     staging:
-      profile: artwork_ci_staging          # the connections.toml profile for the staging CI user
+      profile: artwork_ci_staging
       target: { type: environment, name: staging }
       map:
         account:   { variable: SNOWFLAKE_ACCOUNT }
+        database:  { variable: SNOWFLAKE_DATABASE }
         user:      { secret: DBT_SNOWFLAKE_USER }
         role:      { variable: DBT_SNOWFLAKE_ROLE }
         warehouse: { variable: SNOWFLAKE_WAREHOUSE }
       extra:
-        DBT_SNOWFLAKE_PRIVATE_KEY:            { from_file: "~/.snowflake/keys/staging_ci.p8" }
-        DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: { prompt: true }
+        DBT_SNOWFLAKE_PRIVATE_KEY: { from_file: "~/.snowflake/keys/staging_ci.p8" }
       allow_roles: [ARTWORK_TRANSFORMER]
     prod:
-      profile: artwork_ci_prod              # the connections.toml profile for the prod CI user
+      profile: artwork_ci_prod
       target: { type: environment, name: prod }
       map:
         account:   { variable: SNOWFLAKE_ACCOUNT }
+        database:  { variable: SNOWFLAKE_DATABASE }
         user:      { secret: DBT_SNOWFLAKE_USER }
         role:      { variable: DBT_SNOWFLAKE_ROLE }
         warehouse: { variable: SNOWFLAKE_WAREHOUSE }
       extra:
-        DBT_SNOWFLAKE_PRIVATE_KEY:            { from_file: "~/.snowflake/keys/prod_ci.p8" }
-        DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: { prompt: true }
+        DBT_SNOWFLAKE_PRIVATE_KEY: { from_file: "~/.snowflake/keys/prod_ci.p8" }
       allow_roles: [ARTWORK_TRANSFORMER]
 
-# Area C (`ci reconcile`): the workflow whose required checks are reconciled.
 ci:
   workflows:
     - .github/workflows/ci.yml
   required_checks: auto
-  # C2: name the ONE workflow that actually emits the aggregate. orchestration-tests was
-  # folded into ci.yml (C1), so ci.yml is the sole emitter and there are no informational
-  # workflows that could be mistaken for feeding the gate.
   aggregate_workflow: .github/workflows/ci.yml
-  # H2: the single always-emitting aggregate status `ci reconcile` sets as the required
-  # check on protected branches -- must match the aggregate job in .github/workflows/ci.yml,
-  # never a path-filtered job name (which would deadlock docs-only PRs).
   aggregate_context: ci-required

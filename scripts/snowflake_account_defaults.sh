@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Shared defaults for connecting this checkout to the KW94245 Snowflake account.
+# Intended to be sourced by helper scripts, not executed directly.
 
 set -euo pipefail
 
@@ -12,12 +13,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 : "${SNOW_ARTWORK_ADMIN_ROLE:=ACCOUNTADMIN}"
 : "${SNOW_ARTWORK_INIT_WAREHOUSE:=COMPUTE_WH}"
 : "${SNOW_ARTWORK_PROJECT_WAREHOUSE:=ARTWORK_WH}"
+: "${SNOW_ARTWORK_STAGING_WAREHOUSE:=ARTWORK_WH_STAGING}"
+: "${SNOW_ARTWORK_PROD_WAREHOUSE:=ARTWORK_WH_PROD}"
 : "${SNOW_ARTWORK_DATABASE:=ARTWORK_DB}"
+: "${SNOW_ARTWORK_DEV_SCHEMA_PREFIX:=dbt_daniel}"
 : "${SNOW_ARTWORK_LOADER_USER:=ARTWORK_LOADER_SVC}"
 : "${SNOW_ARTWORK_LOADER_ROLE:=ARTWORK_LOADER}"
 : "${SNOW_ARTWORK_TRANSFORMER_USER:=ARTWORK_TRANSFORMER_SVC}"
 : "${SNOW_ARTWORK_TRANSFORMER_ROLE:=ARTWORK_TRANSFORMER}"
+: "${SNOW_ARTWORK_CI_STAGING_PROFILE:=artwork_ci_staging}"
+: "${SNOW_ARTWORK_CI_PROD_PROFILE:=artwork_ci_prod}"
 : "${TOOLKIT_DIR:=${REPO_ROOT}/../snowflake-toolkit}"
+: "${DRY_RUN:=0}"
 
 COMMON_USAGE=$(cat <<'EOF_USAGE'
 Common options:
@@ -33,30 +40,8 @@ Common options:
   --transformer-user USER Transformer service user. Default: ARTWORK_TRANSFORMER_SVC
   --transformer-role ROLE Transformer service role. Default: ARTWORK_TRANSFORMER
   --toolkit-dir PATH      snowflake-toolkit clone. Default: ../snowflake-toolkit
-  --dry-run               Print actions without calling snowflake-toolkit or snow
 EOF_USAGE
 )
-
-parse_common_account_args() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --profile) SNOW_ARTWORK_PROFILE="${2:-}"; shift 2 ;;
-            --account) SNOW_ARTWORK_ACCOUNT="${2:-}"; shift 2 ;;
-            --admin-user) SNOW_ARTWORK_ADMIN_USER="${2:-}"; shift 2 ;;
-            --admin-role|--role) SNOW_ARTWORK_ADMIN_ROLE="${2:-}"; shift 2 ;;
-            --init-warehouse) SNOW_ARTWORK_INIT_WAREHOUSE="${2:-}"; shift 2 ;;
-            --warehouse) SNOW_ARTWORK_PROJECT_WAREHOUSE="${2:-}"; shift 2 ;;
-            --database) SNOW_ARTWORK_DATABASE="${2:-}"; shift 2 ;;
-            --loader-user) SNOW_ARTWORK_LOADER_USER="${2:-}"; shift 2 ;;
-            --loader-role) SNOW_ARTWORK_LOADER_ROLE="${2:-}"; shift 2 ;;
-            --transformer-user) SNOW_ARTWORK_TRANSFORMER_USER="${2:-}"; shift 2 ;;
-            --transformer-role) SNOW_ARTWORK_TRANSFORMER_ROLE="${2:-}"; shift 2 ;;
-            --toolkit-dir) TOOLKIT_DIR="${2:-}"; shift 2 ;;
-            --dry-run) DRY_RUN=1; shift ;;
-            *) echo "error: unknown option '$1'" >&2; return 64 ;;
-        esac
-    done
-}
 
 require_non_empty_defaults() {
     local missing=0
@@ -97,7 +82,7 @@ connection_account_from_toml() {
         $0 ~ "^\\[" && in_section { exit }
         in_section && $1 == "account" {
             sub(/^[^=]*=[[:space:]]*/, "", $0)
-            gsub(/^[\"'\'' ]+|[\"'\'' ]+$/, "", $0)
+            gsub(/^[\"'"'"' ]+|[\"'"'"' ]+$/, "", $0)
             print $0
             exit
         }
@@ -111,8 +96,8 @@ ensure_profile_not_pointing_elsewhere() {
         cat >&2 <<EOF_PROFILE
 error: profile '${SNOW_ARTWORK_PROFILE}' already points at '${existing_account}', not '${SNOW_ARTWORK_ACCOUNT}'.
 
-Use a different --profile value or edit ~/.snowflake/connections.toml deliberately.
-The toolkit init-profile phase is intentionally non-destructive.
+Use a different --profile value or pass --replace-existing to a helper that supports it.
+The toolkit init-profile phase is intentionally non-destructive unless replacement is explicit.
 EOF_PROFILE
         exit 78
     fi
@@ -220,6 +205,8 @@ Snowflake target:
   admin role       ${SNOW_ARTWORK_ADMIN_ROLE}
   init warehouse   ${SNOW_ARTWORK_INIT_WAREHOUSE}
   project wh/db    ${SNOW_ARTWORK_PROJECT_WAREHOUSE} / ${SNOW_ARTWORK_DATABASE}
+  staging/prod wh  ${SNOW_ARTWORK_STAGING_WAREHOUSE} / ${SNOW_ARTWORK_PROD_WAREHOUSE}
+  dev schema       ${SNOW_ARTWORK_DEV_SCHEMA_PREFIX}
   loader           ${SNOW_ARTWORK_LOADER_USER} / ${SNOW_ARTWORK_LOADER_ROLE}
   transformer      ${SNOW_ARTWORK_TRANSFORMER_USER} / ${SNOW_ARTWORK_TRANSFORMER_ROLE}
   toolkit          ${TOOLKIT_DIR}
