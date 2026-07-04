@@ -12,30 +12,40 @@ SKIP_SNOW=0
 SKIP_DBT=0
 SKIP_GH=0
 INCLUDE_PROD=1
+CHECK_BRANCH_GOVERNANCE=0
+REPO="dckallos/artwork-db"
+BRANCH="main"
 
 usage() {
   cat <<EOF_USAGE
 usage: bash scripts/setup/verify_operational_readiness.sh [options]
 
-Runs non-mutating checks after setup.
+Runs non-mutating checks after setup. Branch protection checks are opt-in because
+private-repo branch protection can return HTTP 403 even when Environment/CI setup is fine.
 
 Options:
 ${COMMON_USAGE}
-  --env-file FILE       Env file for dbt validation. Default: .env
-  --skip-snow           Skip snow connection tests.
-  --skip-dbt            Skip dbt debug/deps/parse.
-  --skip-gh             Skip ghclient/GitHub checks.
-  --staging-only        Do not check prod CI profile/environment.
+  --env-file FILE                Env file for dbt validation. Default: .env
+  --repo OWNER/NAME              Default: dckallos/artwork-db
+  --branch NAME                  Default: main
+  --skip-snow                    Skip snow connection tests.
+  --skip-dbt                     Skip dbt debug/deps/parse.
+  --skip-gh                      Skip ghclient/GitHub checks.
+  --staging-only                 Do not check prod CI profile/environment.
+  --check-branch-governance      Also run ghclient audit/preview checks for branch protection.
 EOF_USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env-file) ENV_FILE="${2:-}"; shift 2 ;;
+    --repo) REPO="${2:-}"; shift 2 ;;
+    --branch) BRANCH="${2:-}"; shift 2 ;;
     --skip-snow) SKIP_SNOW=1; shift ;;
     --skip-dbt) SKIP_DBT=1; shift ;;
     --skip-gh) SKIP_GH=1; shift ;;
     --staging-only) INCLUDE_PROD=0; shift ;;
+    --check-branch-governance) CHECK_BRANCH_GOVERNANCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --profile) SNOW_ARTWORK_PROFILE="${2:-}"; shift 2 ;;
     --account) SNOW_ARTWORK_ACCOUNT="${2:-}"; shift 2 ;;
@@ -55,6 +65,16 @@ run_check() {
   else
     echo "❌ ${label} failed"
     failures=$((failures + 1))
+  fi
+}
+run_optional_check() {
+  local label="$1"; shift
+  printf '\n==> %s\n' "$label"
+  printf '+ '; printf '%q ' "$@"; printf '\n'
+  if "$@"; then
+    echo "✅ ${label} passed"
+  else
+    echo "⚠️  ${label} failed (non-blocking; inspect branch-protection access separately)"
   fi
 }
 
@@ -86,12 +106,19 @@ fi
 if (( SKIP_GH == 0 )); then
   export GH_CONFIG_DIR="${GH_CONFIG_DIR:-$HOME/.config/gh-artwork-admin}"
   run_check "ghclient preflight" ghclient preflight
-  run_check "ghclient audit main" ghclient audit --branch main
-  run_check "list staging secrets" gh secret list --env staging --repo dckallos/artwork-db
-  run_check "list staging variables" gh variable list --env staging --repo dckallos/artwork-db
+  run_check "list staging secrets" gh secret list --env staging --repo "$REPO"
+  run_check "list staging variables" gh variable list --env staging --repo "$REPO"
   if (( INCLUDE_PROD == 1 )); then
-    run_check "list prod secrets" gh secret list --env prod --repo dckallos/artwork-db
-    run_check "list prod variables" gh variable list --env prod --repo dckallos/artwork-db
+    run_check "list prod secrets" gh secret list --env prod --repo "$REPO"
+    run_check "list prod variables" gh variable list --env prod --repo "$REPO"
+  fi
+  if (( CHECK_BRANCH_GOVERNANCE == 1 )); then
+    run_optional_check "ghclient audit ${BRANCH}" ghclient audit --branch "$BRANCH"
+    run_optional_check "branch protection preview ${BRANCH}" bash tools/github/wrappers/protect.sh --branch "$BRANCH"
+    run_optional_check "ci reconcile preview ${BRANCH}" bash tools/github/wrappers/reconcile-ci.sh --branch "$BRANCH"
+  else
+    echo
+    echo "Skipping branch-governance checks. Add --check-branch-governance when ready."
   fi
 fi
 
