@@ -45,7 +45,7 @@ run_status() {
   printf '\n==> %s\n' "$label"
   printf '+ '; printf '%q ' "$@"; printf '\n'
   set +e
-  out="$($@ 2>&1)"
+  out="$("$@" 2>&1)"
   rc=$?
   set -e
   printf '%s\n' "$out"
