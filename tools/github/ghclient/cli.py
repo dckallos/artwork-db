@@ -133,13 +133,24 @@ def build_app():  # noqa: ANN201 - returns a typer.Typer; annotated loosely to a
     def bp_rollback(
         branch: Optional[str] = typer.Option(None, "--branch", help="Limit to one branch."),
         apply: bool = typer.Option(False, "--apply", help="Perform the change (default: dry-run)."),
+        allow_ruleset_overlap: bool = typer.Option(
+            False,
+            "--allow-ruleset-overlap",
+            help="Proceed even when a repo/org ruleset also governs the branch (A3).",
+        ),
     ) -> None:
         """
         Restore protection from the last snapshot (dry-run unless --apply).
         """
         from . import branch_protection as _bp
 
-        code, lines = _bp.run_rollback(SubprocessGhRunner(), load_config(), branch=branch, apply=apply)
+        code, lines = _bp.run_rollback(
+            SubprocessGhRunner(),
+            load_config(),
+            branch=branch,
+            apply=apply,
+            allow_ruleset_overlap=allow_ruleset_overlap,
+        )
         _echo(lines)
         raise typer.Exit(code)
 

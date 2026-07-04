@@ -29,8 +29,10 @@ branch_protection:
 # --- Consumed by later slices (present so the schema is stable; not used by Area A) ---
 
 # Area B (`secrets publish`): map ~/.snowflake/connections.toml fields -> GitHub
-# Environment secrets/variables for the dbt layer. This block is DATA: the profile ->
-# environment/secret/variable mapping and the H3 role allowlist live here, never in .py.
+# Environment secrets/variables for the dbt layer. Non-sensitive metadata such as
+# account/role/warehouse is published as Variables; user and key material remains
+# Secrets. This block is DATA: the profile -> environment/secret/variable mapping
+# and the H3 role allowlist live here, never in .py.
 #   - `map`   : a connections.toml field -> a GitHub {secret|variable} name. Secrets are
 #               write-only (H8: never value-diffed); variables are readable.
 #   - `extra` : items NOT in the TOML (key material), always published as secrets; the raw
@@ -45,7 +47,7 @@ snowflake_secrets:
       profile: artwork_ci_staging          # the connections.toml profile for the staging CI user
       target: { type: environment, name: staging }
       map:
-        account:   { secret: SNOWFLAKE_ACCOUNT }
+        account:   { variable: SNOWFLAKE_ACCOUNT }
         user:      { secret: DBT_SNOWFLAKE_USER }
         role:      { variable: DBT_SNOWFLAKE_ROLE }
         warehouse: { variable: SNOWFLAKE_WAREHOUSE }
@@ -57,7 +59,7 @@ snowflake_secrets:
       profile: artwork_ci_prod              # the connections.toml profile for the prod CI user
       target: { type: environment, name: prod }
       map:
-        account:   { secret: SNOWFLAKE_ACCOUNT }
+        account:   { variable: SNOWFLAKE_ACCOUNT }
         user:      { secret: DBT_SNOWFLAKE_USER }
         role:      { variable: DBT_SNOWFLAKE_ROLE }
         warehouse: { variable: SNOWFLAKE_WAREHOUSE }

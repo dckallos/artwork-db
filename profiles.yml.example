@@ -12,11 +12,11 @@
 # Three targets share ONE database (ARTWORK_DB); isolation is by SCHEMA, routed
 # in macros/generate_schema_name.sql:
 #   dev     -> per-developer prefix   (dbt_kalleward_SILVER / _GOLD)   key-pair via PEM file
-#   staging -> STAGING_SILVER / _GOLD                                  key-pair via key CONTENTS
-#   prod    -> verbatim SILVER / GOLD                                  key-pair via key CONTENTS
+#   staging -> STAGING_SILVER / _GOLD                                  key-pair via an injected PEM file path
+#   prod    -> verbatim SILVER / GOLD                                  key-pair via an injected PEM file path
 
 dbt_daniel:                       # must match profile: in artwork_pipeline/dbt_project.yml
-  target: dev
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
 
     # Local development -- key-pair via an on-disk PEM key.
@@ -33,29 +33,29 @@ dbt_daniel:                       # must match profile: in artwork_pipeline/dbt_
       threads: 16
       client_session_keep_alive: false
 
-    # Staging -- CI on merge; key-pair via injected key CONTENTS.
+    # Staging -- CI on merge; key-pair via an injected PEM file path.
     staging:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
-      private_key: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
       private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
       role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
-      warehouse: "{{ env_var('DBT_STAGING_WAREHOUSE', 'ARTWORK_WH_STAGING') }}"
+      warehouse: "{{ env_var('DBT_STAGING_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_STAGING')) }}"
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
       schema: STAGING               # prefix source -> STAGING_SILVER / STAGING_GOLD
       threads: 8
       client_session_keep_alive: false
 
-    # Prod -- CI on release tag (gated); key-pair via injected key CONTENTS.
+    # Prod -- CI on release tag (gated); key-pair via an injected PEM file path.
     prod:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
-      private_key: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
       private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
       role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
-      warehouse: "{{ env_var('DBT_PROD_WAREHOUSE', 'ARTWORK_WH_PROD') }}"
+      warehouse: "{{ env_var('DBT_PROD_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_PROD')) }}"
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
       schema: GOLD                   # fallback; +schema models route to verbatim SILVER / GOLD
       threads: 8

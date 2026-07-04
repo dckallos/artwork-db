@@ -452,10 +452,20 @@ def plan_rollback(repo: str, snapshot: ProtectionSnapshot) -> ProtectionAction:
 
     A verified-404 envelope (``restore_body is None``) -> DELETE protection; a captured
     envelope -> PUT its **normalized** ``restore_body`` (never the raw GET response, which
-    is not a valid PUT payload -- A1). H1/A2: only a ``source == "verified-404"`` envelope
-    is delete-eligible, and :func:`export_snapshot` is the sole producer of one, so a
-    hand-written or transport-error snapshot can never delete protection.
+    is not a valid PUT payload -- A1). H1/A2: only a strictly validated
+    ``source == "verified-404"`` envelope is delete-eligible, so a legacy bare-null,
+    mismatched, or internally inconsistent snapshot can never delete protection.
     """
+    if snapshot.schema_version != _SNAPSHOT_SCHEMA:
+        raise GhClientError(
+            f"snapshot for {snapshot.branch} has unsupported schema_version "
+            f"{snapshot.schema_version!r}; refusing to roll back."
+        )
+    if snapshot.repo != repo:
+        raise GhClientError(
+            f"snapshot for {snapshot.branch} was captured for repo {snapshot.repo!r}, "
+            f"not {repo!r}; refusing to roll back."
+        )
     if snapshot.is_null:
         if snapshot.source != "verified-404":
             raise GhClientError(
@@ -468,10 +478,10 @@ def plan_rollback(repo: str, snapshot: ProtectionSnapshot) -> ProtectionAction:
             branch=snapshot.branch,
             reason="restore unprotected before-state (verified 404)",
         )
-    if snapshot.restore_body is None:
+    if snapshot.source != "live" or snapshot.restore_body is None:
         raise GhClientError(
-            f"refusing to roll back {snapshot.branch}: snapshot has no restore_body and "
-            f"source {snapshot.source!r} is not a verified 404 (A2)."
+            f"refusing to roll back {snapshot.branch}: snapshot has no trusted restore_body "
+            f"for source {snapshot.source!r} (A2)."
         )
     return ProtectionAction(
         kind=ActionKind.PUT,
@@ -528,6 +538,34 @@ def write_snapshot(snapshot: ProtectionSnapshot, exports_dir: Path) -> Path:
     return out
 
 
+def _parse_captured_at(value: Any, *, path_name: str) -> str:
+    """
+    Validate and return the snapshot capture timestamp.
+    """
+    if not isinstance(value, str) or not value:
+        raise GhClientError(f"corrupt snapshot {path_name}: missing captured_at; refusing to roll back.")
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise GhClientError(
+            f"corrupt snapshot {path_name}: invalid captured_at {value!r}; refusing to roll back."
+        ) from exc
+    return value
+
+
+def _dict_or_none(value: Any, *, field_name: str, path_name: str) -> Optional[dict]:
+    """
+    Validate optional object fields from a snapshot envelope.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise GhClientError(
+            f"corrupt snapshot {path_name}: {field_name} must be an object or null; refusing to roll back."
+        )
+    return value
+
+
 def read_snapshot(path: Path, branch: str) -> ProtectionSnapshot:
     """
     Load a persisted :class:`ProtectionSnapshot` envelope, refusing a corrupt/legacy one.
@@ -558,19 +596,47 @@ def read_snapshot(path: Path, branch: str) -> ProtectionSnapshot:
             f"corrupt snapshot {path.name}: expected a schema-versioned envelope; "
             "refusing to roll back."
         )
+    schema_version = data.get("schema_version")
+    if type(schema_version) is not int or schema_version != _SNAPSHOT_SCHEMA:
+        raise GhClientError(
+            f"corrupt snapshot {path.name}: unsupported schema_version {schema_version!r}; "
+            f"expected {_SNAPSHOT_SCHEMA}; refusing to roll back."
+        )
+    repo = data.get("repo")
+    if not isinstance(repo, str) or not repo:
+        raise GhClientError(f"corrupt snapshot {path.name}: missing repo; refusing to roll back.")
+    snap_branch = data.get("branch")
+    if snap_branch != branch:
+        raise GhClientError(
+            f"corrupt snapshot {path.name}: branch mismatch {snap_branch!r} != {branch!r}; "
+            "refusing to roll back."
+        )
+    captured_at = _parse_captured_at(data.get("captured_at"), path_name=path.name)
     source = data.get("source")
     if source not in ("live", "verified-404"):
         raise GhClientError(
             f"corrupt snapshot {path.name}: unknown source {source!r}; refusing to roll back."
         )
+    live_response = _dict_or_none(data.get("live_response"), field_name="live_response", path_name=path.name)
+    restore_body = _dict_or_none(data.get("restore_body"), field_name="restore_body", path_name=path.name)
+    if source == "verified-404" and (live_response is not None or restore_body is not None):
+        raise GhClientError(
+            f"corrupt snapshot {path.name}: verified-404 envelopes must not carry live_response "
+            "or restore_body; refusing to roll back."
+        )
+    if source == "live" and (live_response is None or restore_body is None):
+        raise GhClientError(
+            f"corrupt snapshot {path.name}: live envelopes require both live_response and "
+            "restore_body; refusing to roll back."
+        )
     return ProtectionSnapshot(
-        schema_version=int(data["schema_version"]),
-        repo=data.get("repo", ""),
-        branch=data.get("branch", branch),
-        captured_at=data.get("captured_at", ""),
+        schema_version=schema_version,
+        repo=repo,
+        branch=snap_branch,
+        captured_at=captured_at,
         source=source,
-        live_response=data.get("live_response"),
-        restore_body=data.get("restore_body"),
+        live_response=live_response,
+        restore_body=restore_body,
     )
 
 
@@ -730,8 +796,9 @@ def run_export(
     """
     Snapshot current live protection to ``policies/exports/`` -- fail-closed (H1).
 
-    A verified 404 writes a ``null`` snapshot; any other failure writes nothing and
-    yields a non-zero exit so a transport error is never mistaken for "no rules."
+    A verified 404 writes a schema-versioned ``verified-404`` envelope; any other
+    failure writes nothing and yields a non-zero exit so a transport error is never
+    mistaken for "no rules."
     """
     try:
         policies = _selected_policies(cfg, branch)
@@ -742,7 +809,7 @@ def run_export(
     for policy in policies:
         try:
             snapshot = export_snapshot(runner, cfg.repo, policy.branch)
-            out = write_snapshot(snapshot, cfg.exports_dir)
+            out = write_snapshot(build_snapshot(cfg.repo, snapshot), cfg.exports_dir)
             state = "no protection (verified 404)" if snapshot.is_null else "protection present"
             lines.append(f"exported {policy.branch}: {state} -> {out}")
         except GhClientError as exc:
@@ -754,13 +821,20 @@ def run_export(
 
 
 def run_rollback(
-    runner: GhRunner, cfg: GithubClientConfig, *, branch: Optional[str] = None, apply: bool = False
+    runner: GhRunner,
+    cfg: GithubClientConfig,
+    *,
+    branch: Optional[str] = None,
+    apply: bool = False,
+    allow_ruleset_overlap: bool = False,
 ) -> Tuple[int, List[str]]:
     """
     Preview (default) or ``--apply`` a restore from the last exported snapshot.
 
-    A ``null`` snapshot (verified 404) DELETEs protection; a saved body PUT-restores it.
-    A corrupt or untrusted snapshot is refused (H1/H5).
+    A ``verified-404`` snapshot DELETEs protection; a saved body PUT-restores it. A corrupt
+    or untrusted snapshot is refused (H1/H5). Rollback is also a classic-protection mutation,
+    so it inventories rulesets before applying and blocks over overlap unless explicitly
+    overridden (H9).
     """
     try:
         policies = _selected_policies(cfg, branch)
@@ -772,7 +846,21 @@ def run_rollback(
         try:
             snapshot = read_snapshot(cfg.exports_dir / _snapshot_filename(policy.branch), policy.branch)
             action = plan_rollback(cfg.repo, snapshot)
+            report = audit(runner, cfg.repo, policy.branch)
             lines.append(action.render())
+            if report.has_ruleset_overlap:
+                kinds = sorted({str(r.get("type", "?")) for r in report.branch_rules})
+                lines.append(
+                    f"  WARNING: {len(report.branch_rules)} ruleset rule(s) also govern "
+                    f"{policy.branch} (types: {kinds}); a classic rollback may fight them (A3)."
+                )
+                if apply and not allow_ruleset_overlap:
+                    code = 1
+                    lines.append(
+                        f"  BLOCKED: refusing to --apply rollback over a ruleset overlap on "
+                        f"{policy.branch}; re-run with --allow-ruleset-overlap to override (A3)."
+                    )
+                    continue
             if apply:
                 execute(runner, action)
                 lines.append(f"  ROLLED BACK: {policy.branch}.")

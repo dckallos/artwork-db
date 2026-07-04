@@ -131,14 +131,35 @@ class SubprocessGhRunner:
     def _exec(self, args: Sequence[str], input_text: Optional[str]) -> GhResult:
         """
         Run ``gh <args...>`` once, capturing output and parsing any HTTP status.
+
+        Missing binaries and timeouts are returned as structured failures rather than
+        escaping as Python tracebacks, so callers render actionable diagnostics and tests
+        can assert the same failure model as HTTP errors.
         """
-        proc = subprocess.run(
-            [self._gh_bin, *args],
-            input=input_text,
-            capture_output=True,
-            text=True,
-            timeout=self._timeout,
-        )
+        try:
+            proc = subprocess.run(
+                [self._gh_bin, *args],
+                input=input_text,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+            )
+        except FileNotFoundError:
+            return GhResult(
+                args=tuple(args),
+                returncode=127,
+                stdout="",
+                stderr=f"gh executable not found: {self._gh_bin}",
+                status_code=None,
+            )
+        except subprocess.TimeoutExpired:
+            return GhResult(
+                args=tuple(args),
+                returncode=124,
+                stdout="",
+                stderr=f"gh command timed out after {self._timeout} seconds",
+                status_code=None,
+            )
         status = parse_http_status(proc.stderr, proc.stdout)
         return GhResult(
             args=tuple(args),

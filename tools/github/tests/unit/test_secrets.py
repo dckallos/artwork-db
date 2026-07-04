@@ -35,12 +35,11 @@ from ghclient.secrets import (
 from ghclient.gh import GhResult
 
 _MANAGED_SECRETS = (
-    "SNOWFLAKE_ACCOUNT",
     "DBT_SNOWFLAKE_USER",
     "DBT_SNOWFLAKE_PRIVATE_KEY",
     "DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE",
 )
-_MANAGED_VARS = ("DBT_SNOWFLAKE_ROLE", "SNOWFLAKE_WAREHOUSE")
+_MANAGED_VARS = ("SNOWFLAKE_ACCOUNT", "DBT_SNOWFLAKE_ROLE", "SNOWFLAKE_WAREHOUSE")
 
 # Synthetic values that are NOT substrings of any managed item name.
 _KEY_VALUE = "pk-data-9f3a2b7c"
@@ -175,8 +174,8 @@ def test_plan_skips_existing_under_no_overwrite(fixtures_dir: Path) -> None:
     cfg = _cfg(fixtures_dir)
     plan = build_publish_plan(
         _profile(fixtures_dir), cfg.secrets.get("staging"),
-        existing_secrets={"SNOWFLAKE_ACCOUNT"},
-        existing_variables={"DBT_SNOWFLAKE_ROLE": "ARTWORK_TRANSFORMER"},
+        existing_secrets=set(),
+        existing_variables={"SNOWFLAKE_ACCOUNT": _ACCOUNT_VALUE, "DBT_SNOWFLAKE_ROLE": "ARTWORK_TRANSFORMER"},
         mode=PublishMode(no_overwrite=True, force=False),
     )
     by_name = {i.name: i.action for i in plan}
@@ -189,23 +188,25 @@ def test_plan_force_updates_existing(fixtures_dir: Path) -> None:
     cfg = _cfg(fixtures_dir)
     plan = build_publish_plan(
         _profile(fixtures_dir), cfg.secrets.get("staging"),
-        existing_secrets={"SNOWFLAKE_ACCOUNT"}, existing_variables={}, mode=PublishMode(force=True),
+        existing_secrets=set(), existing_variables={"SNOWFLAKE_ACCOUNT": "old"}, mode=PublishMode(force=True),
     )
     account = next(i for i in plan if i.name == "SNOWFLAKE_ACCOUNT")
+    assert account.kind is ItemKind.VARIABLE
     assert account.action is PublishAction.UPDATE
 
 
-def test_plan_delete_missing_removes_only_unmanaged(fixtures_dir: Path) -> None:
+def test_plan_delete_missing_preserves_unmanaged_items(fixtures_dir: Path) -> None:
     cfg = _cfg(fixtures_dir)
     plan = build_publish_plan(
         _profile(fixtures_dir), cfg.secrets.get("staging"),
-        existing_secrets={"STALE_SECRET", "SNOWFLAKE_ACCOUNT"},
-        existing_variables={"STALE_VAR": "x"}, mode=PublishMode(delete_missing=True),
+        existing_secrets={"STALE_SECRET", "DBT_SNOWFLAKE_USER"},
+        existing_variables={"STALE_VAR": "x", "SNOWFLAKE_ACCOUNT": _ACCOUNT_VALUE},
+        mode=PublishMode(delete_missing=True),
     )
     deletes = {(i.name, i.kind) for i in plan if i.action is PublishAction.DELETE}
-    assert ("STALE_SECRET", ItemKind.SECRET) in deletes
-    assert ("STALE_VAR", ItemKind.VARIABLE) in deletes
-    assert ("SNOWFLAKE_ACCOUNT", ItemKind.SECRET) not in deletes  # managed -> never deleted
+    assert deletes == set()
+    assert any(i.name == "STALE_SECRET" for i in plan) is False
+    assert any(i.name == "STALE_VAR" for i in plan) is False
 
 
 # --------------------------------------------------------------------------- #
@@ -279,7 +280,7 @@ def test_apply_creates_passing_values_via_stdin(fixtures_dir: Path, fake_runner_
     )
     assert code == 0
     calls = _set_delete_calls(runner)
-    assert ("secret", "set", "SNOWFLAKE_ACCOUNT") in calls
+    assert ("variable", "set", "SNOWFLAKE_ACCOUNT") in calls
     assert ("variable", "set", "DBT_SNOWFLAKE_ROLE") in calls
     stdin = _stdin_by_name(runner)
     assert stdin["SNOWFLAKE_ACCOUNT"] == _ACCOUNT_VALUE
@@ -287,30 +288,31 @@ def test_apply_creates_passing_values_via_stdin(fixtures_dir: Path, fake_runner_
     assert stdin["DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE"] == _PP_VALUE
     # No secret value ever appears in argv (the recorded path) or the output lines.
     blob = "\n".join(lines) + "\n".join(p for _k, _m, p, _b in runner.calls)
-    for value in (_ACCOUNT_VALUE, "ARTWORK_CI_SVC_STAGING", _KEY_VALUE, _PP_VALUE):
+    for value in ("ARTWORK_CI_SVC_STAGING", _KEY_VALUE, _PP_VALUE):
         assert value not in blob
 
 
 def test_apply_skips_existing_without_force(fixtures_dir: Path, fake_runner_factory) -> None:
-    runner = _runner(fake_runner_factory, existing_secrets=["SNOWFLAKE_ACCOUNT"])
+    runner = _runner(fake_runner_factory, existing_variables={"SNOWFLAKE_ACCOUNT": _ACCOUNT_VALUE})
     code, _ = run_publish(
         runner, _cfg(fixtures_dir), profile_set="staging", apply=True,
         file_reader=lambda p: _KEY_VALUE, prompt=lambda n: _PP_VALUE,
     )
     assert code == 0
     calls = _set_delete_calls(runner)
-    assert ("secret", "set", "SNOWFLAKE_ACCOUNT") not in calls  # skipped
+    assert ("variable", "set", "SNOWFLAKE_ACCOUNT") not in calls  # skipped
     assert ("secret", "set", "DBT_SNOWFLAKE_USER") in calls
 
 
-def test_delete_missing_issues_delete(fixtures_dir: Path, fake_runner_factory) -> None:
+def test_delete_missing_preserves_unmanaged_items(fixtures_dir: Path, fake_runner_factory) -> None:
     runner = _runner(fake_runner_factory, existing_secrets=["STALE_SECRET"])
-    code, _ = run_publish(
+    code, lines = run_publish(
         runner, _cfg(fixtures_dir), profile_set="staging", apply=True,
         force=True, delete_missing=True, file_reader=lambda p: _KEY_VALUE, prompt=lambda n: _PP_VALUE,
     )
     assert code == 0
-    assert ("secret", "delete", "STALE_SECRET") in _set_delete_calls(runner)
+    assert ("secret", "delete", "STALE_SECRET") not in _set_delete_calls(runner)
+    assert any("--delete-missing requested but ignored" in ln for ln in lines)
 
 
 def test_run_publish_refuses_accountadmin_before_any_gh_call(fixtures_dir: Path, fake_runner_factory) -> None:
@@ -384,7 +386,7 @@ def test_h5_partial_apply_reports_and_stops(fixtures_dir: Path, fake_runner_fact
     assert any("[FAILED]" in ln and "DBT_SNOWFLAKE_USER" in ln for ln in lines)
     assert any("aborted" in ln for ln in lines)
     calls = _set_delete_calls(runner)
-    assert ("secret", "set", "SNOWFLAKE_ACCOUNT") in calls          # applied before the failure
+    assert ("variable", "set", "SNOWFLAKE_ACCOUNT") in calls        # applied before the failure
     assert ("variable", "set", "DBT_SNOWFLAKE_ROLE") not in calls    # not attempted after abort
 
 

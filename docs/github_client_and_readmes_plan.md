@@ -1,7 +1,8 @@
 # Master Optimization & Implementation Plan — artwork-db
 
-**Status:** DRAFT (Stage 2, iteration 1). No code written yet. This is the single
-**authoritative** document for the optimization effort on this branch: GitHub client,
+**Status:** DRAFT (Stage 2, iteration 1). Areas A, B, and C have repository-local
+implementation on this branch and are under review; this remains the planning and
+review artifact for the broader optimization effort: GitHub client,
 per-folder READMEs, Dagster/orchestration enrichment UX, and dbt hardening. It is the
 review artifact; we iterate on it until it is explicitly approved, then implement in the
 sliced sequence at the end.

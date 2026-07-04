@@ -92,7 +92,9 @@ def test_audit_reads_three_surfaces(fixtures_dir: Path, fake_runner_factory, gh_
     assert len(runner.api_calls) == 3
 
 
-def test_rollback_dry_run_records_nothing(fixtures_dir: Path, fake_runner_factory, tmp_path: Path) -> None:
+def test_rollback_dry_run_audits_but_records_no_mutations(
+    fixtures_dir: Path, fake_runner_factory, gh_result, tmp_path: Path
+) -> None:
     cfg = _cfg(fixtures_dir)
     # Seed a verified-404 snapshot ENVELOPE (A2: a bare `null` file is refused).
     exports = tmp_path / "exports"
@@ -105,10 +107,16 @@ def test_rollback_dry_run_records_nothing(fixtures_dir: Path, fake_runner_factor
         branch_protection = cfg.branch_protection
         exports_dir = exports
 
-    runner = fake_runner_factory()
+    def handler(kind, method, path, body):
+        if "protection" in path:
+            return gh_result(returncode=1, stderr="Not Found (HTTP 404)", status_code=404)
+        return gh_result(returncode=0, stdout="[]")
+
+    runner = fake_runner_factory(handler)
     code, lines = bp.run_rollback(runner, _Cfg(), apply=False)
     assert code == 0
-    assert runner.api_calls == []
+    assert [m for (m, _p, _b) in runner.api_calls if m in ("PUT", "DELETE")] == []
+    assert len(runner.api_calls) == 3
     assert any("dry-run" in line for line in lines)
 
 
@@ -237,7 +245,7 @@ def test_secrets_publish_apply_sets_values_via_stdin(fixtures_dir: Path, fake_ru
     sets = [(argv, text) for (argv, text) in runner.run_inputs if len(argv) >= 2 and argv[1] == "set"]
     got = [(argv[0], argv[2], text) for (argv, text) in sets]
     assert got == [
-        ("secret", "SNOWFLAKE_ACCOUNT", "orgname-staging_acct"),
+        ("variable", "SNOWFLAKE_ACCOUNT", "orgname-staging_acct"),
         ("secret", "DBT_SNOWFLAKE_USER", "ARTWORK_CI_SVC_STAGING"),
         ("variable", "DBT_SNOWFLAKE_ROLE", "ARTWORK_TRANSFORMER"),
         ("variable", "SNOWFLAKE_WAREHOUSE", "DBT_STAGING_WH"),

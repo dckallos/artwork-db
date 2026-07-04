@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Shared defaults for connecting this checkout to the KUNHTEL Snowflake account.
+# Shared defaults for connecting this checkout to the KW94245 Snowflake account.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-: "${SNOW_ARTWORK_PROFILE:=gl13131}"
-: "${SNOW_ARTWORK_ACCOUNT:=KUNHTEL-GL13131}"
-: "${SNOW_ARTWORK_ADMIN_USER:=RSKALLOS}"
+: "${SNOW_ARTWORK_PROFILE:=kw94245}"
+: "${SNOW_ARTWORK_ACCOUNT:=DSHXYWJ-KW94245}"
+: "${SNOW_ARTWORK_ADMIN_USER:=PORCHORCH}"
 : "${SNOW_ARTWORK_ADMIN_ROLE:=ACCOUNTADMIN}"
 : "${SNOW_ARTWORK_INIT_WAREHOUSE:=COMPUTE_WH}"
 : "${SNOW_ARTWORK_PROJECT_WAREHOUSE:=ARTWORK_WH}"
@@ -21,9 +21,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 COMMON_USAGE=$(cat <<'EOF_USAGE'
 Common options:
-  --profile NAME          Snowflake CLI connection label. Default: gl13131
-  --account IDENTIFIER    Snowflake account identifier. Default: KUNHTEL-GL13131
-  --admin-user USER       Human admin login. Default: RSKALLOS
+  --profile NAME          Snowflake CLI connection label. Default: kw94245
+  --account IDENTIFIER    Snowflake account identifier. Default: DSHXYWJ-KW94245
+  --admin-user USER       Human admin login. Default: PORCHORCH
   --admin-role ROLE       Human admin role. Default: ACCOUNTADMIN
   --init-warehouse NAME   Existing bootstrap warehouse. Default: COMPUTE_WH
   --warehouse NAME        Project warehouse after IaC. Default: ARTWORK_WH
@@ -150,6 +150,22 @@ run_toolkit_phase() {
             SNOW_LIB_DEFAULT_WAREHOUSE="${SNOW_ARTWORK_PROJECT_WAREHOUSE}" \
                 bash "${TOOLKIT_DIR}/snowflake_cli/setup.sh" --profile "${SNOW_ARTWORK_PROFILE}" --phase "${phase}" "$@"
             ;;
+        prereq|init-profile|admin|all)
+            env -u SNOWFLAKE_ACCOUNT -u SNOWFLAKE_USER -u SNOWFLAKE_ROLE \
+                -u SNOWFLAKE_WAREHOUSE -u SNOWFLAKE_DATABASE \
+                -u SNOWFLAKE_PRIVATE_KEY_FILE -u SNOWFLAKE_AUTHENTICATOR \
+            SNOWFLAKE_ADMIN_ACCOUNT="${SNOW_ARTWORK_ACCOUNT}" \
+            SNOWFLAKE_ADMIN_USER="${SNOW_ARTWORK_ADMIN_USER}" \
+            SNOWFLAKE_ADMIN_ROLE="${SNOW_ARTWORK_ADMIN_ROLE}" \
+            SNOWFLAKE_ADMIN_WAREHOUSE="${SNOW_ARTWORK_INIT_WAREHOUSE}" \
+                bash "${TOOLKIT_DIR}/snowflake_cli/setup.sh" \
+                    --profile "${SNOW_ARTWORK_PROFILE}" \
+                    --account "${SNOW_ARTWORK_ACCOUNT}" \
+                    --admin-user "${SNOW_ARTWORK_ADMIN_USER}" \
+                    --admin-role "${SNOW_ARTWORK_ADMIN_ROLE}" \
+                    --init-warehouse "${SNOW_ARTWORK_INIT_WAREHOUSE}" \
+                    --phase "${phase}" "$@"
+            ;;
         *)
             SNOW_LIB_DEFAULT_WAREHOUSE="${SNOW_ARTWORK_PROJECT_WAREHOUSE}" \
                 bash "${TOOLKIT_DIR}/snowflake_cli/setup.sh" --profile "${SNOW_ARTWORK_PROFILE}" --phase "${phase}" "$@"
@@ -174,6 +190,11 @@ print_toolkit_phase() {
             printf 'TRANSFORMER_USER=%q TRANSFORMER_ROLE=%q TRANSFORMER_WAREHOUSE=%q SNOW_LIB_DEFAULT_WAREHOUSE=%q bash %q --profile %q --phase %q\n' \
                 "${SNOW_ARTWORK_TRANSFORMER_USER}" "${SNOW_ARTWORK_TRANSFORMER_ROLE}" "${SNOW_ARTWORK_PROJECT_WAREHOUSE}" \
                 "${SNOW_ARTWORK_PROJECT_WAREHOUSE}" "${TOOLKIT_DIR}/snowflake_cli/setup.sh" "${SNOW_ARTWORK_PROFILE}" "${phase}"
+            ;;
+        prereq|init-profile|admin|all)
+            printf 'SNOWFLAKE_ADMIN_ACCOUNT=%q SNOWFLAKE_ADMIN_USER=%q SNOWFLAKE_ADMIN_ROLE=%q SNOWFLAKE_ADMIN_WAREHOUSE=%q bash %q --profile %q --account %q --admin-user %q --admin-role %q --init-warehouse %q --phase %q\n' \
+                "${SNOW_ARTWORK_ACCOUNT}" "${SNOW_ARTWORK_ADMIN_USER}" "${SNOW_ARTWORK_ADMIN_ROLE}" "${SNOW_ARTWORK_INIT_WAREHOUSE}" \
+                "${TOOLKIT_DIR}/snowflake_cli/setup.sh" "${SNOW_ARTWORK_PROFILE}" "${SNOW_ARTWORK_ACCOUNT}" "${SNOW_ARTWORK_ADMIN_USER}" "${SNOW_ARTWORK_ADMIN_ROLE}" "${SNOW_ARTWORK_INIT_WAREHOUSE}" "${phase}"
             ;;
         *)
             printf 'SNOW_LIB_DEFAULT_WAREHOUSE=%q bash %q --profile %q --phase %q\n' \

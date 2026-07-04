@@ -1,12 +1,13 @@
 # ghclient -- GitHub governance client
 
 Config-driven client for governing the `dckallos/artwork-db` GitHub repo:
-branch protection today (Area A), secrets publishing (Area B) and CI reconcile
-(Area C) next. Behavior is **configured**, not hardcoded -- the repo slug,
-protected branches, and policy bodies all come from
-`config/github-client-config.yml` and `policies/*.json`.
+branch protection (Area A), GitHub Environment Snowflake secret/variable publishing
+(Area B), and CI reconcile (Area C). Behavior is **configured**, not hardcoded --
+the repo slug, protected branches, policy bodies, Snowflake profile mappings, and
+CI aggregate context all come from `config/github-client-config.yml` and
+`policies/*.json`.
 
-## What exists today (Area A)
+## What exists today
 
 - `ghclient preflight` -- verify `gh` auth, `jq`, and config validity.
 - `ghclient branch-protection apply|export|rollback` -- classic branch
@@ -14,8 +15,12 @@ protected branches, and policy bodies all come from
 - `ghclient audit export` -- inventory **both** classic protection **and** repo
   rulesets, report overlap (v1 mutates classic only), and snapshot the classic
   state.
-
-Deferred (stubs only): `secrets publish` (Area B), `ci reconcile` (Area C).
+- `ghclient secrets publish` -- publish allowlisted Snowflake connection profiles
+  to GitHub Environments. Non-sensitive metadata such as `SNOWFLAKE_ACCOUNT`,
+  role, and warehouse are Variables; user, private key, and passphrase are
+  Secrets. Values are supplied through stdin, not argv.
+- `ghclient ci reconcile` -- reconcile required branch-protection checks to the
+  single always-emitting `ci-required` aggregate context.
 
 ## Install
 
@@ -38,6 +43,10 @@ ghclient branch-protection export             # snapshot live state -> policies/
 ghclient audit export                         # classic + ruleset inventory + overlap
 ghclient branch-protection rollback           # dry-run: preview DELETE/PUT
 ghclient branch-protection rollback --apply
+ghclient secrets publish --profile-set staging          # dry-run
+ghclient secrets publish --profile-set staging --apply
+ghclient ci reconcile                                  # dry-run
+ghclient ci reconcile --apply
 ```
 
 Thin wrappers (no arg memorization) live in `wrappers/`:
@@ -50,8 +59,9 @@ Thin wrappers (no arg memorization) live in `wrappers/`:
 - **Fail-closed export (H1).** A snapshot records `null` (no protection) ONLY
   for a *verified* HTTP 404. Any other `gh` failure writes no snapshot and exits
   non-zero, so "couldn't reach GitHub" is never mistaken for "no rules".
-- **Ruleset-aware (H9).** The audit path inventories rulesets alongside classic
-  protection; v1 mutates classic only and reports overlap.
+- **Ruleset-aware (H9).** Apply and rollback audit rulesets alongside classic
+  protection first; mutating commands block on overlap unless a maintainer uses
+  the explicit override.
 - **Snapshots are not committed.** `policies/exports/` is gitignored (§12.2.3);
   the committed source of truth is `policies/policy.main.json`.
 
@@ -67,7 +77,9 @@ tools/github/
     preflight.py                  # environment checks
     cli.py                        # `ghclient` typer entrypoint
     errors.py                     # ConfigError / GhError (file/field-scoped)
-    connections.py secrets.py ci.py   # stubs (Areas B/C)
+    connections.py                  # read Snowflake CLI connections.toml profiles
+    secrets.py                      # plan/apply environment secrets + variables
+    ci.py                           # reconcile aggregate required-check policy
   policies/policy.main.json       # desired-state body (committed)
   policies/exports/               # before-state snapshots (gitignored)
   wrappers/                       # protect.sh, rollback.sh
@@ -82,3 +94,10 @@ python -m pytest tools/github/tests
 ```
 
 All tests are offline: every `gh` call is routed through a stubbed `GhRunner`.
+
+## CI Environment contract
+
+The Snowflake CI profile is Environment-scoped. Jobs that consume published values
+must declare the matching GitHub Environment and read Variables with `vars.*` and
+Secrets with `secrets.*`. The dbt CI job uses `deployment: false` so it can access
+the Environment values without creating a deployment record.

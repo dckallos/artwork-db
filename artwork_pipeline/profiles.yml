@@ -10,7 +10,7 @@
 #   dev      LOCAL, dbt Core. Key-pair via a PEM file on disk (private_key_path).
 #            Per-developer prefixed schemas (dbt_kalleward_SILVER / _GOLD).
 #   staging  CI (auto on merge). Key-pair via injected key CONTENTS
-#            (DBT_SNOWFLAKE_PRIVATE_KEY). Schemas STAGING_SILVER / STAGING_GOLD.
+#            (DBT_SNOWFLAKE_PRIVATE_KEY_PATH). Schemas STAGING_SILVER / STAGING_GOLD.
 #   prod     CI (on release tag, gated). Key-pair via injected key CONTENTS.
 #            Verbatim schemas SILVER / GOLD.
 #
@@ -25,13 +25,13 @@
 # REQUIRED ENV VARS -- dev (see .env.example):
 #   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH
 # REQUIRED ENV VARS -- staging/prod (CI secrets/vars):
-#   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY
+#   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH
 # OPTIONAL (have defaults): DBT_SNOWFLAKE_ROLE, *_PASSPHRASE, SNOWFLAKE_DATABASE,
 #   per-env warehouse + schema overrides.
 # =============================================================================
 
 dbt_daniel:                       # must match `profile:` in dbt_project.yml
-  target: dev
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
 
     # --- LOCAL development (key-pair via on-disk PEM) ---
@@ -54,10 +54,10 @@ dbt_daniel:                       # must match `profile:` in dbt_project.yml
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
-      private_key: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
       private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
       role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
-      warehouse: "{{ env_var('DBT_STAGING_WAREHOUSE', 'ARTWORK_WH_STAGING') }}"
+      warehouse: "{{ env_var('DBT_STAGING_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_STAGING')) }}"
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
       # Prefix source: generate_schema_name yields STAGING_SILVER / STAGING_GOLD.
       schema: STAGING
@@ -69,10 +69,10 @@ dbt_daniel:                       # must match `profile:` in dbt_project.yml
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
-      private_key: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
       private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
       role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
-      warehouse: "{{ env_var('DBT_PROD_WAREHOUSE', 'ARTWORK_WH_PROD') }}"
+      warehouse: "{{ env_var('DBT_PROD_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_PROD')) }}"
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
       # Fallback only; +schema models route to verbatim SILVER / GOLD.
       schema: GOLD

@@ -160,11 +160,11 @@ def build_publish_plan(
         exists = name in existing_secrets
         items.append(PublishItem(env, name, ItemKind.SECRET, _action_for(exists, mode), exists, None))
 
-    if mode.delete_missing:
-        for name in sorted(set(existing_secrets) - managed_secrets):
-            items.append(PublishItem(env, name, ItemKind.SECRET, PublishAction.DELETE, True, None))
-        for name in sorted(set(existing_variables) - managed_variables):
-            items.append(PublishItem(env, name, ItemKind.VARIABLE, PublishAction.DELETE, True, None))
+    # v1 intentionally does not delete existing GitHub Environment items that are not
+    # in the current mapping. GitHub does not expose ownership metadata for secrets or
+    # variables, so deleting "everything not mapped" can remove unrelated human- or
+    # tool-managed values. A future version can add an ownership manifest/snapshot and
+    # then delete only names proven to be ghclient-owned.
 
     return tuple(items)
 
@@ -252,8 +252,6 @@ def _resolve_value(
     """
     if isinstance(source, MappedField):
         return profile.require(source.toml_field)
-    if source.source is ExtraSource.VALUE:
-        return source.ref or ""
     if source.source is ExtraSource.FROM_FILE:
         path = os.path.expanduser(source.ref or "")
         reader = file_reader or _read_file
@@ -406,6 +404,11 @@ def run_publish(
         ]
 
     mode = PublishMode(no_overwrite=not force, force=force, delete_missing=delete_missing)
+    if delete_missing:
+        lines.append(
+            "secrets publish: --delete-missing requested but ignored in v1; "
+            "no unmanaged GitHub Environment items will be deleted without an ownership manifest"
+        )
     items = build_publish_plan(
         profile,
         publish_set,

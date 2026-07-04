@@ -138,12 +138,12 @@ class TargetType(Enum):
 class ExtraSource(Enum):
     """
     Where an ``extra`` item's value comes from when it is not a connections.toml field:
-    a file on disk (key material), an interactive prompt, or an inline literal.
+    a file on disk (key material) or an interactive prompt. Inline literals are
+    deliberately not supported so secrets cannot be smuggled into YAML config.
     """
 
     FROM_FILE = "from_file"
     PROMPT = "prompt"
-    VALUE = "value"
 
 
 @dataclass(frozen=True)
@@ -177,8 +177,8 @@ class ExtraItem:
     A published item whose value is *not* in the connections.toml profile.
 
     ``source`` says where the value comes from; ``ref`` is the file path (``FROM_FILE``)
-    or inline literal (``VALUE``), and ``None`` for ``PROMPT``. Extra items are always
-    secrets (key material / passphrases), so the raw value never enters config or logs.
+    and ``None`` for ``PROMPT``. Extra items are always secrets (key material /
+    passphrases), so the raw value never enters config or logs.
     """
 
     gh_name: str
@@ -454,7 +454,7 @@ _SECRETS_ALLOWED_KEYS = {"source", "profiles"}
 _PUBLISH_SET_ALLOWED_KEYS = {"profile", "target", "map", "extra", "allow_roles"}
 _TARGET_ALLOWED_KEYS = {"type", "name"}
 _ITEM_ALLOWED_KEYS = {"secret", "variable"}
-_EXTRA_ALLOWED_KEYS = {"from_file", "prompt", "value"}
+_EXTRA_ALLOWED_KEYS = {"from_file", "prompt"}
 
 
 def _parse_secrets(source: str, value: Any) -> SecretsCfg:

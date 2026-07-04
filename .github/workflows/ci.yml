@@ -11,12 +11,11 @@
 # job, which only runs when dbt-relevant paths change; `ci-required` treats a
 # legitimately skipped job as success.
 #
-# Required repo secrets for dbt-checks (Settings > Secrets and variables > Actions):
-#   SNOWFLAKE_ACCOUNT
-#   DBT_SNOWFLAKE_USER               (a dedicated low-privilege CI user, e.g.
-#                                     ARTWORK_TRANSFORMER_SVC -- never ACCOUNTADMIN, H3)
-#   DBT_SNOWFLAKE_PRIVATE_KEY        (full PEM contents of the .p8 key)
-#   DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE  (optional; "" if none)
+# Required GitHub Environment values for dbt-checks (environment: staging):
+#   Variables: SNOWFLAKE_ACCOUNT, SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE,
+#              DBT_SNOWFLAKE_ROLE, DBT_TARGET
+#   Secrets:   DBT_SNOWFLAKE_USER (dedicated low-privilege CI user, never ACCOUNTADMIN),
+#              DBT_SNOWFLAKE_PRIVATE_KEY, DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
 #
 # NOTE: no job here ever runs `ghclient ... --apply` (H4). GitHub-side required-check
 # settings are managed out-of-band by a maintainer running `ghclient ci reconcile`.
@@ -65,7 +64,7 @@ jobs:
             exit 0
           fi
           changed="$(git diff --name-only "$base" HEAD)"
-          if printf '%s\n' "$changed" | grep -Eq '^(artwork_pipeline/|scripts/ci/|\.sqlfluff$)'; then
+          if printf '%s\n' "$changed" | grep -Eq '^(artwork_pipeline/|scripts/ci/|requirements\.txt$|profiles\.yml\.example$|config/github-client-config\.yml$|\.github/workflows/ci\.yml$|\.sqlfluff$)'; then
             echo "dbt=true" >> "$GITHUB_OUTPUT"
           else
             echo "dbt=false" >> "$GITHUB_OUTPUT"
@@ -159,13 +158,19 @@ jobs:
     needs: changes
     if: needs.changes.outputs.dbt == 'true'
     runs-on: ubuntu-latest
+    # Environment-scoped secrets/variables are published by ghclient secrets publish.
+    # deployment: false grants access without creating a deployment record.
+    environment:
+      name: staging
+      deployment: false
     env:
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_ACCOUNT: ${{ vars.SNOWFLAKE_ACCOUNT }}
       DBT_SNOWFLAKE_USER: ${{ secrets.DBT_SNOWFLAKE_USER }}
       DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE }}
-      SNOWFLAKE_DATABASE: ARTWORK_DB
-      SNOWFLAKE_WAREHOUSE: ARTWORK_WH
-      DBT_SNOWFLAKE_ROLE: ARTWORK_TRANSFORMER
+      SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE || 'ARTWORK_DB' }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
+      DBT_SNOWFLAKE_ROLE: ${{ vars.DBT_SNOWFLAKE_ROLE }}
+      DBT_TARGET: ${{ vars.DBT_TARGET || 'staging' }}
       DBT_SNOWFLAKE_PRIVATE_KEY_PATH: ${{ github.workspace }}/ci_rsa_key.p8
     steps:
       - uses: actions/checkout@v4
