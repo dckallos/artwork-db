@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Create local Snowflake CLI profiles used by ghclient secrets publish.
+"""
+Create local Snowflake CLI profiles used by ghclient secrets publish.
 
 Dry-run by default. With --apply, this script:
   * copies the transformer private key to staging/prod CI key paths, chmod 600;
