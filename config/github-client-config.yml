@@ -66,12 +66,15 @@ snowflake_secrets:
         DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: { prompt: true }
       allow_roles: [ARTWORK_TRANSFORMER]
 
-# Area C (`ci reconcile`): the workflows whose required checks are reconciled.
+# Area C (`ci reconcile`): the workflow whose required checks are reconciled.
 ci:
   workflows:
-    - .github/workflows/orchestration-tests.yml
     - .github/workflows/ci.yml
   required_checks: auto
+  # C2: name the ONE workflow that actually emits the aggregate. orchestration-tests was
+  # folded into ci.yml (C1), so ci.yml is the sole emitter and there are no informational
+  # workflows that could be mistaken for feeding the gate.
+  aggregate_workflow: .github/workflows/ci.yml
   # H2: the single always-emitting aggregate status `ci reconcile` sets as the required
   # check on protected branches -- must match the aggregate job in .github/workflows/ci.yml,
   # never a path-filtered job name (which would deadlock docs-only PRs).

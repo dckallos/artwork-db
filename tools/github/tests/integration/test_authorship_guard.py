@@ -81,6 +81,38 @@ def test_allow_token_is_respected(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_markdown_prose_body_discussing_marker_is_not_flagged(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    # A review/doc that DISCUSSES a marker deep in its prose (outside the edge windows)
+    # must not be flagged (C5): clean header + footer, marker only in the middle.
+    body = (
+        ["# Review notes", ""]
+        + [f"line {i}" for i in range(1, 26)]
+        + ["We must never let a tool write 'Generated with Claude Code' as a footer.", ""]
+        + [f"tail {i}" for i in range(1, 26)]
+        + ["## End", ""]
+    )
+    (tmp_path / "review.md").write_text("\n".join(body))
+    _git(tmp_path, "add", "-A")
+    result = _run_guard(tmp_path, "--files-only")
+    assert result.returncode == 0, result.stderr
+
+
+def test_markdown_automated_footer_is_caught(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    # An automated attribution FOOTER in the last lines is still caught structurally.
+    body = ["# Change log", ""] + [f"entry {i}" for i in range(1, 40)] + [
+        "",
+        "Generated with Cortex Code",
+        "",
+    ]
+    (tmp_path / "CHANGELOG.md").write_text("\n".join(body))
+    _git(tmp_path, "add", "-A")
+    result = _run_guard(tmp_path, "--files-only")
+    assert result.returncode == 1
+    assert "CHANGELOG.md" in result.stderr
+
+
 def test_commit_scan_with_explicit_base(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     base = subprocess.run(

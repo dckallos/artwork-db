@@ -27,7 +27,7 @@ from typing import Any, List, Optional, Sequence, Tuple
 import yaml
 
 from ._paths import quote_segment
-from .config import GithubClientConfig
+from .config import CiCfg, GithubClientConfig
 from .errors import ConfigError, GhApiError, GhClientError
 from .gh import GhRunner
 
@@ -218,11 +218,19 @@ def validate_aggregate_workflow(text: str, *, source: str, aggregate_context: st
         )
     needs = agg_def.get("needs")
     needs_set = {needs} if isinstance(needs, str) else set(needs or [])
-    missing = sorted({jid for jid in jobs if jid != agg_id} - needs_set)
+    # Advisory jobs (continue-on-error: true) are deliberately NOT part of the gate, so the
+    # aggregate need not depend on them; every other (gating) job must be a dependency (C3).
+    gating = {
+        jid
+        for jid, jdef in jobs.items()
+        if jid != agg_id and not (isinstance(jdef, dict) and jdef.get("continue-on-error") is True)
+    }
+    missing = sorted(gating - needs_set)
     if missing:
         raise ConfigError(
             source, f"jobs.{agg_id}.needs",
-            f"aggregate job must `needs` every other job so the gate reflects them; missing: {missing}",
+            f"aggregate job must `needs` every gating job so the gate reflects them "
+            f"(advisory continue-on-error jobs excluded); missing: {missing}",
         )
 
 
@@ -252,6 +260,38 @@ class ReconcilePlan:
         return sorted(self.current_contexts) != sorted(self.desired_contexts)
 
 
+def _select_aggregate_workflow(ci: CiCfg, declared_by_source: dict) -> str:
+    """
+    Return the single workflow source that emits ``ci.aggregate_context`` (C2).
+
+    Honours an explicit ``ci.aggregate_workflow`` -- validating the aggregate job is actually
+    declared there -- otherwise finds the sole configured workflow that declares it.
+    Informational workflows never emit the gate, so their jobs must not be presented as
+    feeding it. Raises a scoped :class:`ConfigError` when no configured workflow can emit the
+    aggregate.
+    """
+    if ci.aggregate_workflow is not None:
+        if ci.aggregate_context not in declared_by_source.get(ci.aggregate_workflow, set()):
+            raise ConfigError(
+                ci.source,
+                "ci.aggregate_workflow",
+                f"{ci.aggregate_context!r} is not a job in the configured aggregate workflow "
+                f"{ci.aggregate_workflow!r}",
+            )
+        return ci.aggregate_workflow
+
+    matches = [src for src, names in declared_by_source.items() if ci.aggregate_context in names]
+    if not matches:
+        all_declared = sorted(set().union(*declared_by_source.values())) if declared_by_source else []
+        raise ConfigError(
+            ci.source,
+            "ci.aggregate_context",
+            f"{ci.aggregate_context!r} is not a job in any configured workflow; "
+            f"declared jobs: {all_declared}",
+        )
+    return matches[0]
+
+
 def build_reconcile_plan(
     cfg: GithubClientConfig,
     workflow_texts: Sequence[Tuple[str, str]],
@@ -267,27 +307,23 @@ def build_reconcile_plan(
     current ``strict`` (require-up-to-date) setting, carried through to the PATCH so the
     reconcile never silently flips it (C4). Raises a scoped :class:`ConfigError` if the
     config has no ``ci`` block or if the configured ``aggregate_context`` is not a job in
-    any configured workflow (which would set an unsatisfiable required check).
+    the emitting workflow (which would set an unsatisfiable required check). The preview's
+    ``workflow_contexts`` reflects only the aggregate-emitting workflow's jobs -- never the
+    jobs of merely *informational* workflows, which do not feed the gate (C2).
     """
     ci = cfg.ci
     if ci is None:
         raise ConfigError(str(cfg.config_path), "ci", "no ci block configured")
 
-    declared: set = set()
-    contexts: List[str] = []
+    # Parse-validate every configured workflow (informational ones included, so malformed
+    # or job-less YAML is still caught here), recording each one's declared jobs + contexts.
+    declared_by_source: dict = {}
+    contexts_by_source: dict = {}
     for source, text in workflow_texts:
-        declared |= declared_context_names(text, source=source)
-        for ctx in job_check_contexts(text, source=source):
-            if ctx not in contexts:
-                contexts.append(ctx)
+        declared_by_source[source] = declared_context_names(text, source=source)
+        contexts_by_source[source] = job_check_contexts(text, source=source)
 
-    if ci.aggregate_context not in declared:
-        raise ConfigError(
-            ci.source,
-            "ci.aggregate_context",
-            f"{ci.aggregate_context!r} is not a job in any configured workflow; "
-            f"declared jobs: {sorted(declared)}",
-        )
+    emitter = _select_aggregate_workflow(ci, declared_by_source)
 
     return ReconcilePlan(
         repo=cfg.repo,
@@ -295,7 +331,7 @@ def build_reconcile_plan(
         api_path=required_checks_path(cfg.repo, branch),
         current_contexts=tuple(current_contexts),
         desired_contexts=(ci.aggregate_context,),
-        workflow_contexts=tuple(contexts),
+        workflow_contexts=tuple(contexts_by_source[emitter]),
         strict=strict,
     )
 
@@ -447,18 +483,13 @@ def run_reconcile(
                 raise ConfigError(ci.source, "ci.workflows", f"workflow file not found: {path}")
             workflow_texts.append((wf, path.read_text()))
 
-        # C3: the workflow that declares the aggregate must make it an always-emitting PR
-        # gate (triggered on pull_request, no path filter, if: always(), complete needs) --
-        # otherwise the required check can sit Pending and deadlock merges.
-        aggregate_wf = next(
-            (s for s, t in workflow_texts if ci.aggregate_context in declared_context_names(t, source=s)),
-            None,
+        # C3: the workflow that emits the aggregate must make it an always-emitting PR gate
+        # (triggered on pull_request, no path filter, if: always(), complete needs) -- else
+        # the required check can sit Pending and deadlock merges. C2: the emitter is the
+        # configured aggregate_workflow when set, otherwise the sole workflow declaring it.
+        aggregate_wf = _select_aggregate_workflow(
+            ci, {s: declared_context_names(t, source=s) for s, t in workflow_texts}
         )
-        if aggregate_wf is None:
-            return 1, [
-                f"ci reconcile: FAIL: aggregate {ci.aggregate_context!r} is not a job in any "
-                f"configured workflow ({', '.join(ci.workflows)})"
-            ]
         agg_text = next(t for s, t in workflow_texts if s == aggregate_wf)
         validate_aggregate_workflow(agg_text, source=aggregate_wf, aggregate_context=ci.aggregate_context)
 

@@ -65,11 +65,13 @@ def test_reconcile_patch_carries_strict_through() -> None:
     cfg = _real_cfg()
     assert cfg.ci is not None
     # A minimal synthetic workflow that declares the aggregate job, so the plan builds
-    # without depending on the exact contents of the committed workflows.
+    # without depending on the exact contents of the committed workflows. Key it under the
+    # configured emitter (ci.aggregate_workflow when set) so the C2 emitter check is satisfied.
     wf = f"jobs:\n  {cfg.ci.aggregate_context}:\n    runs-on: ubuntu-latest\n"
+    emitter = cfg.ci.aggregate_workflow or cfg.ci.workflows[0]
     for strict in (True, False):
         plan = ci.build_reconcile_plan(
-            cfg, [("synthetic.yml", wf)], branch="main", current_contexts=["test"], strict=strict
+            cfg, [(emitter, wf)], branch="main", current_contexts=["test"], strict=strict
         )
         assert plan.strict is strict  # carried, never silently flipped (C4)
         assert plan.desired_contexts == (cfg.ci.aggregate_context,)

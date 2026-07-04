@@ -14,12 +14,18 @@
 #
 # Why two pattern sets:
 #   - FILE_ERE  (broad): source-file headers, where CoCo writes the attribution
-#     header and tools write "Generated with ...". Scans *.py *.sql *.ipynb *.md
+#     header and tools write "Generated with ...". Scans *.py *.sql *.ipynb
 #     *.yaml *.yml *.sh (the last three also cover .github/workflows/*.yml).
 #   - COMMIT_ERE (strict): only real trailers/footers/identity, anchored to their
 #     structural location (trailers/footers at line start; the author tag on the
 #     commit identity line), so prose that mentions a marker in a commit body is
 #     not a false hit.
+#
+# Markdown is scanned STRUCTURALLY (C5): only the first/last MD_EDGE_LINES of each
+# *.md file are checked -- that is where an automated attribution header/footer
+# actually lands -- so a doc that merely DISCUSSES a marker in its prose body (a
+# review note, this plan, AGENTS.md examples) is not a false positive. An automated
+# footer or header still sits in the edges and is caught.
 #
 # Escape hatch: put the token  authorship-marker-ok  on the same line (or in the
 # commit body) to intentionally allow a reference.
@@ -63,17 +69,34 @@ COMMIT_ERE="${COMMIT_ERE}|claude\.(com/claude-code|ai/code)"
 COMMIT_ERE="${COMMIT_ERE}|^commit .*\\(aider\\)"
 
 # Widened file coverage (H7): code + docs + YAML + shell. Workflow files under
-# .github/workflows/*.yml are covered by the *.yml glob.
-GLOBS=( '*.py' '*.sql' '*.ipynb' '*.md' '*.yaml' '*.yml' '*.sh' )
+# .github/workflows/*.yml are covered by the *.yml glob. Markdown is handled
+# separately (edge-only, C5); CODE_GLOBS are scanned in full.
+CODE_GLOBS=( '*.py' '*.sql' '*.ipynb' '*.yaml' '*.yml' '*.sh' )
+MD_EDGE_LINES=15
 MODE='all'   # all | files | commits
 
 err() { printf '%s\n' "$*" >&2; }
 drop_allowed() { grep -v -- "$ALLOW" | grep -v -E '^[[:space:]]*$' || true; }
 
+scan_md_edges() {
+  # Emit "path:lineno:content" markers found only in the first/last MD_EDGE_LINES of
+  # each given markdown file (C5). Small files (<= 2*N lines) are scanned in full.
+  local n="$MD_EDGE_LINES" f edges
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    edges="$(awk -v n="$n" -v f="$f" \
+      '{a[NR]=$0} END{for(i=1;i<=NR;i++) if(i<=n||i>NR-n) printf "%s:%d:%s\n",f,i,a[i]}' "$f")"
+    printf '%s\n' "$edges" | grep -I -i -E -e "$FILE_ERE" || true
+    printf '%s\n' "$edges" | grep -I -P -e '\x{1F916}' 2>/dev/null || true
+  done
+}
+
 scan_tracked_files() {
-  { git grep -nI -i -E -e "$FILE_ERE" -- "${GLOBS[@]}" 2>/dev/null || true
+  { git grep -nI -i -E -e "$FILE_ERE" -- "${CODE_GLOBS[@]}" 2>/dev/null || true
     # Raw robot-emoji bytes (needs a PCRE-enabled git; skipped silently otherwise).
-    git grep -nI -P -e '\x{1F916}' -- "${GLOBS[@]}" 2>/dev/null || true
+    git grep -nI -P -e '\x{1F916}' -- "${CODE_GLOBS[@]}" 2>/dev/null || true
+    # Markdown: header/footer windows only, so prose that discusses markers is not flagged.
+    git ls-files -- '*.md' 2>/dev/null | while IFS= read -r f; do scan_md_edges "$f"; done
   } | drop_allowed
 }
 
@@ -81,7 +104,8 @@ scan_explicit_files() {
   local f
   for f in "$@"; do
     case "$f" in
-      *.py|*.sql|*.ipynb|*.md|*.yaml|*.yml|*.sh)
+      *.md) scan_md_edges "$f" ;;
+      *.py|*.sql|*.ipynb|*.yaml|*.yml|*.sh)
         [ -f "$f" ] && { grep -nHI -i -E -e "$FILE_ERE" -- "$f" 2>/dev/null || true; } ;;
     esac
   done | drop_allowed

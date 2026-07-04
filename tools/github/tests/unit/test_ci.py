@@ -8,6 +8,7 @@ empty, or missing workflows yield actionable file/field-scoped errors.
 """
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -86,6 +87,53 @@ def test_plan_is_noop_when_already_aggregate(fixtures_dir: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# C2: only the aggregate-emitting workflow's jobs feed the gate; informational
+# workflows are validated but never presented as feeding it.
+# --------------------------------------------------------------------------- #
+def _cfg_with_roles(fixtures_dir: Path, *, workflows, aggregate_workflow):
+    """
+    Clone the fixture config with explicit ci.workflows + ci.aggregate_workflow roles.
+    """
+    base = _cfg(fixtures_dir)
+    ci_cfg = dataclasses.replace(
+        base.ci, workflows=tuple(workflows), aggregate_workflow=aggregate_workflow
+    )
+    return dataclasses.replace(base, ci=ci_cfg)
+
+
+def test_workflow_contexts_exclude_informational_workflows(fixtures_dir: Path) -> None:
+    cfg = _cfg_with_roles(
+        fixtures_dir,
+        workflows=("workflow-normal.yml", "workflow-matrix.yml"),
+        aggregate_workflow="workflow-normal.yml",
+    )
+    texts = [
+        ("workflow-normal.yml", _text(fixtures_dir, "workflow-normal.yml")),
+        ("workflow-matrix.yml", _text(fixtures_dir, "workflow-matrix.yml")),
+    ]
+    plan = ci.build_reconcile_plan(cfg, texts, branch="main", current_contexts=["test"])
+    # Preview reflects the emitter's jobs only; the informational matrix workflow's jobs never leak.
+    assert set(plan.workflow_contexts) == set(
+        ci.job_check_contexts(_text(fixtures_dir, "workflow-normal.yml"), source="normal")
+    )
+    assert "unit (3.11)" not in plan.workflow_contexts
+    assert plan.desired_contexts == (_AGGREGATE,)
+
+
+def test_explicit_aggregate_workflow_missing_the_job_is_actionable(fixtures_dir: Path) -> None:
+    cfg = _cfg_with_roles(
+        fixtures_dir, workflows=("emit.yml", "other.yml"), aggregate_workflow="emit.yml"
+    )
+    # emit.yml is named as the emitter but does not declare the aggregate job; other.yml does.
+    texts = [
+        ("emit.yml", "on:\n  pull_request: {}\njobs:\n  build:\n    runs-on: ubuntu-latest\n"),
+        ("other.yml", _text(fixtures_dir, "workflow-normal.yml")),
+    ]
+    with pytest.raises(ConfigError, match=r"ci\.aggregate_workflow"):
+        ci.build_reconcile_plan(cfg, texts, branch="main", current_contexts=[])
+
+
+# --------------------------------------------------------------------------- #
 # H5: adversarial inputs yield actionable, scoped errors.
 # --------------------------------------------------------------------------- #
 def test_malformed_workflow_is_actionable(fixtures_dir: Path) -> None:
@@ -104,6 +152,92 @@ def test_aggregate_not_a_job_is_actionable(fixtures_dir: Path) -> None:
     text = "name: x\non: {pull_request: {}}\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
     with pytest.raises(ConfigError, match=r"ci\.aggregate_context"):
         ci.build_reconcile_plan(cfg, [("x.yml", text)], branch="main", current_contexts=[])
+
+
+# --------------------------------------------------------------------------- #
+# C3: the aggregate workflow must make the required context *always-emitting*.
+# --------------------------------------------------------------------------- #
+_VALID_AGG_QUOTED = (
+    'name: ci\n'
+    '"on":\n'
+    '  pull_request: {}\n'
+    'jobs:\n'
+    '  build:\n    runs-on: ubuntu-latest\n'
+    '  ci-required:\n    runs-on: ubuntu-latest\n    needs: [build]\n    if: always()\n'
+)
+
+
+def test_validate_aggregate_accepts_valid_always_emitting_workflow(fixtures_dir: Path) -> None:
+    # Bare `on:` (YAML 1.1 -> True key) and quoted "on": (str key) are both valid spellings;
+    # _workflow_on must read either so a good workflow is never falsely rejected.
+    ci.validate_aggregate_workflow(
+        _text(fixtures_dir, "workflow-normal.yml"), source="normal", aggregate_context=_AGGREGATE
+    )
+    ci.validate_aggregate_workflow(_VALID_AGG_QUOTED, source="quoted", aggregate_context=_AGGREGATE)
+
+
+def test_validate_aggregate_requires_pull_request_trigger() -> None:
+    text = (
+        'on:\n  push: {}\n'
+        'jobs:\n'
+        '  build:\n    runs-on: ubuntu-latest\n'
+        '  ci-required:\n    runs-on: ubuntu-latest\n    needs: [build]\n    if: always()\n'
+    )
+    with pytest.raises(ConfigError, match=r"on\.pull_request"):
+        ci.validate_aggregate_workflow(text, source="wf", aggregate_context=_AGGREGATE)
+
+
+def test_validate_aggregate_rejects_path_filtered_pull_request() -> None:
+    text = (
+        'on:\n  pull_request:\n    paths:\n      - "src/**"\n'
+        'jobs:\n'
+        '  build:\n    runs-on: ubuntu-latest\n'
+        '  ci-required:\n    runs-on: ubuntu-latest\n    needs: [build]\n    if: always()\n'
+    )
+    with pytest.raises(ConfigError, match=r"path-filter"):
+        ci.validate_aggregate_workflow(text, source="wf", aggregate_context=_AGGREGATE)
+
+
+def test_validate_aggregate_requires_if_always() -> None:
+    text = (
+        'on:\n  pull_request: {}\n'
+        'jobs:\n'
+        '  build:\n    runs-on: ubuntu-latest\n'
+        '  ci-required:\n    runs-on: ubuntu-latest\n    needs: [build]\n'
+    )
+    with pytest.raises(ConfigError, match=r"always\(\)"):
+        ci.validate_aggregate_workflow(text, source="wf", aggregate_context=_AGGREGATE)
+
+
+def test_validate_aggregate_requires_complete_needs() -> None:
+    text = (
+        'on:\n  pull_request: {}\n'
+        'jobs:\n'
+        '  build:\n    runs-on: ubuntu-latest\n'
+        '  lint:\n    runs-on: ubuntu-latest\n'
+        '  ci-required:\n    runs-on: ubuntu-latest\n    needs: [build]\n    if: always()\n'
+    )
+    with pytest.raises(ConfigError, match=r"needs"):
+        ci.validate_aggregate_workflow(text, source="wf", aggregate_context=_AGGREGATE)
+
+
+def test_validate_aggregate_ignores_advisory_continue_on_error_jobs() -> None:
+    # An advisory job (continue-on-error: true, e.g. the H7 authorship guard) is not part of
+    # the gate, so the aggregate need not `needs` it -- the workflow must still validate.
+    text = (
+        'on:\n  pull_request: {}\n'
+        'jobs:\n'
+        '  build:\n    runs-on: ubuntu-latest\n'
+        '  advisory:\n    runs-on: ubuntu-latest\n    continue-on-error: true\n'
+        '  ci-required:\n    runs-on: ubuntu-latest\n    needs: [build]\n    if: always()\n'
+    )
+    ci.validate_aggregate_workflow(text, source="wf", aggregate_context=_AGGREGATE)
+
+
+def test_validate_aggregate_missing_job_is_actionable() -> None:
+    text = 'on:\n  pull_request: {}\njobs:\n  build:\n    runs-on: ubuntu-latest\n'
+    with pytest.raises(ConfigError, match=r"is not a job"):
+        ci.validate_aggregate_workflow(text, source="wf", aggregate_context=_AGGREGATE)
 
 
 # --------------------------------------------------------------------------- #
