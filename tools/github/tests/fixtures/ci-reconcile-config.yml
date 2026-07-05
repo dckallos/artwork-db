@@ -1,0 +1,15 @@
+# Fixture config for `ci reconcile` tests: workflows resolve under the fixtures dir
+# (workflows_root=fixtures_dir), so `workflow-normal.yml` sits alongside this file.
+repo: octocat/hello-world
+
+branch_protection:
+  branches:
+    main:
+      policy: policies/policy.main.json
+      required_checks_from_workflows: true
+
+ci:
+  workflows:
+    - workflow-normal.yml
+  required_checks: auto
+  aggregate_context: ci-required

@@ -1,0 +1,61 @@
+# =============================================================================
+# github-client-config.yml -- governance config for the `ghclient` tool
+# =============================================================================
+# This file is DATA. It declares WHAT the GitHub client governs for this repo;
+# the mechanism (HOW a change is planned/executed) lives in tools/github/ghclient/**.
+# Repo slug, protected branches, policy bodies, Snowflake profile mappings, and
+# CI aggregate context are read from here -- never hardcoded in Python -- so the
+# client stays repo-agnostic and reusable.
+#
+# Loaded + validated by tools/github/ghclient/config.py into frozen dataclasses,
+# with unknown keys rejected and file/field-scoped errors. Paths under
+# `branch_protection.*.policy` resolve relative to tools/github/ (the package home).
+# =============================================================================
+
+repo: dckallos/artwork-db
+
+branch_protection:
+  branches:
+    main:
+      policy: policies/policy.main.json
+      required_checks_from_workflows: true
+
+# Environment-scoped Snowflake CI publishing. Non-sensitive values are Variables;
+# durable credential material remains Secrets. The helper script
+# scripts/setup/create_ci_snowflake_profiles.py creates the two local Snowflake CLI
+# profiles this block reads. DBT_TARGET is not a Snowflake connection field, so
+# scripts/setup/github_governance.sh sets it explicitly as an Environment Variable.
+snowflake_secrets:
+  source: ~/.snowflake/connections.toml
+  profiles:
+    staging:
+      profile: artwork_ci_staging
+      target: { type: environment, name: staging }
+      map:
+        account:   { variable: SNOWFLAKE_ACCOUNT }
+        database:  { variable: SNOWFLAKE_DATABASE }
+        user:      { secret: DBT_SNOWFLAKE_USER }
+        role:      { variable: DBT_SNOWFLAKE_ROLE }
+        warehouse: { variable: SNOWFLAKE_WAREHOUSE }
+      extra:
+        DBT_SNOWFLAKE_PRIVATE_KEY: { from_file: "~/.snowflake/keys/staging_ci.p8" }
+      allow_roles: [ARTWORK_TRANSFORMER]
+    prod:
+      profile: artwork_ci_prod
+      target: { type: environment, name: prod }
+      map:
+        account:   { variable: SNOWFLAKE_ACCOUNT }
+        database:  { variable: SNOWFLAKE_DATABASE }
+        user:      { secret: DBT_SNOWFLAKE_USER }
+        role:      { variable: DBT_SNOWFLAKE_ROLE }
+        warehouse: { variable: SNOWFLAKE_WAREHOUSE }
+      extra:
+        DBT_SNOWFLAKE_PRIVATE_KEY: { from_file: "~/.snowflake/keys/prod_ci.p8" }
+      allow_roles: [ARTWORK_TRANSFORMER]
+
+ci:
+  workflows:
+    - .github/workflows/ci.yml
+  required_checks: auto
+  aggregate_workflow: .github/workflows/ci.yml
+  aggregate_context: ci-required

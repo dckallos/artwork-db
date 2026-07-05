@@ -1,29 +1,36 @@
 #!/usr/bin/env bash
-# Shared defaults for connecting this checkout to the KUNHTEL Snowflake account.
+# Shared defaults for connecting this checkout to the KW94245 Snowflake account.
+# Intended to be sourced by helper scripts, not executed directly.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-: "${SNOW_ARTWORK_PROFILE:=gl13131}"
-: "${SNOW_ARTWORK_ACCOUNT:=KUNHTEL-GL13131}"
-: "${SNOW_ARTWORK_ADMIN_USER:=RSKALLOS}"
+: "${SNOW_ARTWORK_PROFILE:=kw94245}"
+: "${SNOW_ARTWORK_ACCOUNT:=DSHXYWJ-KW94245}"
+: "${SNOW_ARTWORK_ADMIN_USER:=PORCHORCH}"
 : "${SNOW_ARTWORK_ADMIN_ROLE:=ACCOUNTADMIN}"
 : "${SNOW_ARTWORK_INIT_WAREHOUSE:=COMPUTE_WH}"
 : "${SNOW_ARTWORK_PROJECT_WAREHOUSE:=ARTWORK_WH}"
+: "${SNOW_ARTWORK_STAGING_WAREHOUSE:=ARTWORK_WH_STAGING}"
+: "${SNOW_ARTWORK_PROD_WAREHOUSE:=ARTWORK_WH_PROD}"
 : "${SNOW_ARTWORK_DATABASE:=ARTWORK_DB}"
+: "${SNOW_ARTWORK_DEV_SCHEMA_PREFIX:=dbt_daniel}"
 : "${SNOW_ARTWORK_LOADER_USER:=ARTWORK_LOADER_SVC}"
 : "${SNOW_ARTWORK_LOADER_ROLE:=ARTWORK_LOADER}"
 : "${SNOW_ARTWORK_TRANSFORMER_USER:=ARTWORK_TRANSFORMER_SVC}"
 : "${SNOW_ARTWORK_TRANSFORMER_ROLE:=ARTWORK_TRANSFORMER}"
+: "${SNOW_ARTWORK_CI_STAGING_PROFILE:=artwork_ci_staging}"
+: "${SNOW_ARTWORK_CI_PROD_PROFILE:=artwork_ci_prod}"
 : "${TOOLKIT_DIR:=${REPO_ROOT}/../snowflake-toolkit}"
+: "${DRY_RUN:=0}"
 
 COMMON_USAGE=$(cat <<'EOF_USAGE'
 Common options:
-  --profile NAME          Snowflake CLI connection label. Default: gl13131
-  --account IDENTIFIER    Snowflake account identifier. Default: KUNHTEL-GL13131
-  --admin-user USER       Human admin login. Default: RSKALLOS
+  --profile NAME          Snowflake CLI connection label. Default: kw94245
+  --account IDENTIFIER    Snowflake account identifier. Default: DSHXYWJ-KW94245
+  --admin-user USER       Human admin login. Default: PORCHORCH
   --admin-role ROLE       Human admin role. Default: ACCOUNTADMIN
   --init-warehouse NAME   Existing bootstrap warehouse. Default: COMPUTE_WH
   --warehouse NAME        Project warehouse after IaC. Default: ARTWORK_WH
@@ -33,30 +40,8 @@ Common options:
   --transformer-user USER Transformer service user. Default: ARTWORK_TRANSFORMER_SVC
   --transformer-role ROLE Transformer service role. Default: ARTWORK_TRANSFORMER
   --toolkit-dir PATH      snowflake-toolkit clone. Default: ../snowflake-toolkit
-  --dry-run               Print actions without calling snowflake-toolkit or snow
 EOF_USAGE
 )
-
-parse_common_account_args() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --profile) SNOW_ARTWORK_PROFILE="${2:-}"; shift 2 ;;
-            --account) SNOW_ARTWORK_ACCOUNT="${2:-}"; shift 2 ;;
-            --admin-user) SNOW_ARTWORK_ADMIN_USER="${2:-}"; shift 2 ;;
-            --admin-role|--role) SNOW_ARTWORK_ADMIN_ROLE="${2:-}"; shift 2 ;;
-            --init-warehouse) SNOW_ARTWORK_INIT_WAREHOUSE="${2:-}"; shift 2 ;;
-            --warehouse) SNOW_ARTWORK_PROJECT_WAREHOUSE="${2:-}"; shift 2 ;;
-            --database) SNOW_ARTWORK_DATABASE="${2:-}"; shift 2 ;;
-            --loader-user) SNOW_ARTWORK_LOADER_USER="${2:-}"; shift 2 ;;
-            --loader-role) SNOW_ARTWORK_LOADER_ROLE="${2:-}"; shift 2 ;;
-            --transformer-user) SNOW_ARTWORK_TRANSFORMER_USER="${2:-}"; shift 2 ;;
-            --transformer-role) SNOW_ARTWORK_TRANSFORMER_ROLE="${2:-}"; shift 2 ;;
-            --toolkit-dir) TOOLKIT_DIR="${2:-}"; shift 2 ;;
-            --dry-run) DRY_RUN=1; shift ;;
-            *) echo "error: unknown option '$1'" >&2; return 64 ;;
-        esac
-    done
-}
 
 require_non_empty_defaults() {
     local missing=0
@@ -97,7 +82,7 @@ connection_account_from_toml() {
         $0 ~ "^\\[" && in_section { exit }
         in_section && $1 == "account" {
             sub(/^[^=]*=[[:space:]]*/, "", $0)
-            gsub(/^[\"'\'' ]+|[\"'\'' ]+$/, "", $0)
+            gsub(/^[\"'"'"' ]+|[\"'"'"' ]+$/, "", $0)
             print $0
             exit
         }
@@ -111,8 +96,8 @@ ensure_profile_not_pointing_elsewhere() {
         cat >&2 <<EOF_PROFILE
 error: profile '${SNOW_ARTWORK_PROFILE}' already points at '${existing_account}', not '${SNOW_ARTWORK_ACCOUNT}'.
 
-Use a different --profile value or edit ~/.snowflake/connections.toml deliberately.
-The toolkit init-profile phase is intentionally non-destructive.
+Use a different --profile value or pass --replace-existing to a helper that supports it.
+The toolkit init-profile phase is intentionally non-destructive unless replacement is explicit.
 EOF_PROFILE
         exit 78
     fi
@@ -150,6 +135,22 @@ run_toolkit_phase() {
             SNOW_LIB_DEFAULT_WAREHOUSE="${SNOW_ARTWORK_PROJECT_WAREHOUSE}" \
                 bash "${TOOLKIT_DIR}/snowflake_cli/setup.sh" --profile "${SNOW_ARTWORK_PROFILE}" --phase "${phase}" "$@"
             ;;
+        prereq|init-profile|admin|all)
+            env -u SNOWFLAKE_ACCOUNT -u SNOWFLAKE_USER -u SNOWFLAKE_ROLE \
+                -u SNOWFLAKE_WAREHOUSE -u SNOWFLAKE_DATABASE \
+                -u SNOWFLAKE_PRIVATE_KEY_FILE -u SNOWFLAKE_AUTHENTICATOR \
+            SNOWFLAKE_ADMIN_ACCOUNT="${SNOW_ARTWORK_ACCOUNT}" \
+            SNOWFLAKE_ADMIN_USER="${SNOW_ARTWORK_ADMIN_USER}" \
+            SNOWFLAKE_ADMIN_ROLE="${SNOW_ARTWORK_ADMIN_ROLE}" \
+            SNOWFLAKE_ADMIN_WAREHOUSE="${SNOW_ARTWORK_INIT_WAREHOUSE}" \
+                bash "${TOOLKIT_DIR}/snowflake_cli/setup.sh" \
+                    --profile "${SNOW_ARTWORK_PROFILE}" \
+                    --account "${SNOW_ARTWORK_ACCOUNT}" \
+                    --admin-user "${SNOW_ARTWORK_ADMIN_USER}" \
+                    --admin-role "${SNOW_ARTWORK_ADMIN_ROLE}" \
+                    --init-warehouse "${SNOW_ARTWORK_INIT_WAREHOUSE}" \
+                    --phase "${phase}" "$@"
+            ;;
         *)
             SNOW_LIB_DEFAULT_WAREHOUSE="${SNOW_ARTWORK_PROJECT_WAREHOUSE}" \
                 bash "${TOOLKIT_DIR}/snowflake_cli/setup.sh" --profile "${SNOW_ARTWORK_PROFILE}" --phase "${phase}" "$@"
@@ -175,6 +176,11 @@ print_toolkit_phase() {
                 "${SNOW_ARTWORK_TRANSFORMER_USER}" "${SNOW_ARTWORK_TRANSFORMER_ROLE}" "${SNOW_ARTWORK_PROJECT_WAREHOUSE}" \
                 "${SNOW_ARTWORK_PROJECT_WAREHOUSE}" "${TOOLKIT_DIR}/snowflake_cli/setup.sh" "${SNOW_ARTWORK_PROFILE}" "${phase}"
             ;;
+        prereq|init-profile|admin|all)
+            printf 'SNOWFLAKE_ADMIN_ACCOUNT=%q SNOWFLAKE_ADMIN_USER=%q SNOWFLAKE_ADMIN_ROLE=%q SNOWFLAKE_ADMIN_WAREHOUSE=%q bash %q --profile %q --account %q --admin-user %q --admin-role %q --init-warehouse %q --phase %q\n' \
+                "${SNOW_ARTWORK_ACCOUNT}" "${SNOW_ARTWORK_ADMIN_USER}" "${SNOW_ARTWORK_ADMIN_ROLE}" "${SNOW_ARTWORK_INIT_WAREHOUSE}" \
+                "${TOOLKIT_DIR}/snowflake_cli/setup.sh" "${SNOW_ARTWORK_PROFILE}" "${SNOW_ARTWORK_ACCOUNT}" "${SNOW_ARTWORK_ADMIN_USER}" "${SNOW_ARTWORK_ADMIN_ROLE}" "${SNOW_ARTWORK_INIT_WAREHOUSE}" "${phase}"
+            ;;
         *)
             printf 'SNOW_LIB_DEFAULT_WAREHOUSE=%q bash %q --profile %q --phase %q\n' \
                 "${SNOW_ARTWORK_PROJECT_WAREHOUSE}" "${TOOLKIT_DIR}/snowflake_cli/setup.sh" "${SNOW_ARTWORK_PROFILE}" "${phase}"
@@ -199,6 +205,8 @@ Snowflake target:
   admin role       ${SNOW_ARTWORK_ADMIN_ROLE}
   init warehouse   ${SNOW_ARTWORK_INIT_WAREHOUSE}
   project wh/db    ${SNOW_ARTWORK_PROJECT_WAREHOUSE} / ${SNOW_ARTWORK_DATABASE}
+  staging/prod wh  ${SNOW_ARTWORK_STAGING_WAREHOUSE} / ${SNOW_ARTWORK_PROD_WAREHOUSE}
+  dev schema       ${SNOW_ARTWORK_DEV_SCHEMA_PREFIX}
   loader           ${SNOW_ARTWORK_LOADER_USER} / ${SNOW_ARTWORK_LOADER_ROLE}
   transformer      ${SNOW_ARTWORK_TRANSFORMER_USER} / ${SNOW_ARTWORK_TRANSFORMER_ROLE}
   toolkit          ${TOOLKIT_DIR}

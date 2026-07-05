@@ -1,0 +1,14 @@
+# Fixture: a normal path-filtered workflow with the always-emitting aggregate job.
+name: dbt-ci
+on:
+  pull_request: {}
+jobs:
+  dbt-checks:
+    name: dbt checks
+    runs-on: ubuntu-latest
+  github-client:
+    runs-on: ubuntu-latest
+  ci-required:
+    runs-on: ubuntu-latest
+    needs: [dbt-checks, github-client]
+    if: always()

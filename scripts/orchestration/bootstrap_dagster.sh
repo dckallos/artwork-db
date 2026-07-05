@@ -31,8 +31,8 @@ python -m pip install --upgrade pip
 log "Installing project requirements (extraction + dbt)"
 pip install -r requirements.txt
 
-log "Installing orchestration package (Dagster + dagster-dbt)"
-pip install -e "$REPO_ROOT/orchestration"
+log "Installing orchestration package (Dagster + dagster-dbt, with dev/test extras)"
+pip install -e "$REPO_ROOT/orchestration[dev]"
 
 log "Installing dbt packages (dbt deps)"
 dbt deps --project-dir "$REPO_ROOT/artwork_pipeline" --profiles-dir "$REPO_ROOT/artwork_pipeline"

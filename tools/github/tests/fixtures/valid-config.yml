@@ -1,0 +1,17 @@
+repo: octocat/hello-world
+
+branch_protection:
+  branches:
+    main:
+      policy: policies/policy.main.json
+      required_checks_from_workflows: true
+
+snowflake_secrets:
+  source: ~/.snowflake/connections.toml
+  profiles: {}
+
+ci:
+  workflows:
+    - .github/workflows/ci.yml
+  required_checks: auto
+  aggregate_context: ci-required

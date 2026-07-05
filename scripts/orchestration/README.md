@@ -59,7 +59,8 @@ Run only **one daemon** per deployment (multiple webservers are fine).
 
 ### `bootstrap_dagster.sh`
 One-time setup. Creates `.venv`, upgrades pip, installs `requirements.txt` + the editable
-`orchestration` package (Dagster + dagster-dbt), and runs `dbt deps`.
+`orchestration[dev]` package (Dagster + dagster-dbt, plus pytest for `orchestration/tests`),
+and runs `dbt deps`.
 
 ### `doctor_orchestration.sh`
 Non-destructive sanity check: venv active, `dbt`/`dagster` present, manifest present,

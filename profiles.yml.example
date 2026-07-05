@@ -2,27 +2,61 @@
 # dbt-snowflake profile for the OpenAccess Artwork Medallion Pipeline.
 # All values resolve from the environment via env_var() -- no secrets live here,
 # so this example installs verbatim to ~/.dbt/profiles.yml.
-# Auth = key-pair (private_key_path); see sibling snowflake-toolkit/snowflake_cli/setup.sh.
 #
-# NOTE: The canonical profiles.yml now lives INSIDE artwork_pipeline/ and is
-# passed via --profiles-dir by dbt_orchestrate.sh. This root example is kept
-# for reference / alternative ~/.dbt/ installation.
+# NOTE: The canonical profiles.yml lives INSIDE artwork_pipeline/ and is passed
+# via --profiles-dir by dbt_orchestrate.sh. This root example mirrors it for
+# reference / alternative ~/.dbt/ installation and MUST be kept in sync with
+# artwork_pipeline/profiles.yml.
+#
+# Profile name is `dbt_daniel` (must match profile: in artwork_pipeline/dbt_project.yml).
+# Three targets share ONE database (ARTWORK_DB); isolation is by SCHEMA, routed
+# in macros/generate_schema_name.sql:
+#   dev     -> per-developer prefix   (dbt_kalleward_SILVER / _GOLD)   key-pair via PEM file
+#   staging -> STAGING_SILVER / _GOLD                                  key-pair via an injected PEM file path
+#   prod    -> verbatim SILVER / GOLD                                  key-pair via an injected PEM file path
 
-artwork_pipeline:                 # must match profile: in artwork_pipeline/dbt_project.yml
-  target: dev
+dbt_daniel:                       # must match profile: in artwork_pipeline/dbt_project.yml
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
 
-    # Local development -- builds into the SILVER schema by default.
+    # Local development -- key-pair via an on-disk PEM key.
     dev:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
-      # Key-pair auth: point at a PEM key on disk; passphrase blank if unencrypted.
       private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
       private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
       role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
       warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH') }}"
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
-      schema: SILVER
-      threads: 4
+      schema: "{{ env_var('DBT_SNOWFLAKE_SCHEMA', 'dbt_kalleward') }}"
+      threads: 16
+      client_session_keep_alive: false
+
+    # Staging -- CI on merge; key-pair via an injected PEM file path.
+    staging:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
+      warehouse: "{{ env_var('DBT_STAGING_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_STAGING')) }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
+      schema: STAGING               # prefix source -> STAGING_SILVER / STAGING_GOLD
+      threads: 8
+      client_session_keep_alive: false
+
+    # Prod -- CI on release tag (gated); key-pair via an injected PEM file path.
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
+      warehouse: "{{ env_var('DBT_PROD_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_PROD')) }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
+      schema: GOLD                   # fallback; +schema models route to verbatim SILVER / GOLD
+      threads: 8
       client_session_keep_alive: false

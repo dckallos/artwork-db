@@ -1,0 +1,4 @@
+# Generated before-state snapshots (plan section 12.2.3): never committed here.
+# Their secure home is the private ops repo. Keep the directory, ignore contents.
+*
+!.gitignore

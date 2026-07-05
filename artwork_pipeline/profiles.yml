@@ -1,50 +1,80 @@
 # =============================================================================
-# profiles.yml -- Dual-mode dbt-snowflake connection profile
+# profiles.yml -- dbt-snowflake connection profile (dev / staging / prod)
 # =============================================================================
-# This file works in TWO execution contexts:
+# Profile name stays `dbt_daniel` (must match `profile:` in dbt_project.yml).
+# All environment-specific values resolve from env_var() so this file carries
+# no secrets and is stable across account/credential changes -- update `.env`
+# (local) or CI secrets/variables instead (see .env.example).
 #
-#   1. LOCAL (Mac, dbt Core CLI):
-#      - Target: `dev`
-#      - Auth: key-pair (private_key_path via env_var)
-#      - Connects as ARTWORK_TRANSFORMER_SVC service user
-#      - Requires exported env vars from .env
+# TARGETS:
+#   dev      LOCAL, dbt Core. Key-pair via a PEM file on disk (private_key_path).
+#            Per-developer prefixed schemas (dbt_kalleward_SILVER / _GOLD).
+#   staging  CI (auto on merge). Key-pair via injected key CONTENTS
+#            (DBT_SNOWFLAKE_PRIVATE_KEY_PATH). Schemas STAGING_SILVER / STAGING_GOLD.
+#   prod     CI (on release tag, gated). Key-pair via injected key CONTENTS.
+#            Verbatim schemas SILVER / GOLD.
 #
-#   2. SNOWFLAKE-NATIVE (workspace / CREATE DBT PROJECT / EXECUTE DBT PROJECT):
-#      - Target: `snowflake`
-#      - Auth: session-based (inherits the caller's Snowflake session)
-#      - No credentials needed (account/user are placeholders)
-#      - Role/warehouse/database set explicitly to avoid inheriting session defaults
+# All three share ONE database (ARTWORK_DB) and one Bronze; isolation is by
+# SCHEMA, routed in macros/generate_schema_name.sql. (Plan 12.4.1 / 12.4.7.)
 #
-# HOW TO USE:
-#   Local:     dbt run --target dev        (or just `dbt run` since dev is default)
-#   Snowflake: dbt run --target snowflake  (or set target: snowflake in workspace)
+# INFRA PREREQUISITES (ACCOUNTADMIN, provisioned via infrastructure/ -- NOT dbt):
+#   - Warehouses: ARTWORK_WH (dev), ARTWORK_WH_STAGING, ARTWORK_WH_PROD.
+#   - Schemas + transformer grants: SILVER, GOLD, STAGING_SILVER, STAGING_GOLD,
+#     and each developer's dev-prefixed pair.
 #
-# DESIGN NOTES:
-#   - `env_var()` is NOT available in Snowflake-native execution. Any target
-#     used in that context must have all values hardcoded or use Snowflake session
-#     defaults. The `snowflake` target hardcodes everything.
-#   - The `dev` target uses env_var() for ALL secrets (key path, account, user)
-#     because those vary per machine and must not be committed to version control.
-#   - Both targets write to the same schemas (SILVER/GOLD) using the same role.
-#     The generate_schema_name macro handles routing identically regardless of target.
-#
-# REQUIRED ENV VARS (dev target only, set in .env, exported by dbt_orchestrate.sh):
-#   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH,
-#   SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE
-# OPTIONAL (dev target only, have defaults):
-#   DBT_SNOWFLAKE_ROLE, DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
+# REQUIRED ENV VARS -- dev (see .env.example):
+#   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH
+# REQUIRED ENV VARS -- staging/prod (CI secrets/vars):
+#   SNOWFLAKE_ACCOUNT, DBT_SNOWFLAKE_USER, DBT_SNOWFLAKE_PRIVATE_KEY_PATH
+# OPTIONAL (have defaults): DBT_SNOWFLAKE_ROLE, *_PASSPHRASE, SNOWFLAKE_DATABASE,
+#   per-env warehouse + schema overrides.
 # =============================================================================
 
-dbt_daniel:
-  target: dev
+dbt_daniel:                       # must match `profile:` in dbt_project.yml
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
+
+    # --- LOCAL development (key-pair via on-disk PEM) ---
     dev:
       type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
+      # Per-developer prefix; generate_schema_name appends _SILVER / _GOLD.
+      schema: "{{ env_var('DBT_SNOWFLAKE_SCHEMA', 'dbt_kalleward') }}"
       threads: 16
-      account: KUNHTEL-GL13131
-      user: ARTWORK_TRANSFORMER_SVC
-      database: ARTWORK_DB
-      warehouse: ARTWORK_WH
-      schema: DBT_DKALLEWARD
-      role: ARTWORK_TRANSFORMER
-      private_key_path: /Users/daniel/.snowflake/keys/gl13131_transformer_rsa_key.p8
+      client_session_keep_alive: false
+
+    # --- STAGING (CI on merge; key-pair via injected key contents) ---
+    staging:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
+      warehouse: "{{ env_var('DBT_STAGING_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_STAGING')) }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
+      # Prefix source: generate_schema_name yields STAGING_SILVER / STAGING_GOLD.
+      schema: STAGING
+      threads: 8
+      client_session_keep_alive: false
+
+    # --- PROD (CI on release tag, gated; key-pair via injected key contents) ---
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'ARTWORK_TRANSFORMER') }}"
+      warehouse: "{{ env_var('DBT_PROD_WAREHOUSE', env_var('SNOWFLAKE_WAREHOUSE', 'ARTWORK_WH_PROD')) }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ARTWORK_DB') }}"
+      # Fallback only; +schema models route to verbatim SILVER / GOLD.
+      schema: GOLD
+      threads: 8
+      client_session_keep_alive: false

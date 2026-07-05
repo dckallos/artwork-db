@@ -1,0 +1,16 @@
+# Fixture: path-filtered / conditional jobs (each still declares a check context) + aggregate.
+name: skipped-ci
+on:
+  pull_request:
+    paths: ["orchestration/**"]
+jobs:
+  pytest:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+  docs:
+    if: false
+    runs-on: ubuntu-latest
+  ci-required:
+    runs-on: ubuntu-latest
+    needs: [pytest, docs]
+    if: always()

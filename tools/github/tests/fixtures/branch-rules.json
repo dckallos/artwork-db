@@ -1,0 +1,14 @@
+[
+  {
+    "type": "pull_request",
+    "ruleset_source_type": "Repository",
+    "ruleset_source": "octocat/hello-world",
+    "ruleset_id": 42
+  },
+  {
+    "type": "required_status_checks",
+    "ruleset_source_type": "Organization",
+    "ruleset_source": "octocat",
+    "ruleset_id": 7
+  }
+]

@@ -1,0 +1,69 @@
+# =============================================================================
+# TEST FIXTURE ONLY -- synthetic Snowflake connections. NO REAL SECRETS/KEYS.
+# Every private_key_path/token_file_path points at a nonexistent path on purpose;
+# apply-path tests inject a fake file_reader/prompt so nothing on disk is read.
+# =============================================================================
+
+# A dedicated, least-privilege CI service user (the H3-approved shape).
+[artwork_ci_staging]
+account = "orgname-staging_acct"
+user = "ARTWORK_CI_SVC_STAGING"
+role = "ARTWORK_TRANSFORMER"
+warehouse = "DBT_STAGING_WH"
+database = "ARTWORK_DB"
+private_key_path = "/nonexistent/staging_ci.p8"
+
+[artwork_ci_prod]
+account = "orgname-prod_acct"
+user = "ARTWORK_CI_SVC_PROD"
+role = "ARTWORK_TRANSFORMER"
+warehouse = "DBT_PROD_WH"
+database = "ARTWORK_DB"
+private_key_path = "/nonexistent/prod_ci.p8"
+
+# ACCOUNTADMIN -- H3 must refuse to publish this by default.
+[admin_conn]
+account = "orgname-prod_acct"
+user = "ADMIN_USER"
+role = "ACCOUNTADMIN"
+warehouse = "DBT_PROD_WH"
+private_key_path = "/nonexistent/admin.p8"
+
+# OAuth/session profile with no key pair -- not a durable CI credential (H3 refuses).
+[oauth_conn]
+account = "orgname-acct"
+user = "SOME_USER"
+authenticator = "oauth"
+token_file_path = "/nonexistent/token"
+role = "ARTWORK_TRANSFORMER"
+
+# A personal/interactive identity: user matches a local OS user (H3 refuses when local_user matches).
+[human_conn]
+account = "orgname-acct"
+user = "rskallos"
+role = "ARTWORK_TRANSFORMER"
+warehouse = "DEV_WH"
+private_key_path = "/nonexistent/human.p8"
+
+# No role at all -- H3 refuses an unscoped credential.
+[no_role_conn]
+account = "orgname-acct"
+user = "SVC_NOROLE"
+warehouse = "DEV_WH"
+private_key_path = "/nonexistent/norole.p8"
+
+# A valid key-pair profile whose role is OUTSIDE the publish-set allowlist (H3 refuses,
+# via the allowlist path -- distinct from the always-forbidden ACCOUNTADMIN path).
+[wrong_role_conn]
+account = "orgname-acct"
+user = "SVC_WRONG"
+role = "SYSADMIN"
+warehouse = "DEV_WH"
+private_key_path = "/nonexistent/wrong.p8"
+
+# Missing the required `account` field -- apply-time require() raises a field-scoped error.
+[missing_account]
+user = "SVC_X"
+role = "ARTWORK_TRANSFORMER"
+warehouse = "DEV_WH"
+private_key_path = "/nonexistent/x.p8"
