@@ -1,0 +1,20 @@
+# =============================================================================
+# Fixture-only source -- NOT a production-like registry entry.
+# =============================================================================
+# Loaded exclusively by the orchestration acceptance test through the same
+# loader.load_source_specs() path production uses, from this fixtures/ dir --
+# never from the package's real sources/ dir. It proves the repository's prime
+# directive: adding a source is ONE YAML file with ZERO framework .py edits.
+#
+# This replaces the implicit source-decoupling proof the removed CMA placeholder
+# used to provide (issue #23, Option A). Museum-style names are allowed in tests/;
+# the grep gate only guards framework .py.
+# =============================================================================
+source: example_museum
+cli_module: extraction.example_museum.run
+steps:
+  - name: snapshot
+    run: snapshot
+    produces:
+      - {table: raw_example_museum_objects, check_nonempty: true}
+      - raw_example_museum_agents

@@ -157,3 +157,7 @@ Do not collapse the following into one extraction-time boolean:
 Production-like no-op source stubs should be avoided.
 
 A fake source may live in test fixtures to prove framework source-decoupling. A real registry source should be runnable, explicitly disabled/research-only, or removed.
+
+### CMA precedent (issue #23, Option A)
+
+The Cleveland Museum of Art (CMA) placeholder was removed from all production-like paths — the `extraction/cma/` stub CLI, the `sources/cma.yaml` registry entry, the `RAW_CMA_*` Bronze DDL, and the `models/staging/cma/` stub — rather than kept as an ambiguous no-op source. Source-decoupling acceptance coverage now lives in a fixture-only source (`orchestration/tests/fixtures/sources/example_museum.yaml`) exercised by `orchestration/tests/unit/test_source_registry_acceptance.py`, which proves a new source is discovered from one YAML file with zero framework `.py` edits. Cleveland returns under #20 as a real, source-owned implementation built on the common primitives — not as a stub.

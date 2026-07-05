@@ -3,7 +3,7 @@
 # =============================================================================
 # This is the COMPLEX example: a CSV snapshot, a seeded control table, a bounded +
 # department-partitioned + rate-limited enrichment step, and a terminal verify asset.
-# A simple source (see aic.yaml / the CMA example in ADDING_A_SOURCE.md) needs only a
+# A simple source (see aic.yaml / the worked example in ADDING_A_SOURCE.md) needs only a
 # handful of lines. Full field docs: ../SCHEMA.md.
 # =============================================================================
 source: met

@@ -72,36 +72,6 @@ CREATE TABLE IF NOT EXISTS AIC_LOAD_WATERMARK (
 )
 COMMENT = 'High-water mark for AIC API delta queries. One row per entity type.';
 
--- Cleveland Museum of Art: Artworks
-CREATE TABLE IF NOT EXISTS RAW_CMA_ARTWORKS (
-    artwork_id      INT             COMMENT 'CMA API artwork id',
-    raw_payload     VARIANT         NOT NULL COMMENT 'Complete raw JSON response',
-    _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-    _source_system  VARCHAR         NOT NULL DEFAULT 'cleveland_museum_art',
-    _batch_id       VARCHAR         NOT NULL
-)
-COMMENT = 'Raw Cleveland Museum of Art artwork responses.';
-
--- Cleveland Museum of Art: Creators
-CREATE TABLE IF NOT EXISTS RAW_CMA_CREATORS (
-    creator_id      INT             COMMENT 'CMA API creator id',
-    raw_payload     VARIANT         NOT NULL COMMENT 'Complete raw JSON response',
-    _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-    _source_system  VARCHAR         NOT NULL DEFAULT 'cleveland_museum_art',
-    _batch_id       VARCHAR         NOT NULL
-)
-COMMENT = 'Raw Cleveland Museum of Art creator responses.';
-
--- Cleveland Museum of Art: Exhibitions
-CREATE TABLE IF NOT EXISTS RAW_CMA_EXHIBITIONS (
-    exhibition_id   INT             COMMENT 'CMA API exhibition id',
-    raw_payload     VARIANT         NOT NULL COMMENT 'Complete raw JSON response',
-    _extracted_at   TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-    _source_system  VARCHAR         NOT NULL DEFAULT 'cleveland_museum_art',
-    _batch_id       VARCHAR         NOT NULL
-)
-COMMENT = 'Raw Cleveland Museum of Art exhibition responses.';
-
 -- Smithsonian Institution
 CREATE TABLE IF NOT EXISTS RAW_SMITHSONIAN_OBJECTS (
     object_id       VARCHAR         COMMENT 'Smithsonian record ID (varies by unit)',

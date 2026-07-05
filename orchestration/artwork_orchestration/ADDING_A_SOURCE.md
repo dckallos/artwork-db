@@ -17,17 +17,17 @@ museum is added by touching **four things**, only one of which is a framework fi
    For a simple "download a snapshot" source that is about six lines:
 
    ```yaml
-   source: cma
-   cli_module: extraction.cma.run
+   source: example_museum
+   cli_module: extraction.example_museum.run
    steps:
      - name: snapshot
        run: snapshot
-       produces: [raw_cma_artworks, raw_cma_agents]
+       produces: [raw_example_museum_objects, raw_example_museum_agents]
    ```
 
    Field-by-field docs are in `SCHEMA.md`. Rules of thumb:
    - Each `produces` entry is a table dbt reads (a "dbt source"). List them by name.
-   - Want a "did any rows land?" check? Use `{table: raw_cma_artworks, check_nonempty: true}`.
+   - Want a "did any rows land?" check? Use `{table: raw_example_museum_objects, check_nonempty: true}`.
      Otherwise **let dbt handle data quality** (that is the recommended path).
    - Only if a step calls a **rate-limited API**, add `rate_limited: true` to that step and
      one `tag_concurrency_limits` entry for your source key in

@@ -5,13 +5,13 @@
 #   iac / infra / bootstrap     apply all / infra only / git-setup only
 #   rollback FILE=path.sql      roll back one forward script via its paired drop
 #   down [FROM=create_*.sql]    full teardown / from a point, paired drops in reverse
-#   extract[-met|-aic|-cma|-smithsonian]   run extractors
+#   extract[-met|-aic|-smithsonian]   run extractors
 #   dbt-init|build|test|full-refresh|docs|teardown   dbt lifecycle (via orchestrator)
 #   all / pipeline / setup      full apply / extract+build / infra+init
 # =============================================================================
 
 .PHONY: chmod iac bootstrap infra loader transformer rollback down down-from \
-        extract extract-met extract-aic extract-cma extract-smithsonian \
+        extract extract-met extract-aic extract-smithsonian \
         dbt-init dbt-build dbt-test dbt-full-refresh dbt-docs dbt-teardown dbt-deps \
         all pipeline setup clean
 
@@ -182,9 +182,7 @@ extract-met:
 # own extraction/<source>/run.py with the same subcommand shape as Met, then get
 # uncommented (with the AWS_NO_SSO prefix on any stage-PUT step).
 # extract-aic:
-# 	$(AWS_NO_SSO) python -m extraction.aic.run snapshot
-# extract-cma:
-# 	$(AWS_NO_SSO) python -m extraction.cma.run snapshot
+#   $(AWS_NO_SSO) python -m extraction.aic.run snapshot
 # extract-smithsonian:
 # 	$(AWS_NO_SSO) python -m extraction.smithsonian.run snapshot
 

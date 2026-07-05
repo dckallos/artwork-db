@@ -130,7 +130,7 @@ The implementation backlog is tracked in GitHub:
 - #20 — Add first new bulk-provider proof of concept using common primitives.
 - #21 — Implement Smithsonian S3-first source as a design stress test.
 - #22 — Roadmap index.
-- #23 — Resolve CMA placeholder/stub before strict validation.
+- #23 — Resolved (Option A): the CMA placeholder/stub was removed from production-like paths; Cleveland returns under #20 as a real source. See the placeholder policy in `docs/source_onboarding_contract.md`.
 
 ## AI implementation notes
 

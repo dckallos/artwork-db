@@ -6,7 +6,7 @@ This roadmap is tracked by GitHub issues #10 through #23.
 
 1. #10 — Consolidate ingestion architecture docs and anti-patterns.
 2. #11 — Build offline extraction and orchestration test harness foundation.
-3. #23 — Resolve CMA placeholder/stub before source-contract validation if needed.
+3. #23 — Resolved (Option A): CMA placeholder/stub removed from production-like paths before source-contract validation; Cleveland returns under #20 as a real source.
 
 ## Common ingestion core
 

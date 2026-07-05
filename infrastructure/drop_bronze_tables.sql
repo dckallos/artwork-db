@@ -1,5 +1,5 @@
 -- =============================================================================
--- create_bronze_tables.sql ROLLBACK: drop the seven Bronze raw_*/extraction_log
+-- create_bronze_tables.sql ROLLBACK: drop the Bronze raw_*/extraction_log
 -- tables plus the two Met orchestration tables (MET_ENRICHMENT_CONTROL,
 -- MET_CSV_SNAPSHOT) created by create_bronze_tables.sql.
 --
@@ -8,9 +8,9 @@
 --                 --connection admin --enhanced-exit-codes.
 --
 -- Destructive scope:
---   Every loaded row in raw_met_objects, raw_aic_artworks, raw_cma_artworks,
---   raw_cma_creators, raw_cma_exhibitions, raw_smithsonian_objects, and
---   extraction_log is permanently destroyed. Snowflake Time Travel keeps
+--   Every loaded row in raw_met_objects, raw_aic_artworks,
+--   raw_smithsonian_objects, and extraction_log is permanently destroyed.
+--   Snowflake Time Travel keeps
 --   each table recoverable via
 --     UNDROP TABLE ARTWORK_DB.BRONZE.<table_name>;
 --   within the schema's DATA_RETENTION_TIME_IN_DAYS window. Beyond that,
@@ -38,9 +38,6 @@ DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_MET_OBJECTS;
 DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_AIC_ARTWORKS;
 DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_AIC_AGENTS;
 DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.AIC_LOAD_WATERMARK;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_CMA_ARTWORKS;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_CMA_CREATORS;
-DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_CMA_EXHIBITIONS;
 DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.RAW_SMITHSONIAN_OBJECTS;
 DROP TABLE IF EXISTS ARTWORK_DB.BRONZE.EXTRACTION_LOG;
 -- Met enrichment orchestration pair (Session 3). MET_WORKLIST (a VIEW over these)

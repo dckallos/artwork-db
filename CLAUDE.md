@@ -127,14 +127,33 @@ PY
   no `dagster` install) — that is an env limitation, not a regression. It is green only where
   `pip install -e orchestration` has run.
 
+## GitHub access & the Snowsight Workspace environment
+
+When this repo is opened in a Snowsight CoCo / Cortex Code **Workspace**, the environment
+differs from a laptop checkout — internalize this so no session re-discovers it:
+
+- **The workspace is a live Snowflake stage snapshot, not a git checkout.** There is no
+  `.git`, so git-based steps (`git status`, branch switches, `bash scripts/dev/diff_against_remote.sh`)
+  **cannot run** there. Inspect working state with the file tools (`ls`, `grep`, `read`) and
+  treat the on-disk stage as the source of truth. (These steps still apply in a real clone.)
+- **Read/write GitHub via the GitHub MCP tools, not `gh` or a token.** In the Workspace the
+  `gh` CLI is unauthenticated and no `GITHUB_TOKEN`/`GH_TOKEN` is present. Fetch issue bodies,
+  issue comments, PRs, and files with the `github_mcp_server_*` tools (e.g.
+  `github_mcp_server_issue_read` with `method: get` then `method: get_comments`). Do not block
+  on `gh auth login`; do not ask for a token when MCP is available.
+- The repo is `dckallos/artwork-db`. Roadmap issues are #10-#23 (see
+  `docs/roadmaps/ingestion_platform_roadmap.md`).
+
 ## Roadmap issue execution template
 
 For roadmap issues #10-#23 and follow-ups:
 
-- Read the issue body and all issue comments in full before planning.
+- Read the issue body and all issue comments in full before planning (via GitHub MCP in the
+  Workspace — see the section above).
 - Read every file listed under the issue's review scope in full before editing.
 - Run `bash scripts/dev/diff_against_remote.sh` or equivalent before edits to understand
-  working-tree changes relative to the remote base branch.
+  working-tree changes relative to the remote base branch **when in a git checkout**; in the
+  Workspace stage (no `.git`) inspect on-disk state with the file tools instead.
 - Summarize existing modified, deleted, and untracked files before touching anything.
 - Do not overwrite user or parallel-agent work. If changes are unrelated to the issue, leave
   them alone and ask before modifying them.
