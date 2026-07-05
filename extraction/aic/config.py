@@ -13,8 +13,15 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 
-# Load .env from current working directory if present.
-load_dotenv()
+
+def load_env() -> None:
+    """
+    Load ``.env`` from the current working directory, if present.
+
+    Called explicitly from CLI entry points -- never at import time -- so that
+    importing this module stays inert (no dotenv/credential side effects; #11).
+    """
+    load_dotenv()
 
 # AIC data dump: a ~115 MB tar.bz2 containing individual JSON files per entity.
 AIC_DUMP_URL = "https://artic-api-data.s3.amazonaws.com/artic-api-data.tar.bz2"
@@ -65,13 +72,15 @@ class Config:
 
     # Snowflake connection. Uses the same key-pair auth as the Met loader:
     # ARTWORK_LOADER_SVC is TYPE = SERVICE with no password.
-    snowflake_account: Optional[str] = os.getenv("SNOWFLAKE_ACCOUNT")
-    snowflake_user: Optional[str] = os.getenv("SNOWFLAKE_USER")
-    snowflake_private_key_file: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
+    snowflake_account: Optional[str] = field(default_factory=lambda: os.getenv("SNOWFLAKE_ACCOUNT"))
+    snowflake_user: Optional[str] = field(default_factory=lambda: os.getenv("SNOWFLAKE_USER"))
+    snowflake_private_key_file: Optional[str] = field(
+        default_factory=lambda: os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
+    )
     snowflake_private_key_file_pwd: Optional[str] = None
-    snowflake_role: str = os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER")
-    snowflake_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH")
-    snowflake_database: str = os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB")
+    snowflake_role: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER"))
+    snowflake_warehouse: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH"))
+    snowflake_database: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB"))
     snowflake_schema: str = "BRONZE"
     snowflake_stage: str = "bronze_load_stage"
 

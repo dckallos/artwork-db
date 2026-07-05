@@ -13,8 +13,15 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-# Load .env from current working directory if present.
-load_dotenv()
+
+def load_env() -> None:
+    """
+    Load ``.env`` from the current working directory, if present.
+
+    Called explicitly from CLI entry points -- never at import time -- so that
+    importing this module stays inert (no dotenv/credential side effects; #11).
+    """
+    load_dotenv()
 
 # MetObjects.csv is stored via Git LFS. raw.githubusercontent.com serves the
 # ~130-byte LFS *pointer*, not the file; the media host serves real LFS content
@@ -68,18 +75,22 @@ class Config:
     # ARTWORK_LOADER_SVC is a TYPE = SERVICE user with no password, so we point
     # the connector at the same private key registered by
     # scripts/snowflake_cli/06_setup_loader_keypair.sh. No password at rest.
-    snowflake_account: Optional[str] = os.getenv("SNOWFLAKE_ACCOUNT")
-    snowflake_user: Optional[str] = os.getenv("SNOWFLAKE_USER")
-    snowflake_private_key_file: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
+    snowflake_account: Optional[str] = field(default_factory=lambda: os.getenv("SNOWFLAKE_ACCOUNT"))
+    snowflake_user: Optional[str] = field(default_factory=lambda: os.getenv("SNOWFLAKE_USER"))
+    snowflake_private_key_file: Optional[str] = field(
+        default_factory=lambda: os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
+    )
     # Only needed if the private key is an ENCRYPTED PKCS#8 file; the keys minted
     # by 06_setup_loader_keypair.sh are unencrypted (-nocrypt), so this is None.
-    snowflake_private_key_file_pwd: Optional[str] = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE_PWD")
-    snowflake_role: str = os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER")
-    snowflake_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH")
-    snowflake_database: str = os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB")
-    snowflake_schema: str = os.getenv("SNOWFLAKE_SCHEMA", "BRONZE")
-    snowflake_table: str = os.getenv("SNOWFLAKE_TABLE", "raw_met_objects")
-    snowflake_stage: str = os.getenv("SNOWFLAKE_STAGE", "bronze_load_stage")
+    snowflake_private_key_file_pwd: Optional[str] = field(
+        default_factory=lambda: os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE_PWD")
+    )
+    snowflake_role: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_ROLE", "ARTWORK_LOADER"))
+    snowflake_warehouse: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_WAREHOUSE", "ARTWORK_WH"))
+    snowflake_database: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_DATABASE", "ARTWORK_DB"))
+    snowflake_schema: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_SCHEMA", "BRONZE"))
+    snowflake_table: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_TABLE", "raw_met_objects"))
+    snowflake_stage: str = field(default_factory=lambda: os.getenv("SNOWFLAKE_STAGE", "bronze_load_stage"))
 
     # Upload chunk size: rows per NDJSON file / COPY INTO operation.
     upload_chunk_size: int = int(os.getenv("MET_UPLOAD_CHUNK", "5000"))

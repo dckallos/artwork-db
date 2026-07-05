@@ -20,7 +20,7 @@ from typing import Optional, Sequence
 
 from extraction.met.snowflake_uploader import _snowflake_connect
 
-from .config import Config
+from .config import Config, load_env
 from .loader import run_snapshot
 
 
@@ -152,6 +152,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     args = parser.parse_args(argv)
     _configure_logging(args.verbose)
+    load_env()
     config = Config()
     config.ensure_paths()
 

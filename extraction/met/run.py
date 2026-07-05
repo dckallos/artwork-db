@@ -179,6 +179,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     args = parser.parse_args(argv)
     _configure_logging(args.verbose)
+    load_env()
     config = Config()
     config.ensure_paths()
 
